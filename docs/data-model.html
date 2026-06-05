@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8" />
+<title>Rental Management — Data Model (draft)</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a22;
+    --panel-soft: #1c2230;
+    --line: #2a3142;
+    --ink: #e6e8ee;
+    --ink-soft: #9aa3b2;
+    --accent: #7aa2ff;
+    --identity: #6ee7b7;
+    --core: #fbbf77;
+    --temporal: #f59ec0;
+    --money: #93c5fd;
+    --cost: #c4b5fd;
+    --output: #fca5a5;
+    --warn: #fde68a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, "SF Pro Text", Inter, Helvetica, Arial, sans-serif; }
+  body { padding: 32px 40px 80px; max-width: 1400px; margin: 0 auto; }
+  h1 { font-weight: 600; font-size: 26px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--ink-soft); margin: 28px 0 14px; }
+  .subtitle { color: var(--ink-soft); margin-bottom: 24px; font-size: 13px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; font-size: 12px; }
+  .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .entity { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; position: relative; }
+  .entity header { display: flex; align-items: baseline; justify-content: space-between;
+    gap: 8px; margin-bottom: 8px; }
+  .entity h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .entity .tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--bg); padding: 2px 7px; border-radius: 99px; font-weight: 700; }
+  .entity .desc { color: var(--ink-soft); font-size: 12px; margin-bottom: 8px; }
+  .entity ul { list-style: none; padding: 0; margin: 0; font-family:
+    ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  .entity ul li { padding: 3px 0; border-bottom: 1px dashed transparent; }
+  .entity ul li .k { color: var(--ink); }
+  .entity ul li .t { color: var(--ink-soft); margin-left: 6px; }
+  .entity ul li.fk .k::before { content: "→ "; color: var(--accent); }
+  .entity .rel { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--ink-soft); }
+  .entity .rel b { color: var(--ink); font-weight: 500; }
+  /* color stripes by group */
+  .g-identity { border-left: 3px solid var(--identity); }
+  .g-core     { border-left: 3px solid var(--core); }
+  .g-temporal { border-left: 3px solid var(--temporal); }
+  .g-money    { border-left: 3px solid var(--money); }
+  .g-cost     { border-left: 3px solid var(--cost); }
+  .g-output   { border-left: 3px solid var(--output); }
+  .tag-scd    { background: var(--temporal); }
+  .tag-derived{ background: var(--warn); }
+  .tag-input  { background: var(--cost); }
+  .tag-output { background: var(--output); }
+  .tag-ident  { background: var(--identity); }
+  .tag-core   { background: var(--core); }
+  .tag-money  { background: var(--money); }
+  .note { background: var(--panel-soft); border-left: 3px solid var(--accent);
+    padding: 12px 16px; border-radius: 6px; margin: 10px 0; font-size: 13px;
+    color: var(--ink); }
+  .note b { color: var(--accent); }
+  details { background: var(--panel-soft); border-radius: 8px; padding: 12px 16px;
+    margin-top: 12px; border: 1px solid var(--line); }
+  details summary { cursor: pointer; font-weight: 600; font-size: 13px;
+    color: var(--accent); }
+  details pre { font-size: 12px; line-height: 1.45;
+    background: #0c0e13; padding: 12px; border-radius: 6px; overflow: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink); }
+  .pill { display: inline-block; font-size: 10px; background: var(--panel-soft);
+    border: 1px solid var(--line); padding: 1px 7px; border-radius: 99px;
+    color: var(--ink-soft); margin-left: 4px; }
+  .pill.scd { color: var(--temporal); border-color: var(--temporal); }
+  .pill.derived { color: var(--warn); border-color: var(--warn); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+  .col-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 800px) { .col-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>Rental Management — Data Model</h1>
+<p class="subtitle">draft, k revizi. Žlutě označené věci jsou derivované (nepatří do DB).</p>
+
+<div class="legend">
+  <span><span class="dot" style="background:var(--identity)"></span>Identity</span>
+  <span><span class="dot" style="background:var(--core)"></span>Core</span>
+  <span><span class="dot" style="background:var(--temporal)"></span>Temporální (SCD2)</span>
+  <span><span class="dot" style="background:var(--money)"></span>Platby</span>
+  <span><span class="dot" style="background:var(--cost)"></span>Vstupy nákladů</span>
+  <span><span class="dot" style="background:var(--output)"></span>Výstup (vyúčtování)</span>
+</div>
+
+<h2>① Identity &amp; přístup</h2>
+<div class="grid">
+  <div class="entity g-identity">
+    <header><h3>User</h3><span class="tag tag-ident">core</span></header>
+    <div class="desc">Login identita (better-auth)</div>
+    <ul>
+      <li><span class="k">id</span><span class="t">uuid</span></li>
+      <li><span class="k">email</span><span class="t">unique</span></li>
+      <li><span class="k">name</span><span class="t">string</span></li>
+      <li><span class="k">emailVerifiedAt</span><span class="t">datetime?</span></li>
+      <li><span class="k">createdAt</span><span class="t">datetime</span></li>
+    </ul>
+  </div>
+  <div class="entity g-identity">
+    <header><h3>Credential</h3><span class="tag tag-ident">auth</span></header>
+    <div class="desc">Heslo nebo OAuth (Google, …). Jeden user může mít víc.</div>
+    <ul>
+      <li class="fk"><span class="k">userId</span></li>
+      <li><span class="k">provider</span><span class="t">"local"|"google"|…</span></li>
+      <li><span class="k">providerAccountId</span></li>
+      <li><span class="k">secretHash</span><span class="t">argon2 / token</span></li>
+    </ul>
+  </div>
+  <div class="entity g-identity">
+    <header><h3>Session</h3><span class="tag tag-ident">auth</span></header>
+    <ul>
+      <li><span class="k">id</span></li>
+      <li class="fk"><span class="k">userId</span></li>
+      <li><span class="k">expiresAt</span></li>
+    </ul>
+  </div>
+  <div class="entity g-identity">
+    <header><h3>Organization</h3><span class="tag tag-ident">tenancy</span></header>
+    <div class="desc">Workspace pronajímatele. Vše dál má <code>orgId</code>.</div>
+    <ul>
+      <li><span class="k">id</span></li>
+      <li><span class="k">name</span></li>
+    </ul>
+  </div>
+  <div class="entity g-identity">
+    <header><h3>Membership</h3><span class="tag tag-ident">share</span></header>
+    <div class="desc">User ↔ Org. Role řídí scope.</div>
+    <ul>
+      <li class="fk"><span class="k">userId</span></li>
+      <li class="fk"><span class="k">orgId</span></li>
+      <li><span class="k">role</span><span class="t">"owner"|"member"</span></li>
+    </ul>
+    <div class="rel"><b>owner</b> vidí vše v org. <b>member</b> vidí jen properties udělené přes <code>PropertyAccess</code>.</div>
+  </div>
+  <div class="entity g-identity">
+    <header><h3>PropertyAccess</h3><span class="tag tag-ident">share</span></header>
+    <div class="desc">Per-property scope pro non-owner člena.</div>
+    <ul>
+      <li class="fk"><span class="k">membershipId</span></li>
+      <li class="fk"><span class="k">propertyId</span></li>
+    </ul>
+  </div>
+  <div class="entity g-identity">
+    <header><h3>ApiToken</h3><span class="tag tag-ident">mcp</span></header>
+    <div class="desc">Bearer token pro MCP klienta. Vázán na membership (zdědí scope).</div>
+    <ul>
+      <li class="fk"><span class="k">membershipId</span></li>
+      <li><span class="k">name</span></li>
+      <li><span class="k">tokenHash</span></li>
+      <li><span class="k">lastUsedAt</span></li>
+    </ul>
+  </div>
+</div>
+
+<h2>② Core (statické entity)</h2>
+<div class="grid">
+  <div class="entity g-core">
+    <header><h3>Property</h3><span class="tag tag-core">byt</span></header>
+    <ul>
+      <li class="fk"><span class="k">orgId</span></li>
+      <li><span class="k">name</span><span class="t">"Kolčavka A12"</span></li>
+      <li><span class="k">address</span></li>
+      <li><span class="k">note</span></li>
+    </ul>
+  </div>
+  <div class="entity g-core">
+    <header><h3>Tenant</h3><span class="tag tag-core">nájemce</span></header>
+    <ul>
+      <li class="fk"><span class="k">orgId</span></li>
+      <li><span class="k">name</span></li>
+      <li><span class="k">email, phone</span></li>
+      <li><span class="k">accountNumber</span><span class="t">pro vrácení přeplatku</span></li>
+      <li><span class="k">note</span></li>
+    </ul>
+  </div>
+  <div class="entity g-core">
+    <header><h3>Contract</h3><span class="tag tag-core">smlouva</span></header>
+    <div class="desc">Identita smlouvy. Ceny v <code>ContractTerms</code> a <code>ContractUtility</code>.</div>
+    <ul>
+      <li class="fk"><span class="k">orgId</span></li>
+      <li class="fk"><span class="k">propertyId</span></li>
+      <li class="fk"><span class="k">tenantId</span></li>
+      <li><span class="k">startDate</span></li>
+      <li><span class="k">endDate</span><span class="t">nullable</span></li>
+      <li><span class="k">securityDeposit</span><span class="t">kauce, vratná</span></li>
+      <li><span class="k">note</span></li>
+    </ul>
+    <div class="rel">Prodloužení / dodatek = nový řádek v <b>ContractTerms</b> (nebo <b>ContractUtility</b>) s novou platností. Žádný auto-magic.</div>
+  </div>
+</div>
+
+<h2>③ Temporální vrstva (SCD2)</h2>
+<p class="subtitle">Vše se může v čase měnit. Změna = nový row, starý dostane <code>validTo</code>.</p>
+<div class="grid">
+  <div class="entity g-temporal">
+    <header><h3>ContractTerms <span class="pill scd">SCD2</span></h3><span class="tag tag-scd">smlouva</span></header>
+    <div class="desc">Co je dohodnuto s nájemcem (nájem + SVJ-služby jako jedno číslo).</div>
+    <ul>
+      <li class="fk"><span class="k">contractId</span></li>
+      <li><span class="k">validFrom</span><span class="t">date</span></li>
+      <li><span class="k">validTo</span><span class="t">date?, otevřený</span></li>
+      <li><span class="k">baseRent</span><span class="t">Kč/měs</span></li>
+      <li><span class="k">serviceAdvance</span><span class="t">SVJ služby bez FO</span></li>
+      <li><span class="k">source</span><span class="t">"initial"|"addendum"|"change"</span></li>
+      <li><span class="k">note</span></li>
+    </ul>
+  </div>
+  <div class="entity g-temporal">
+    <header><h3>ContractUtility <span class="pill scd">SCD2</span></h3><span class="tag tag-scd">utility</span></header>
+    <div class="desc">Jedna utility per řádek (elektřina / plyn / internet / voda / other). Smlouva může mít 0–N.</div>
+    <ul>
+      <li class="fk"><span class="k">contractId</span></li>
+      <li><span class="k">kind</span><span class="t">"electricity"|"gas"|"internet"|"water"|"other"</span></li>
+      <li><span class="k">validFrom</span></li>
+      <li><span class="k">validTo</span><span class="t">date?</span></li>
+      <li><span class="k">monthlyAdvance</span></li>
+      <li><span class="k">note</span></li>
+    </ul>
+    <div class="rel">Internet jen jako paušál bez vyúčtování? Stačí <code>monthlyAdvance</code>; pokud nebude <code>CostStatement</code> tohoto kindu, vyúčtování pro něj zanechá <code>actualCost=0</code> (přeplatek = celá zaplacená záloha) — nebo jednoduše tu utility do reconciliace nezahrneme. Řešitelné na úrovni service.</div>
+  </div>
+  <div class="entity g-temporal">
+    <header><h3>PropertyServiceTariff <span class="pill scd">SCD2</span></h3><span class="tag tag-scd">EL</span></header>
+    <div class="desc">Co property platí SVJ dle evidenčního listu (per property, ne per smlouva).</div>
+    <ul>
+      <li class="fk"><span class="k">propertyId</span></li>
+      <li><span class="k">validFrom</span></li>
+      <li><span class="k">validTo</span><span class="t">date?</span></li>
+      <li><span class="k">totalSvjAdvance</span><span class="t">např. 8 884 Kč</span></li>
+      <li><span class="k">deductibleAmount</span><span class="t">část NEjdoucí za nájemcem (typicky FO, ale i další odečitatelné), např. 1 878 Kč</span></li>
+      <li><span class="k">deductibleNote</span><span class="t">text: výčet složek („Fond oprav 1424, Odměny výbor 110, Pojištění 85, Správa 213, Ostatní režie 46")</span></li>
+      <li><span class="k">note</span></li>
+    </ul>
+    <div class="rel">reconciliable = <code>totalSvjAdvance − deductibleAmount</code></div>
+  </div>
+</div>
+
+<h2>④ Platby</h2>
+<div class="grid">
+  <div class="entity g-money">
+    <header><h3>Payment</h3><span class="tag tag-money">in</span></header>
+    <div class="desc">Příchozí platba z banky nebo manuál. <b>Žádná explicitní alokace.</b></div>
+    <ul>
+      <li class="fk"><span class="k">orgId</span></li>
+      <li class="fk"><span class="k">contractId</span><span class="t">nullable (inbox)</span></li>
+      <li><span class="k">amount</span></li>
+      <li><span class="k">paidAt</span><span class="t">date</span></li>
+      <li><span class="k">counterparty</span></li>
+      <li><span class="k">counterpartyAccount</span></li>
+      <li><span class="k">externalId</span><span class="t">bank tx hash, unique per org</span></li>
+      <li><span class="k">statementRef</span><span class="t">statement number/date</span></li>
+      <li><span class="k">source</span><span class="t">"bank"|"manual"</span></li>
+      <li><span class="k">description, note</span></li>
+      <li><span class="k">importedAt</span></li>
+    </ul>
+  </div>
+  <div class="entity g-money">
+    <header><h3>Alokační pravidlo <span class="pill derived">derived</span></h3><span class="tag tag-derived">service</span></header>
+    <div class="desc">Per měsíc spočítáme co je očekáváno a aplikujeme přijaté platby v pořadí.</div>
+    <ul>
+      <li><span class="k">1.</span><span class="t">expected = baseRent + serviceAdvance + Σ utilityAdvance</span></li>
+      <li><span class="k">2.</span><span class="t">received = Σ Payment.amount pro daný měsíc</span></li>
+      <li><span class="k">3.</span><span class="t">pokud received ≥ expected → rent OK, services OK</span></li>
+      <li><span class="k">4.</span><span class="t">jinak: nejdřív pokrýt rent, pak služby (SVJ), pak utility postupně → deficit zůstane na "konci"</span></li>
+    </ul>
+    <div class="rel">Žádná tabulka. Service vrstva má funkci <code>allocateForPeriod(contract, month)</code>.</div>
+  </div>
+</div>
+
+<h2>⑤ Vstupy nákladů (od SVJ, elektrárny, …)</h2>
+<div class="grid">
+  <div class="entity g-cost">
+    <header><h3>CostStatement</h3><span class="tag tag-input">vstup</span></header>
+    <div class="desc">Jedno příchozí vyúčtování (SVJ ročně, elektrárna fakturou, plyn, …) už proporcionálně přepočtené na relevantní období.</div>
+    <ul>
+      <li class="fk"><span class="k">orgId, propertyId</span></li>
+      <li><span class="k">kind</span><span class="t">"services"|"electricity"|"gas"|"internet"|"water"|"other"</span></li>
+      <li><span class="k">periodFrom, periodTo</span></li>
+      <li><span class="k">totalAmount</span><span class="t">celkové vyúčtování dokumentu</span></li>
+      <li><span class="k">adjustmentAmount</span><span class="t">signed: + přičíst (např. solar credit zpět protože placeno z FO), − odečíst (např. FO porce ze SVJ celku)</span></li>
+      <li><span class="k">adjustmentNote</span><span class="t">vysvětlení (např. „solar 22 KWh × 5.32 = +117 Kč" nebo „FO portion ze SVJ −6253 Kč")</span></li>
+      <li><span class="k">documentRef</span><span class="t">URL/filename PDF</span></li>
+      <li><span class="k">note, issuedAt</span></li>
+    </ul>
+    <div class="rel">reconciliable = <code>totalAmount + adjustmentAmount</code>. Skill při vkládání spočítá adjustment ze své doménové logiky (solar, FO, …) a vloží už hotové číslo.</div>
+  </div>
+</div>
+
+<h2>⑥ Výstup — vyúčtování pro nájemce</h2>
+<div class="grid">
+  <div class="entity g-output">
+    <header><h3>Reconciliation</h3><span class="tag tag-output">out</span></header>
+    <ul>
+      <li class="fk"><span class="k">orgId, contractId</span></li>
+      <li><span class="k">periodFrom, periodTo</span><span class="t">může být proporcionální výřez roku</span></li>
+      <li><span class="k">status</span><span class="t">"draft"|"finalized"</span></li>
+      <li><span class="k">computedAt</span></li>
+      <li><span class="k">note</span></li>
+    </ul>
+  </div>
+  <div class="entity g-output">
+    <header><h3>ReconciliationItem</h3><span class="tag tag-output">out</span></header>
+    <ul>
+      <li class="fk"><span class="k">reconciliationId</span></li>
+      <li><span class="k">kind</span><span class="t">stejné jako u CostStatement</span></li>
+      <li><span class="k">actualCost</span><span class="t">z CostStatement, reconciliable část</span></li>
+      <li><span class="k">paid</span><span class="t">z alokačního pravidla pro období</span></li>
+      <li><span class="k">difference</span><span class="t">paid − actualCost; kladné = vrátit, záporné = doplatit</span></li>
+    </ul>
+  </div>
+</div>
+
+<hr>
+
+<h2>Klíčové výpočty (v service vrstvě, ne v DB)</h2>
+<div class="col-2">
+  <div class="note">
+    <b>Plán plateb (per měsíc)</b><br>
+    Najdi platný <code>ContractTerms</code> a všechny <code>ContractUtility</code> pro daný měsíc.<br>
+    <code>expected = baseRent + serviceAdvance + Σ utility.monthlyAdvance</code>
+  </div>
+  <div class="note">
+    <b>Co tenant zaplatil za období (per kind)</b><br>
+    Sum všech <code>Payment</code> přiřazených k <code>contractId</code> v období, alokovaných dle pravidla "rent → services → utility". Pro každý <code>kind</code> kolik dorazilo.
+  </div>
+  <div class="note">
+    <b>Reálné náklady (per kind)</b><br>
+    Sum <code>(CostStatement.totalAmount + CostStatement.adjustmentAmount)</code> pro daný <code>kind</code> a property v období.<br>
+    Skill při vkládání <code>CostStatement</code> řeší proporci dní (period orezán na trvání smlouvy) i adjustment (solar credit, odečet FO porce ze SVJ celku, …). Backend jen sčítá hotová čísla.
+  </div>
+  <div class="note">
+    <b>Vyúčtování</b><br>
+    Pro každý <code>kind</code> v období: <code>difference = paid − actualCost</code>.<br>
+    Celkem = sum diferencí. Kladné = vrátit nájemci. Záporné = doplatí.
+  </div>
+</div>
+
+<hr>
+
+<h2>Co tu schválně <em>není</em></h2>
+<ul>
+  <li><b>PaymentAllocation tabulka</b> — alokace je derivované pravidlo, ne uložená data.</li>
+  <li><b>Kategorie services per řádek</b> — celkové SVJ číslo + odečitatelná část stačí.</li>
+  <li><b>Snapshoty plánu plateb</b> — derivujeme z temporálních termů.</li>
+  <li><b>ServiceCategory katalog</b> — <code>kind</code> enum stačí (services/electricity/gas/internet/water/other).</li>
+  <li><b>Auto-extension flag na smlouvě</b> — uživatel založí nový <code>ContractTerms</code> řádek.</li>
+</ul>
+
+<details>
+  <summary>Schéma jako DDL (pro orientaci, ne finální)</summary>
+<pre>
+-- multi-tenancy
+user(id, email UNIQUE, name, emailVerifiedAt, createdAt)
+credential(id, userId→user, provider, providerAccountId, secretHash)
+session(id, userId→user, expiresAt)
+organization(id, name)
+membership(id, userId→user, orgId→organization, role)
+property_access(membershipId→membership, propertyId→property)
+api_token(id, membershipId→membership, name, tokenHash, lastUsedAt, createdAt)
+
+-- core
+property(id, orgId→organization, name, address, note)
+tenant(id, orgId→organization, name, email, phone, accountNumber, note)
+contract(id, orgId, propertyId→property, tenantId→tenant,
+         startDate, endDate?, securityDeposit, note)
+
+-- SCD2
+contract_terms(id, contractId→contract, validFrom, validTo?,
+               baseRent, serviceAdvance, source, note)
+contract_utility(id, contractId→contract, kind, validFrom, validTo?,
+                 monthlyAdvance, note)
+property_service_tariff(id, propertyId→property, validFrom, validTo?,
+                        totalSvjAdvance, deductibleAmount, deductibleNote, note)
+
+-- money
+payment(id, orgId, contractId? →contract,
+        amount, paidAt, counterparty, counterpartyAccount,
+        externalId UNIQUE(orgId,externalId), statementRef,
+        source, description, note, importedAt)
+
+-- cost input
+cost_statement(id, orgId, propertyId→property, kind,
+               periodFrom, periodTo, totalAmount,
+               adjustmentAmount, adjustmentNote,
+               documentRef, issuedAt, note)
+
+-- output
+reconciliation(id, orgId, contractId→contract,
+               periodFrom, periodTo, status, computedAt, note)
+reconciliation_item(id, reconciliationId→reconciliation, kind,
+                    actualCost, paid, difference)
+</pre>
+</details>
+
+</body>
+</html>

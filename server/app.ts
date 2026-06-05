@@ -8,6 +8,7 @@ import { organizationRoutes } from './routes/organizations.js';
 import { propertyRoutes } from './routes/properties.js';
 import { propertyAccessRoutes } from './routes/property-access.js';
 import { apiTokenRoutes } from './routes/api-tokens.js';
+import { tenantRoutes } from './routes/tenants.js';
 import type { DB } from '../core/db/client.js';
 import type { Auth } from '../core/auth/better-auth.js';
 import type { AuthContext } from '../core/auth/context.js';
@@ -52,6 +53,7 @@ export function buildApp(deps: AppDeps): HonoApp {
   app.route('/api', propertyRoutes());
   app.route('/api', propertyAccessRoutes());
   app.route('/api', apiTokenRoutes());
+  app.route('/api', tenantRoutes());
 
   return app;
 }

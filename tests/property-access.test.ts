@@ -36,7 +36,7 @@ describe('property access', () => {
     expect(grant.status).toBe(201);
 
     const list = await app.request(`/api/property-access?membershipId=${org.membershipId}`, { headers: { cookie } });
-    const body = await list.json();
+    const body = await list.json() as { propertyIds: string[] };
     expect(body.propertyIds).toEqual([prop.id]);
 
     const rev = await app.request(`/api/property-access?membershipId=${org.membershipId}&propertyId=${prop.id}`, {

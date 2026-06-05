@@ -15,7 +15,7 @@ export interface AppDeps {
   db: DB;
 }
 
-interface AppEnv {
+export interface AppEnv {
   Variables: {
     auth: Auth;
     db: DB;

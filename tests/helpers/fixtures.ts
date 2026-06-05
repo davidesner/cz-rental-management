@@ -1,6 +1,15 @@
 import type { Hono } from 'hono';
+import type { Auth } from '../../core/auth/better-auth.js';
+import type { DB } from '../../core/db/client.js';
 
-export async function registerUser(app: Hono, email: string, password: string, name: string) {
+type AppHono = Hono<{
+  Variables: {
+    auth: Auth;
+    db: DB;
+  };
+}>;
+
+export async function registerUser(app: AppHono, email: string, password: string, name: string) {
   const res = await app.request('/api/auth/sign-up/email', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

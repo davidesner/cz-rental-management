@@ -12,14 +12,16 @@
     "verbatimModuleSyntax": false,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "types": ["node"],
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@core/*": ["core/*"],
-      "@server/*": ["server/*"]
+      "@server/*": ["server/*"],
+      "@/*": ["src/*"]
     }
   },
-  "include": ["core/**/*", "server/**/*", "tests/**/*", "mcp/**/*", "drizzle.config.ts"]
+  "include": ["core/**/*", "server/**/*", "tests/**/*", "mcp/**/*", "drizzle.config.ts", "src/**/*", "vite.config.ts", "tailwind.config.ts"]
 }

@@ -46,6 +46,9 @@ export function buildApp(deps: AppDeps): HonoApp {
     await next();
   });
 
+  // Health check — used by Playwright webServer readiness probe
+  app.get('/api/health', (c) => c.json({ ok: true }));
+
   // Auth routes must remain unauthenticated
   app.route('/api', authRoutes(auth));
 

@@ -1,5 +1,7 @@
 # Plan 1 — Skeleton + Auth + Multi-tenancy
 
+> **Note (2026-06-05):** PG migration applied after plan-1-complete tag. Original Plan 1 tasks were executed as written with libSQL/SQLite, then migrated to Postgres (`postgres-js` + Drizzle pg-core) due to a `db.transaction()` bug in drizzle+libSQL 0.45.x. Tests now use `@testcontainers/postgresql` for per-test Postgres databases. See tag `plan-1-postgres-complete`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stojící Hono backend s libSQL/Drizzle, better-auth (email+heslo), multi-tenant scoping (Organization/Membership/PropertyAccess) a Bearer API tokenem pro MCP. Konec: lze se zaregistrovat, vytvořit organizaci, vydat API token, zavolat autentizovaný `/api/me`.

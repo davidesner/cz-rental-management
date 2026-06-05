@@ -65,7 +65,7 @@ Nový systém přesouvá tohle do dedikované aplikace s **MCP rozhraním jako p
 ### 3.1 Stack
 - **Backend:** TypeScript + Hono (REST API)
 - **Frontend:** Vite + React + Tailwind + shadcn/ui + react-hook-form
-- **Databáze:** libSQL přes Drizzle ORM (soubor pro local/Docker, Turso pro Vercel)
+- **Databáze:** Postgres přes Drizzle ORM (`postgres-js` driver, local Docker, produkce Supabase/Neon/managed Postgres)
 - **Auth:** `better-auth` (email+heslo pro MVP, OAuth schema-ready)
 - **MCP:** `fastmcp` (stdio teď, Streamable HTTP/SSE později — stejný kód)
 - **Deploy:** Vercel (HTTP) + Docker (full container)
@@ -263,7 +263,7 @@ pnpm dev              # spustí Vite + Hono server paralelně (jako VMP_TEST)
 pnpm db:migrate       # Drizzle migrace
 pnpm mcp              # spustí stdio MCP server (pro testování)
 ```
-DB = `./data/rental.sqlite` (libSQL file).
+DB = local Postgres via `docker-compose up -d pg` (`DATABASE_URL=postgresql://postgres:postgres@localhost:5432/rental_dev`).
 
 ### 8.2 Docker
 - `Dockerfile`: multi-stage build, výstup = single Node image
@@ -297,14 +297,14 @@ DB = `./data/rental.sqlite` (libSQL file).
 ## 11. Test strategy
 
 - **Unit testy** v `core/services/*.test.ts` — temporální resolver, alokační pravidlo, reconciliace math
-- **Integrační testy** v `server/routes/*.test.ts` — proti in-memory libSQL
+- **Integrační testy** v `server/routes/*.test.ts` — proti per-test Postgres databázi v Docker kontejneru (testcontainers)
 - **E2E vyúčtování:** sestaví scénář z reálných čísel sheetu (Kolčavka 2024) a porovná výsledek s `Vyuctovani 2024` (rozdíl 693 Kč)
 
 ## 12. Postupné fáze (high-level)
 
 Detailní implementační plán následuje v separátních dokumentech (writing-plans skill). Plány jsou rozdělené tak aby každý produkoval samostatně fungující/testovatelný software:
 
-1. **Plan 1** — Skeleton + Auth + Multi-tenancy (Vite+Hono+Drizzle+libSQL+better-auth, User/Org/Membership/PropertyAccess/ApiToken, `/api/me`)
+1. **Plan 1** — Skeleton + Auth + Multi-tenancy (Hono+Drizzle+Postgres+better-auth, User/Org/Membership/PropertyAccess/ApiToken, `/api/me`)
 2. **Plan 2** — Core domain + Temporal (Property s `reconciliationSkill`, Tenant, Contract, ContractTerms, ContractUtility, PropertyServiceTariff)
 3. **Plan 3** — Payments + CostStatement (idempotentní import, adjustmentAmount)
 4. **Plan 4** — Reconciliace service + REST + **E2E <property-name-a> 2024 (<tenant-name>, period 20.09.–31.12.2024, expected diff 693 Kč)** přes REST volání proti backendu
@@ -312,7 +312,7 @@ Detailní implementační plán následuje v separátních dokumentech (writing-
 6. **Plan 6** — UI (React+Tailwind+shadcn dashboard + CRUD) + Chrome MCP UI smoke tests (auth flow, dashboard render, CRUD happy paths)
 7. **Plan 7** — Comprehensive unit test coverage přes agent team (parallel subagenty per service module: temporal resolver edge cases, allocation rule cornery, reconciliation math drift, idempotence stress, scope leak prevention)
 
-Deploy (Docker + Vercel/Turso) **zatím není v scopu** — projekt běží lokálně přes `pnpm dev` + libSQL soubor. Hosted varianta odložena.
+Deploy (Docker + Vercel/hosted Postgres) **zatím není v scopu** — projekt běží lokálně přes `pnpm dev` + local Postgres (`docker-compose up -d pg`). Hosted varianta odložena.
 
 ---
 

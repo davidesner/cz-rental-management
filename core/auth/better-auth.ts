@@ -17,6 +17,10 @@ export function createAuth(db: DB) {
     }),
     secret: process.env.BETTER_AUTH_SECRET ?? 'dev-secret-do-not-use',
     baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3000',
+    // Vite dev server proxies /api → :3000, but origin header is :5173
+    trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS
+      ? process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
+      : ['http://localhost:5173'],
     emailAndPassword: { enabled: true, requireEmailVerification: false },
   });
 }

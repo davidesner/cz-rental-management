@@ -7,3 +7,6 @@ data/
 .DS_Store
 coverage/
 .vscode/
+test-results/
+playwright-report/
+playwright/.cache/

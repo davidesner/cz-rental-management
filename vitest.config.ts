@@ -12,5 +12,7 @@ export default defineConfig({
     env: {
       TESTCONTAINERS_RYUK_DISABLED: 'true',
     },
+    // Exclude Playwright E2E specs — those are run via `pnpm test:e2e`
+    exclude: ['tests-e2e/**', 'node_modules/**'],
   },
 });

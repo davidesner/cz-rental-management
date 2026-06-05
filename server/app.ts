@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
 import { createAuth } from '../core/auth/better-auth.js';
 import { errorMiddleware } from './middleware/errors.js';
+import { authMiddleware } from './middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
+import { meRoutes } from './routes/me.js';
 import type { DB } from '../core/db/client.js';
 import type { Auth } from '../core/auth/better-auth.js';
+import type { AuthContext } from '../core/auth/context.js';
 
 export interface AppDeps {
   db: DB;
@@ -13,6 +16,7 @@ interface AppEnv {
   Variables: {
     auth: Auth;
     db: DB;
+    auth_ctx: AuthContext;
   };
 }
 
@@ -30,7 +34,16 @@ export function buildApp(deps: AppDeps): HonoApp {
     await next();
   });
 
+  // Auth routes must remain unauthenticated
   app.route('/api', authRoutes(auth));
+
+  // Gated /api/* (skip the /api/auth/* paths)
+  app.use('/api/*', async (c, next) => {
+    if (c.req.path.startsWith('/api/auth/')) return next();
+    return authMiddleware()(c, next);
+  });
+
+  app.route('/api', meRoutes());
 
   return app;
 }

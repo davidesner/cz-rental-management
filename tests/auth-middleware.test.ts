@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { sql } from 'drizzle-orm';
 import { freshDb } from './helpers/db.js';
 import { makeApp } from './helpers/app.js';
 import { registerUser } from './helpers/fixtures.js';
@@ -36,6 +37,25 @@ describe('auth middleware', () => {
     });
     const res = await app.request('/api/me', { headers: { authorization: `Bearer ${t}` } });
     expect(res.status).toBe(200);
+    client.close();
+  });
+
+  it('updates lastUsedAt on bearer auth', async () => {
+    const { db, client } = await freshDb();
+    const app = makeApp(db);
+    const { userId } = await registerUser(app, 'a@b.cz', 'password123', 'A');
+    const org = await createOrganization(db, { userId, name: 'O' });
+    const t = generateToken();
+    await db.insert(apiToken).values({
+      id: 'at1', membershipId: org.membershipId, name: 't', tokenHash: hashToken(t),
+    });
+
+    const before = await db.select().from(apiToken).where(sql`id = 'at1'`).get();
+    expect(before?.lastUsedAt).toBeNull();
+
+    await app.request('/api/me', { headers: { authorization: `Bearer ${t}` } });
+    const after = await db.select().from(apiToken).where(sql`id = 'at1'`).get();
+    expect(after?.lastUsedAt).toBeTruthy();
     client.close();
   });
 });

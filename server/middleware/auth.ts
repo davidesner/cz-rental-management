@@ -33,6 +33,9 @@ export function authMiddleware() {
       if (!row) throw new AppError('unauthenticated', 'invalid token');
       const m = await db.select().from(membership).where(eq(membership.id, row.membershipId)).get();
       if (!m) throw new AppError('unauthenticated', 'membership missing for token');
+      await db.update(apiToken)
+        .set({ lastUsedAt: new Date().toISOString() })
+        .where(eq(apiToken.id, row.id));
       const allowed = await loadAllowedProperties(db, m.id, m.role as Role);
       const ctx: AuthContext = {
         userId: m.userId, orgId: m.orgId, membershipId: m.id, role: m.role as Role, allowedPropertyIds: allowed,

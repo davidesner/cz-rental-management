@@ -1,15 +1,11 @@
-import { createClient, type Client } from '@libsql/client';
-import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql';
+import postgres from 'postgres';
+import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from './schema.js';
 
-export type DB = LibSQLDatabase<typeof schema>;
+export type DB = PostgresJsDatabase<typeof schema>;
 
-export function createDb(url: string): { db: DB; client: Client } {
-  const client = createClient({ url });
+export function createDb(url: string): { db: DB; close: () => Promise<void> } {
+  const client = postgres(url, { max: 10 });
   const db = drizzle(client, { schema });
-  return { db, client };
-}
-
-export function createMemoryDb(): { db: DB; client: Client } {
-  return createDb(':memory:');
+  return { db, close: () => client.end() };
 }

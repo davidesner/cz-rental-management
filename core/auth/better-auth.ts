@@ -7,7 +7,7 @@ import * as schema from '../db/schema.js';
 export function createAuth(db: DB) {
   return betterAuth({
     database: drizzleAdapter(db, {
-      provider: 'sqlite',
+      provider: 'pg',
       schema: {
         user: schema.user,
         account: schema.account,

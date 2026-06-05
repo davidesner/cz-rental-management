@@ -1,19 +1,18 @@
-import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text, primaryKey, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { boolean, pgTable, text, timestamp, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
 
 // ----- better-auth tables (names match better-auth defaults) -----
 
-export const user = sqliteTable('user', {
+export const user = pgTable('user', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
-  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
+  emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
-  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
-  updatedAt: text('updated_at').notNull().default(sql`(current_timestamp)`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const account = sqliteTable('account', {
+export const account = pgTable('account', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   providerId: text('provider_id').notNull(),
@@ -22,72 +21,72 @@ export const account = sqliteTable('account', {
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
   idToken: text('id_token'),
-  accessTokenExpiresAt: text('access_token_expires_at'),
-  refreshTokenExpiresAt: text('refresh_token_expires_at'),
+  accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
   scope: text('scope'),
-  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
-  updatedAt: text('updated_at').notNull().default(sql`(current_timestamp)`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   providerUser: uniqueIndex('account_provider_user_idx').on(t.providerId, t.accountId),
 }));
 
-export const session = sqliteTable('session', {
+export const session = pgTable('session', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   token: text('token').notNull().unique(),
-  expiresAt: text('expires_at').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
-  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
-  updatedAt: text('updated_at').notNull().default(sql`(current_timestamp)`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const verification = sqliteTable('verification', {
+export const verification = pgTable('verification', {
   id: text('id').primaryKey(),
   identifier: text('identifier').notNull(),
   value: text('value').notNull(),
-  expiresAt: text('expires_at').notNull(),
-  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
-  updatedAt: text('updated_at').notNull().default(sql`(current_timestamp)`),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ----- tenancy tables -----
 
-export const organization = sqliteTable('organization', {
+export const organization = pgTable('organization', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const membership = sqliteTable('membership', {
+export const membership = pgTable('membership', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
   role: text('role', { enum: ['owner', 'member'] }).notNull(),
-  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userOrg: uniqueIndex('membership_user_org_idx').on(t.userId, t.orgId),
 }));
 
-export const property = sqliteTable('property', {
+export const property = pgTable('property', {
   id: text('id').primaryKey(),
   orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
-  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const propertyAccess = sqliteTable('property_access', {
+export const propertyAccess = pgTable('property_access', {
   membershipId: text('membership_id').notNull().references(() => membership.id, { onDelete: 'cascade' }),
   propertyId: text('property_id').notNull().references(() => property.id, { onDelete: 'cascade' }),
 }, (t) => ({
   pk: primaryKey({ columns: [t.membershipId, t.propertyId] }),
 }));
 
-export const apiToken = sqliteTable('api_token', {
+export const apiToken = pgTable('api_token', {
   id: text('id').primaryKey(),
   membershipId: text('membership_id').notNull().references(() => membership.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   tokenHash: text('token_hash').notNull().unique(),
-  lastUsedAt: text('last_used_at'),
-  createdAt: text('created_at').notNull().default(sql`(current_timestamp)`),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -4,6 +4,7 @@ import { errorMiddleware } from './middleware/errors.js';
 import { authMiddleware } from './middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
 import { meRoutes } from './routes/me.js';
+import { organizationRoutes } from './routes/organizations.js';
 import type { DB } from '../core/db/client.js';
 import type { Auth } from '../core/auth/better-auth.js';
 import type { AuthContext } from '../core/auth/context.js';
@@ -44,6 +45,7 @@ export function buildApp(deps: AppDeps): HonoApp {
   });
 
   app.route('/api', meRoutes());
+  app.route('/api', organizationRoutes());
 
   return app;
 }

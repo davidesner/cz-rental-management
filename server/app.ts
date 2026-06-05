@@ -9,6 +9,10 @@ import { propertyRoutes } from './routes/properties.js';
 import { propertyAccessRoutes } from './routes/property-access.js';
 import { apiTokenRoutes } from './routes/api-tokens.js';
 import { tenantRoutes } from './routes/tenants.js';
+import { contractRoutes } from './routes/contracts.js';
+import { contractTermsRoutes } from './routes/contract-terms.js';
+import { contractUtilityRoutes } from './routes/contract-utilities.js';
+import { propertyTariffRoutes } from './routes/property-tariffs.js';
 import type { DB } from '../core/db/client.js';
 import type { Auth } from '../core/auth/better-auth.js';
 import type { AuthContext } from '../core/auth/context.js';
@@ -54,6 +58,10 @@ export function buildApp(deps: AppDeps): HonoApp {
   app.route('/api', propertyAccessRoutes());
   app.route('/api', apiTokenRoutes());
   app.route('/api', tenantRoutes());
+  app.route('/api', contractRoutes());
+  app.route('/api', contractTermsRoutes());
+  app.route('/api', contractUtilityRoutes());
+  app.route('/api', propertyTariffRoutes());
 
   return app;
 }

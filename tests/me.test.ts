@@ -28,6 +28,6 @@ describe('GET /api/me', () => {
     expect(body.user.email).toBe('a@b.cz');
     expect(body.memberships).toHaveLength(2);
     expect(body.activeOrgId).toBeTruthy();
-    client.close();
+    await client.close();
   });
 });

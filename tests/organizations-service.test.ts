@@ -18,7 +18,7 @@ describe('organization service', () => {
     const list = await listOrganizationsForUser(db, uid);
     expect(list).toHaveLength(1);
     expect(list[0]!.name).toBe('Acme');
-    client.close();
+    await client.close();
   });
 
   it('lists multiple orgs for same user', async () => {
@@ -28,6 +28,6 @@ describe('organization service', () => {
     await createOrganization(db, { userId: uid, name: 'B' });
     const list = await listOrganizationsForUser(db, uid);
     expect(list.map((o) => o.name).sort()).toEqual(['A', 'B']);
-    client.close();
+    await client.close();
   });
 });

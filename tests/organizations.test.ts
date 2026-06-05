@@ -17,7 +17,7 @@ describe('POST /api/organizations', () => {
     const body = await res.json() as { organization: { name: string; role: string } };
     expect(body.organization.name).toBe('Acme');
     expect(body.organization.role).toBe('owner');
-    client.close();
+    await client.close();
   });
 });
 
@@ -40,6 +40,6 @@ describe('GET /api/organizations', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { organizations: unknown[] };
     expect(body.organizations).toHaveLength(2);
-    client.close();
+    await client.close();
   });
 });

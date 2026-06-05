@@ -17,6 +17,6 @@ describe('email + password sign up / sign in', () => {
       body: JSON.stringify({ email: 'a@b.cz', password: 'password123' }),
     });
     expect(signIn.status).toBe(200);
-    client.close();
+    await client.close();
   });
 });

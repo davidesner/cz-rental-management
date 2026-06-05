@@ -13,7 +13,7 @@ describe('auth middleware', () => {
     const app = makeApp(db);
     const res = await app.request('/api/me');
     expect(res.status).toBe(401);
-    client.close();
+    await client.close();
   });
 
   it('accepts session cookie', async () => {
@@ -23,7 +23,7 @@ describe('auth middleware', () => {
     await createOrganization(db, { userId, name: 'O' });
     const res = await app.request('/api/me', { headers: { cookie } });
     expect(res.status).toBe(200);
-    client.close();
+    await client.close();
   });
 
   it('accepts bearer token', async () => {
@@ -37,7 +37,7 @@ describe('auth middleware', () => {
     });
     const res = await app.request('/api/me', { headers: { authorization: `Bearer ${t}` } });
     expect(res.status).toBe(200);
-    client.close();
+    await client.close();
   });
 
   it('updates lastUsedAt on bearer auth', async () => {
@@ -50,12 +50,12 @@ describe('auth middleware', () => {
       id: 'at1', membershipId: org.membershipId, name: 't', tokenHash: hashToken(t),
     });
 
-    const before = await db.select().from(apiToken).where(sql`id = 'at1'`).get();
+    const [before] = await db.select().from(apiToken).where(sql`id = 'at1'`);
     expect(before?.lastUsedAt).toBeNull();
 
     await app.request('/api/me', { headers: { authorization: `Bearer ${t}` } });
-    const after = await db.select().from(apiToken).where(sql`id = 'at1'`).get();
+    const [after] = await db.select().from(apiToken).where(sql`id = 'at1'`);
     expect(after?.lastUsedAt).toBeTruthy();
-    client.close();
+    await client.close();
   });
 });

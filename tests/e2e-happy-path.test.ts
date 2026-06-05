@@ -53,6 +53,6 @@ describe('end-to-end: register → org → token → property → access', () =>
     expect(list.status).toBe(200);
     expect((await list.json() as any).propertyIds).toEqual([prop.id]);
 
-    client.close();
+    await client.close();
   });
 });

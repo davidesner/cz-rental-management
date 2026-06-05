@@ -38,6 +38,6 @@ describe('api tokens', () => {
 
     const meAfter = await app.request('/api/me', { headers: { authorization: `Bearer ${body.token}` } });
     expect(meAfter.status).toBe(401);
-    client.close();
+    await client.close();
   });
 });

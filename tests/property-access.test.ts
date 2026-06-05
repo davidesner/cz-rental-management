@@ -44,6 +44,6 @@ describe('property access', () => {
       headers: { cookie },
     });
     expect(rev.status).toBe(204);
-    client.close();
+    await client.close();
   });
 });

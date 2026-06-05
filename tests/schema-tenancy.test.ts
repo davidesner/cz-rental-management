@@ -1,19 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { createMemoryDb } from '../core/db/client.js';
-import { migrate } from 'drizzle-orm/libsql/migrator';
 import { sql } from 'drizzle-orm';
+import { freshDb } from './helpers/db.js';
 
 describe('tenancy schema', () => {
   it('creates organization/membership/property/property_access/api_token tables', async () => {
-    const { db, client } = createMemoryDb();
-    await migrate(db, { migrationsFolder: './drizzle' });
-    const rows = await db.all<{ name: string }>(
-      sql`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`
+    const { db, client } = await freshDb();
+    const rows = await db.execute<{ tablename: string }>(
+      sql`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' ORDER BY tablename`
     );
-    const names = rows.map((r) => r.name);
+    const names = rows.map((r) => r.tablename);
     for (const t of ['organization', 'membership', 'property', 'property_access', 'api_token']) {
       expect(names).toContain(t);
     }
-    client.close();
+    await client.close();
   });
 });

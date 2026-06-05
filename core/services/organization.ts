@@ -18,12 +18,14 @@ export interface OrgWithRole {
 export async function createOrganization(db: DB, input: CreateOrgInput): Promise<OrgWithRole> {
   const orgId = createId();
   const membershipId = createId();
-  await db.insert(organization).values({ id: orgId, name: input.name });
-  await db.insert(membership).values({
-    id: membershipId,
-    userId: input.userId,
-    orgId,
-    role: 'owner',
+  await db.transaction(async (tx) => {
+    await tx.insert(organization).values({ id: orgId, name: input.name });
+    await tx.insert(membership).values({
+      id: membershipId,
+      userId: input.userId,
+      orgId,
+      role: 'owner',
+    });
   });
   return { id: orgId, name: input.name, role: 'owner', membershipId };
 }

@@ -29,12 +29,12 @@ export function authMiddleware() {
     const authz = c.req.header('authorization');
     if (authz?.startsWith('Bearer ')) {
       const token = authz.slice('Bearer '.length).trim();
-      const row = await db.select().from(apiToken).where(eq(apiToken.tokenHash, hashToken(token))).get();
+      const [row] = await db.select().from(apiToken).where(eq(apiToken.tokenHash, hashToken(token)));
       if (!row) throw new AppError('unauthenticated', 'invalid token');
-      const m = await db.select().from(membership).where(eq(membership.id, row.membershipId)).get();
+      const [m] = await db.select().from(membership).where(eq(membership.id, row.membershipId));
       if (!m) throw new AppError('unauthenticated', 'membership missing for token');
       await db.update(apiToken)
-        .set({ lastUsedAt: new Date().toISOString() })
+        .set({ lastUsedAt: new Date() })
         .where(eq(apiToken.id, row.id));
       const allowed = await loadAllowedProperties(db, m.id, m.role as Role);
       const ctx: AuthContext = {

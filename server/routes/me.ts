@@ -10,7 +10,7 @@ export function meRoutes() {
   r.get('/me', async (c) => {
     const ctx = getCtx(c);
     const db = c.get('db');
-    const u = await db.select().from(user).where(eq(user.id, ctx.userId)).get();
+    const [u] = await db.select().from(user).where(eq(user.id, ctx.userId));
     if (!u) throw new AppError('not_found', 'user gone');
     const memberships = await db
       .select({

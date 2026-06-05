@@ -8,12 +8,12 @@ import { AppError } from '../errors.js';
 export interface TokenSummary {
   id: string;
   name: string;
-  lastUsedAt: string | null;
-  createdAt: string;
+  lastUsedAt: Date | null;
+  createdAt: Date;
 }
 
 export async function issueApiToken(db: DB, membershipId: string, name: string): Promise<{ id: string; token: string; name: string }> {
-  const m = await db.select().from(membership).where(eq(membership.id, membershipId)).get();
+  const [m] = await db.select().from(membership).where(eq(membership.id, membershipId));
   if (!m) throw new AppError('not_found', 'membership not found');
   const token = generateToken();
   const id = createId();
@@ -32,7 +32,8 @@ export async function listApiTokens(db: DB, membershipId: string): Promise<Token
 }
 
 export async function revokeApiToken(db: DB, membershipId: string, tokenId: string) {
-  const result = await db.delete(apiToken)
-    .where(and(eq(apiToken.id, tokenId), eq(apiToken.membershipId, membershipId)));
-  if (result.rowsAffected === 0) throw new AppError('not_found', 'token not found');
+  const deleted = await db.delete(apiToken)
+    .where(and(eq(apiToken.id, tokenId), eq(apiToken.membershipId, membershipId)))
+    .returning({ id: apiToken.id });
+  if (deleted.length === 0) throw new AppError('not_found', 'token not found');
 }

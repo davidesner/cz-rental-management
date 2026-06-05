@@ -13,6 +13,8 @@ import { PaymentsPage } from './pages/Payments';
 import { CostStatementsPage } from './pages/CostStatements';
 import { ReconciliationsPage } from './pages/Reconciliations';
 import { ApiTokensPage } from './pages/ApiTokens';
+import { ContractDetailPage } from './pages/ContractDetail';
+import { ReconciliationDetailPage } from './pages/ReconciliationDetail';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -35,6 +37,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/cost-statements" element={<CostStatementsPage />} />
             <Route path="/reconciliations" element={<ReconciliationsPage />} />
             <Route path="/settings/api-tokens" element={<ApiTokensPage />} />
+            <Route path="/contracts/:id" element={<ContractDetailPage />} />
+            <Route path="/reconciliations/:id" element={<ReconciliationDetailPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

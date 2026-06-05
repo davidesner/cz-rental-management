@@ -151,3 +151,38 @@ export const propertyServiceTariff = pgTable('property_service_tariff', {
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const payment = pgTable('payment', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  contractId: text('contract_id').references(() => contract.id, { onDelete: 'set null' }),
+  amount: integer('amount_haler').notNull(),
+  paidAt: date('paid_at', { mode: 'string' }).notNull(),
+  counterparty: text('counterparty'),
+  counterpartyAccount: text('counterparty_account'),
+  externalId: text('external_id'),
+  statementRef: text('statement_ref'),
+  source: text('source', { enum: ['bank', 'manual'] }).notNull(),
+  description: text('description'),
+  note: text('note'),
+  importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  orgExternal: uniqueIndex('payment_org_external_idx').on(t.orgId, t.externalId),
+}));
+
+export const costStatement = pgTable('cost_statement', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  propertyId: text('property_id').notNull().references(() => property.id, { onDelete: 'cascade' }),
+  kind: text('kind', { enum: ['services', 'electricity', 'gas', 'internet', 'water', 'other'] }).notNull(),
+  periodFrom: date('period_from', { mode: 'string' }).notNull(),
+  periodTo: date('period_to', { mode: 'string' }).notNull(),
+  totalAmount: integer('total_amount_haler').notNull(),
+  adjustmentAmount: integer('adjustment_amount_haler').notNull().default(0),
+  adjustmentNote: text('adjustment_note'),
+  documentRef: text('document_ref'),
+  issuedAt: date('issued_at', { mode: 'string' }),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

@@ -199,7 +199,9 @@ export default {
   schema: './core/db/schema.ts',
   out: './drizzle',
   dialect: 'sqlite',
-  driver: 'libsql',
+  // Note: drizzle-kit no longer accepts driver: 'libsql' for the sqlite dialect
+  // (valid values are 'd1-http' | 'expo' | 'durable-sqlite'). For libSQL/Turso,
+  // dialect alone suffices — driver is inferred from the URL scheme.
   dbCredentials: {
     url: process.env.DATABASE_URL ?? 'file:./data/rental.sqlite',
   },

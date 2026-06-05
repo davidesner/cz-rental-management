@@ -1,6 +1,7 @@
 // Disable Ryuk reaper — it hangs on macOS Docker Desktop (socket at non-standard path)
 process.env['TESTCONTAINERS_RYUK_DISABLED'] = 'true';
 
+import { readFileSync } from 'node:fs';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import postgres from 'postgres';
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -13,7 +14,21 @@ let sharedContainer: StartedPostgreSqlContainer | null = null;
 let sharedUrl: string | null = null;
 let counter = 0;
 
+// Path used to share the container URL between the globalSetup process and test workers.
+const URL_FILE = '/tmp/vitest-postgres-url.txt';
+
 export async function ensureContainer(): Promise<string> {
+  if (sharedUrl) return sharedUrl;
+  // Check if globalSetup already started a container and wrote its URL to a file.
+  try {
+    const url = readFileSync(URL_FILE, 'utf8').trim();
+    if (url) {
+      sharedUrl = url;
+      return sharedUrl;
+    }
+  } catch {
+    // file not present yet — fall through to start a container
+  }
   if (!sharedContainer) {
     sharedContainer = await new PostgreSqlContainer('postgres:16-alpine').start();
     sharedUrl = sharedContainer.getConnectionUri();

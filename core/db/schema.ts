@@ -186,3 +186,24 @@ export const costStatement = pgTable('cost_statement', {
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const reconciliation = pgTable('reconciliation', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  contractId: text('contract_id').notNull().references(() => contract.id, { onDelete: 'cascade' }),
+  periodFrom: date('period_from', { mode: 'string' }).notNull(),
+  periodTo: date('period_to', { mode: 'string' }).notNull(),
+  status: text('status', { enum: ['draft', 'finalized'] }).notNull().default('draft'),
+  computedAt: timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const reconciliationItem = pgTable('reconciliation_item', {
+  id: text('id').primaryKey(),
+  reconciliationId: text('reconciliation_id').notNull().references(() => reconciliation.id, { onDelete: 'cascade' }),
+  kind: text('kind', { enum: ['services', 'electricity', 'gas', 'internet', 'water', 'other'] }).notNull(),
+  actualCost: integer('actual_cost_haler').notNull(),
+  paid: integer('paid_haler').notNull(),
+  difference: integer('difference_haler').notNull(),
+});

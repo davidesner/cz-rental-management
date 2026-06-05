@@ -6,3 +6,4 @@ export const TableBody = ({ className, ...props }: React.HTMLAttributes<HTMLTabl
 export const TableRow = ({ className, ...props }: React.HTMLAttributes<HTMLTableRowElement>) => <tr className={cn('border-b transition-colors hover:bg-muted/50', className)} {...props} />;
 export const TableHead = ({ className, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => <th className={cn('h-12 px-4 text-left align-middle font-medium text-muted-foreground', className)} {...props} />;
 export const TableCell = ({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) => <td className={cn('p-4 align-middle', className)} {...props} />;
+export const TableFooter = ({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) => <tfoot className={cn('border-t bg-muted/50 font-medium [&>tr]:last:border-b-0', className)} {...props} />;

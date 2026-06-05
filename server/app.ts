@@ -14,6 +14,7 @@ import { contractTermsRoutes } from './routes/contract-terms.js';
 import { contractUtilityRoutes } from './routes/contract-utilities.js';
 import { propertyTariffRoutes } from './routes/property-tariffs.js';
 import { paymentRoutes } from './routes/payments.js';
+import { costStatementRoutes } from './routes/cost-statements.js';
 import type { DB } from '../core/db/client.js';
 import type { Auth } from '../core/auth/better-auth.js';
 import type { AuthContext } from '../core/auth/context.js';
@@ -64,6 +65,7 @@ export function buildApp(deps: AppDeps): HonoApp {
   app.route('/api', contractUtilityRoutes());
   app.route('/api', propertyTariffRoutes());
   app.route('/api', paymentRoutes());
+  app.route('/api', costStatementRoutes());
 
   return app;
 }

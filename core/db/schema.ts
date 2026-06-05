@@ -1,4 +1,4 @@
-import { boolean, pgTable, text, timestamp, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
+import { boolean, date, integer, pgTable, text, timestamp, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
 
 // ----- better-auth tables (names match better-auth defaults) -----
 
@@ -72,6 +72,9 @@ export const property = pgTable('property', {
   id: text('id').primaryKey(),
   orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
+  address: text('address'),
+  reconciliationSkill: text('reconciliation_skill'),
+  note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -88,5 +91,63 @@ export const apiToken = pgTable('api_token', {
   name: text('name').notNull(),
   tokenHash: text('token_hash').notNull().unique(),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const tenant = pgTable('tenant', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  email: text('email'),
+  phone: text('phone'),
+  accountNumber: text('account_number'),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contract = pgTable('contract', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  propertyId: text('property_id').notNull().references(() => property.id, { onDelete: 'restrict' }),
+  tenantId: text('tenant_id').notNull().references(() => tenant.id, { onDelete: 'restrict' }),
+  startDate: date('start_date', { mode: 'string' }).notNull(),
+  endDate: date('end_date', { mode: 'string' }),
+  securityDeposit: integer('security_deposit_haler'),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contractTerms = pgTable('contract_terms', {
+  id: text('id').primaryKey(),
+  contractId: text('contract_id').notNull().references(() => contract.id, { onDelete: 'cascade' }),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }),
+  baseRent: integer('base_rent_haler').notNull(),
+  serviceAdvance: integer('service_advance_haler').notNull(),
+  source: text('source', { enum: ['initial', 'addendum', 'change'] }).notNull(),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contractUtility = pgTable('contract_utility', {
+  id: text('id').primaryKey(),
+  contractId: text('contract_id').notNull().references(() => contract.id, { onDelete: 'cascade' }),
+  kind: text('kind', { enum: ['electricity', 'gas', 'internet', 'water', 'other'] }).notNull(),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }),
+  monthlyAdvance: integer('monthly_advance_haler').notNull(),
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const propertyServiceTariff = pgTable('property_service_tariff', {
+  id: text('id').primaryKey(),
+  propertyId: text('property_id').notNull().references(() => property.id, { onDelete: 'cascade' }),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }),
+  totalSvjAdvance: integer('total_svj_advance_haler').notNull(),
+  deductibleAmount: integer('deductible_amount_haler').notNull(),
+  deductibleNote: text('deductible_note'),
+  note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

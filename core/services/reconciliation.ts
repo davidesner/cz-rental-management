@@ -7,6 +7,28 @@ import { expectedForMonth, allocate, UTILITY_ORDER, type UtilityKind } from '../
 
 type Kind = 'services' | UtilityKind;
 
+export interface ItemBreakdown {
+  costStatements: Array<{
+    id: string;
+    periodFrom: string;
+    periodTo: string;
+    totalAmount: number;
+    adjustmentAmount: number;
+    adjustmentNote: string | null;
+    note: string | null;
+    documentRef: string | null;
+  }>;
+  months: Array<{
+    month: string;           // "YYYY-MM"
+    daysActive: number;
+    daysInMonth: number;
+    expectedThisKind: number;  // haléře
+    expectedTotal: number;     // haléře (baseRent + service + all utilities, prorated)
+    receivedTotal: number;     // haléře (sum of payment amounts in this month)
+    paidThisKind: number;      // haléře (after allocation rule)
+  }>;
+}
+
 export interface ReconciliationItemRow {
   id: string;
   reconciliationId: string;
@@ -14,6 +36,7 @@ export interface ReconciliationItemRow {
   actualCost: number;
   paid: number;
   difference: number;
+  breakdown: ItemBreakdown;
 }
 
 export interface ReconciliationRow {
@@ -27,6 +50,10 @@ export interface ReconciliationRow {
   note: string | null;
   createdAt: Date;
   items: ReconciliationItemRow[];
+}
+
+export interface ReconciliationListRow extends ReconciliationRow {
+  costStatementNotes: string[];
 }
 
 async function assertContract(db: DB, orgId: string, contractId: string, allowedPropertyIds: string[] | null) {
@@ -51,33 +78,43 @@ function eachMonthInPeriod(periodFrom: string, periodTo: string): Array<{ year: 
   return result;
 }
 
-export async function computeReconciliation(
-  db: DB,
-  orgId: string,
-  contractId: string,
-  allowedPropertyIds: string[] | null,
-  input: { periodFrom: string; periodTo: string; note?: string | null }
-): Promise<ReconciliationRow> {
-  const c = await assertContract(db, orgId, contractId, allowedPropertyIds);
+/**
+ * Core computation: given a contract + its temporal/payment/cost-statement data,
+ * compute items with full breakdown. Does not touch the DB.
+ */
+function computeItemsWithBreakdown(
+  contractRow: { id: string; startDate: string; endDate: string | null },
+  periodFrom: string,
+  periodTo: string,
+  terms: Array<{ validFrom: string; validTo: string | null; baseRent: number; serviceAdvance: number }>,
+  utilities: Array<{ kind: string; validFrom: string; validTo: string | null; monthlyAdvance: number }>,
+  payments: Array<{ amount: number; paidAt: string }>,
+  statements: Array<{
+    id: string;
+    kind: string;
+    periodFrom: string;
+    periodTo: string;
+    totalAmount: number;
+    adjustmentAmount: number;
+    adjustmentNote: string | null;
+    note: string | null;
+    documentRef: string | null;
+  }>,
+): Array<{ kind: Kind; actualCost: number; paid: number; difference: number; breakdown: ItemBreakdown }> {
 
-  // Load temporal data
-  const terms = await db.select().from(contractTerms).where(eq(contractTerms.contractId, contractId)).orderBy(asc(contractTerms.validFrom));
-  const utilities = await db.select().from(contractUtility).where(eq(contractUtility.contractId, contractId)).orderBy(asc(contractUtility.validFrom));
-
-  // Load payments in period
-  const payments = await db.select().from(payment).where(
-    and(eq(payment.contractId, contractId), gte(payment.paidAt, input.periodFrom), lte(payment.paidAt, input.periodTo))
-  );
-
-  // Accumulate paid per kind
   const paidPerKind: Record<Kind, number> = {
     services: 0, electricity: 0, gas: 0, internet: 0, water: 0, other: 0,
   };
 
-  for (const { year, month } of eachMonthInPeriod(input.periodFrom, input.periodTo)) {
+  // monthsPerKind collects per-month data keyed by kind
+  const monthsPerKind: Record<Kind, ItemBreakdown['months']> = {
+    services: [], electricity: [], gas: [], internet: [], water: [], other: [],
+  };
+
+  for (const { year, month } of eachMonthInPeriod(periodFrom, periodTo)) {
     const exp = expectedForMonth(
       year, month,
-      c.startDate, c.endDate,
+      contractRow.startDate, contractRow.endDate,
       terms.map(t => ({ validFrom: t.validFrom, validTo: t.validTo, baseRent: t.baseRent, serviceAdvance: t.serviceAdvance })),
       utilities.map(u => ({ kind: u.kind as UtilityKind, validFrom: u.validFrom, validTo: u.validTo, monthlyAdvance: u.monthlyAdvance })),
     );
@@ -87,82 +124,219 @@ export async function computeReconciliation(
       .filter(p => p.paidAt >= monthFirst && p.paidAt <= monthLast)
       .reduce((s, p) => s + p.amount, 0);
     const a = allocate(received, exp);
+
     paidPerKind.services += a.servicePaid;
     for (const kind of UTILITY_ORDER) paidPerKind[kind] += a.utilityPaid[kind];
+
+    const expectedTotal = exp.baseRent + exp.serviceAdvance + UTILITY_ORDER.reduce((s, k) => s + exp.utilities[k], 0);
+    const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+
+    // services
+    monthsPerKind.services.push({
+      month: monthStr,
+      daysActive: exp.daysActive,
+      daysInMonth: exp.daysInMonth,
+      expectedThisKind: exp.serviceAdvance,
+      expectedTotal,
+      receivedTotal: received,
+      paidThisKind: a.servicePaid,
+    });
+
+    // utilities
+    for (const kind of UTILITY_ORDER) {
+      monthsPerKind[kind].push({
+        month: monthStr,
+        daysActive: exp.daysActive,
+        daysInMonth: exp.daysInMonth,
+        expectedThisKind: exp.utilities[kind],
+        expectedTotal,
+        receivedTotal: received,
+        paidThisKind: a.utilityPaid[kind],
+      });
+    }
   }
 
-  // Load cost statements that intersect the period
-  const statements = await db.select().from(costStatement).where(
-    and(
-      eq(costStatement.orgId, orgId),
-      eq(costStatement.propertyId, c.propertyId),
-      lte(costStatement.periodFrom, input.periodTo),
-      gte(costStatement.periodTo, input.periodFrom),
-    ),
-  );
+  // Group cost statements by kind
+  const statementsPerKind: Record<Kind, ItemBreakdown['costStatements']> = {
+    services: [], electricity: [], gas: [], internet: [], water: [], other: [],
+  };
   const costPerKind: Record<Kind, number> = {
     services: 0, electricity: 0, gas: 0, internet: 0, water: 0, other: 0,
   };
   for (const s of statements) {
-    costPerKind[s.kind as Kind] += s.totalAmount + s.adjustmentAmount;
+    const k = s.kind as Kind;
+    statementsPerKind[k].push({
+      id: s.id,
+      periodFrom: s.periodFrom,
+      periodTo: s.periodTo,
+      totalAmount: s.totalAmount,
+      adjustmentAmount: s.adjustmentAmount,
+      adjustmentNote: s.adjustmentNote,
+      note: s.note,
+      documentRef: s.documentRef,
+    });
+    costPerKind[k] += s.totalAmount + s.adjustmentAmount;
   }
 
-  // Build items: include any kind where either side is non-zero
-  const recId = createId();
-  const itemRows: Array<typeof reconciliationItem.$inferInsert> = [];
+  // Build items for any kind with non-zero paid OR cost
   const kindsToShow: Kind[] = ['services', ...UTILITY_ORDER];
+  const result: Array<{ kind: Kind; actualCost: number; paid: number; difference: number; breakdown: ItemBreakdown }> = [];
   for (const kind of kindsToShow) {
     const actual = costPerKind[kind];
     const paid = paidPerKind[kind];
     if (actual === 0 && paid === 0) continue;
-    itemRows.push({
-      id: createId(), reconciliationId: recId, kind,
-      actualCost: actual, paid, difference: paid - actual,
+    result.push({
+      kind,
+      actualCost: actual,
+      paid,
+      difference: paid - actual,
+      breakdown: {
+        costStatements: statementsPerKind[kind],
+        months: monthsPerKind[kind],
+      },
     });
   }
+  return result;
+}
 
-  // Persist in a transaction
+/**
+ * Load all data needed to compute items+breakdown for a given contract and period,
+ * then run the pure computation.
+ */
+async function buildItemsWithBreakdown(
+  db: DB,
+  contractRow: { id: string; orgId: string; propertyId: string; startDate: string; endDate: string | null },
+  periodFrom: string,
+  periodTo: string,
+  placeholderRecId: string,
+): Promise<Array<ReconciliationItemRow>> {
+  const terms = await db.select().from(contractTerms)
+    .where(eq(contractTerms.contractId, contractRow.id))
+    .orderBy(asc(contractTerms.validFrom));
+
+  const utilities = await db.select().from(contractUtility)
+    .where(eq(contractUtility.contractId, contractRow.id))
+    .orderBy(asc(contractUtility.validFrom));
+
+  const payments = await db.select().from(payment).where(
+    and(eq(payment.contractId, contractRow.id), gte(payment.paidAt, periodFrom), lte(payment.paidAt, periodTo))
+  );
+
+  const statements = await db.select().from(costStatement).where(
+    and(
+      eq(costStatement.orgId, contractRow.orgId),
+      eq(costStatement.propertyId, contractRow.propertyId),
+      lte(costStatement.periodFrom, periodTo),
+      gte(costStatement.periodTo, periodFrom),
+    ),
+  );
+
+  const computed = computeItemsWithBreakdown(contractRow, periodFrom, periodTo, terms, utilities, payments, statements);
+
+  return computed.map(item => ({
+    id: createId(),
+    reconciliationId: placeholderRecId,
+    kind: item.kind,
+    actualCost: item.actualCost,
+    paid: item.paid,
+    difference: item.difference,
+    breakdown: item.breakdown,
+  }));
+}
+
+export async function computeReconciliation(
+  db: DB,
+  orgId: string,
+  contractId: string,
+  allowedPropertyIds: string[] | null,
+  input: { periodFrom: string; periodTo: string; note?: string | null }
+): Promise<ReconciliationRow> {
+  const c = await assertContract(db, orgId, contractId, allowedPropertyIds);
+
+  const recId = createId();
+  const itemsWithBreakdown = await buildItemsWithBreakdown(db, c, input.periodFrom, input.periodTo, recId);
+
+  // Persist in a transaction (store simplified rows — no breakdown in DB)
   const result = await db.transaction(async (tx) => {
     const [rec] = await tx.insert(reconciliation).values({
       id: recId, orgId, contractId,
       periodFrom: input.periodFrom, periodTo: input.periodTo,
       status: 'draft', note: input.note ?? null,
     }).returning();
-    if (itemRows.length > 0) {
-      await tx.insert(reconciliationItem).values(itemRows);
+    if (itemsWithBreakdown.length > 0) {
+      await tx.insert(reconciliationItem).values(
+        itemsWithBreakdown.map(({ id, reconciliationId, kind, actualCost, paid, difference }) => ({
+          id, reconciliationId, kind, actualCost, paid, difference,
+        }))
+      );
     }
     return rec!;
   });
-  const items = await db.select().from(reconciliationItem).where(eq(reconciliationItem.reconciliationId, recId));
-  return { ...result, items: items as ReconciliationItemRow[] };
+
+  return { ...result, items: itemsWithBreakdown };
 }
 
-export async function listReconciliations(db: DB, orgId: string, contractId: string | undefined, allowedPropertyIds: string[] | null): Promise<ReconciliationRow[]> {
+export async function listReconciliations(
+  db: DB,
+  orgId: string,
+  contractId: string | undefined,
+  allowedPropertyIds: string[] | null
+): Promise<ReconciliationListRow[]> {
   const conds = [eq(reconciliation.orgId, orgId)];
   if (contractId) conds.push(eq(reconciliation.contractId, contractId));
   const rows = await db.select().from(reconciliation).where(and(...conds));
+
+  // Pre-load contracts to get propertyIds
+  const contractRows = await db.select().from(contract).where(eq(contract.orgId, orgId));
+  const contractMap = Object.fromEntries(contractRows.map(c => [c.id, c]));
+
+  let filteredRows = rows;
   if (allowedPropertyIds !== null) {
-    // restrict by contract's property
-    const contractRows = await db.select().from(contract).where(eq(contract.orgId, orgId));
-    const allowedContractIds = new Set(contractRows.filter(c => allowedPropertyIds.includes(c.propertyId)).map(c => c.id));
-    const filtered = rows.filter(r => allowedContractIds.has(r.contractId));
-    return Promise.all(filtered.map(async r => ({
-      ...r,
-      items: (await db.select().from(reconciliationItem).where(eq(reconciliationItem.reconciliationId, r.id))) as ReconciliationItemRow[],
-    })));
+    const allowedContractIds = new Set(
+      contractRows.filter(c => allowedPropertyIds.includes(c.propertyId)).map(c => c.id)
+    );
+    filteredRows = rows.filter(r => allowedContractIds.has(r.contractId));
   }
-  return Promise.all(rows.map(async r => ({
-    ...r,
-    items: (await db.select().from(reconciliationItem).where(eq(reconciliationItem.reconciliationId, r.id))) as ReconciliationItemRow[],
-  })));
+
+  return Promise.all(filteredRows.map(async r => {
+    const items = (await db.select().from(reconciliationItem).where(eq(reconciliationItem.reconciliationId, r.id))) as Omit<ReconciliationItemRow, 'breakdown'>[];
+
+    // Collect costStatementNotes for this reconciliation's contract/property
+    const c = contractMap[r.contractId];
+    let costStatementNotes: string[] = [];
+    if (c) {
+      const stmts = await db.select({ adjustmentNote: costStatement.adjustmentNote }).from(costStatement).where(
+        and(
+          eq(costStatement.orgId, orgId),
+          eq(costStatement.propertyId, c.propertyId),
+          lte(costStatement.periodFrom, r.periodTo),
+          gte(costStatement.periodTo, r.periodFrom),
+        ),
+      );
+      costStatementNotes = stmts
+        .map(s => s.adjustmentNote)
+        .filter((n): n is string => n !== null && n.trim() !== '');
+    }
+
+    // Items in list don't include breakdown — add empty breakdown placeholder
+    const itemsWithBreakdown: ReconciliationItemRow[] = (items as Array<Omit<ReconciliationItemRow, 'breakdown'>>).map(item => ({
+      ...item,
+      breakdown: { costStatements: [], months: [] },
+    }));
+
+    return { ...r, items: itemsWithBreakdown, costStatementNotes };
+  }));
 }
 
 export async function getReconciliation(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<ReconciliationRow> {
   const [row] = await db.select().from(reconciliation).where(and(eq(reconciliation.id, id), eq(reconciliation.orgId, orgId)));
   if (!row) throw new AppError('not_found', 'reconciliation not found');
-  await assertContract(db, orgId, row.contractId, allowedPropertyIds);
-  const items = await db.select().from(reconciliationItem).where(eq(reconciliationItem.reconciliationId, id));
-  return { ...row, items: items as ReconciliationItemRow[] };
+  const c = await assertContract(db, orgId, row.contractId, allowedPropertyIds);
+
+  // Re-derive items with fresh breakdown (reflects current cost statement data)
+  const items = await buildItemsWithBreakdown(db, c, row.periodFrom, row.periodTo, id);
+
+  return { ...row, items };
 }
 
 export async function finalizeReconciliation(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<ReconciliationRow> {

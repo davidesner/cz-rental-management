@@ -109,6 +109,35 @@ describe('<property-name-a> 2024 reference reconciliation', () => {
     }
     console.log(`  TOTAL: ${(total / 100).toFixed(2)} Kč`);
 
+    // Verify breakdown structure per item
+    for (const it of rec.items) {
+      expect(it.breakdown).toBeDefined();
+      expect(Array.isArray(it.breakdown.costStatements)).toBe(true);
+      expect(Array.isArray(it.breakdown.months)).toBe(true);
+    }
+
+    // Services item: 1 cost statement with totalAmount 2999949
+    const servicesItem = rec.items.find((it: any) => it.kind === 'services');
+    expect(servicesItem).toBeDefined();
+    expect(servicesItem.breakdown.costStatements.length).toBe(1);
+    expect(servicesItem.breakdown.costStatements[0].totalAmount).toBe(2999949);
+    expect(servicesItem.breakdown.costStatements[0].adjustmentAmount).toBe(-625374);
+    // 4 months: Sep (partial), Oct, Nov, Dec
+    expect(servicesItem.breakdown.months.length).toBe(4);
+
+    // Electricity item: 1 cost statement
+    const elecItem = rec.items.find((it: any) => it.kind === 'electricity');
+    expect(elecItem).toBeDefined();
+    expect(elecItem.breakdown.costStatements.length).toBe(1);
+    expect(elecItem.breakdown.costStatements[0].totalAmount).toBe(316867);
+    // 4 months: Sep (partial), Oct, Nov, Dec
+    expect(elecItem.breakdown.months.length).toBe(4);
+    // Sep is partial (20th–30th = 11 days in 30-day month)
+    const sepMonth = elecItem.breakdown.months.find((m: any) => m.month === '2024-09');
+    expect(sepMonth).toBeDefined();
+    expect(sepMonth.daysActive).toBe(11);
+    expect(sepMonth.daysInMonth).toBe(30);
+
     await client.close();
   }, 30000);
 });

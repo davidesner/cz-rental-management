@@ -23,6 +23,7 @@ interface Reconciliation {
   status: string;
   computedAt: string | null;
   items: ReconciliationItem[];
+  costStatementNotes?: string[];
 }
 
 interface Contract { id: string; propertyId: string; tenantId: string; }
@@ -31,6 +32,19 @@ interface Tenant { id: string; name: string; }
 
 function fmtKc(halere: number) {
   return (halere / 100).toFixed(2) + ' Kč';
+}
+
+const MAX_NOTES_DISPLAY = 80;
+
+function NotesCell({ notes }: { notes: string[] }) {
+  if (!notes || notes.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+  const joined = notes.join(' · ');
+  const truncated = joined.length > MAX_NOTES_DISPLAY ? joined.slice(0, MAX_NOTES_DISPLAY) + '…' : joined;
+  return (
+    <span title={joined} className="text-xs text-muted-foreground cursor-default">
+      {truncated}
+    </span>
+  );
 }
 
 export function ReconciliationsPage() {
@@ -103,6 +117,7 @@ export function ReconciliationsPage() {
               <TableHead>Období</TableHead>
               <TableHead>Stav</TableHead>
               <TableHead>Celkový rozdíl</TableHead>
+              <TableHead>Poznámky</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -113,6 +128,9 @@ export function ReconciliationsPage() {
                 <TableCell>{r.periodFrom} – {r.periodTo}</TableCell>
                 <TableCell>{r.status}</TableCell>
                 <TableCell>{fmtKc(totalDiff(r.items ?? []))}</TableCell>
+                <TableCell className="max-w-xs">
+                  <NotesCell notes={r.costStatementNotes ?? []} />
+                </TableCell>
                 <TableCell>
                   <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
                 </TableCell>
@@ -120,7 +138,7 @@ export function ReconciliationsPage() {
             ))}
             {reconciliations.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Zatím žádná vyúčtování.</TableCell>
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Zatím žádná vyúčtování.</TableCell>
               </TableRow>
             )}
           </TableBody>

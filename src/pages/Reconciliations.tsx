@@ -92,17 +92,17 @@ export function ReconciliationsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Reconciliations</h1>
-        <Button onClick={() => { setComputeErr(null); setComputeOpen(true); }}>Compute</Button>
+        <h1 className="text-3xl font-bold">Vyúčtování nájemci</h1>
+        <Button onClick={() => { setComputeErr(null); setComputeOpen(true); }}>Spočítat</Button>
       </div>
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Contract</TableHead>
-              <TableHead>Period</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Total diff</TableHead>
+              <TableHead>Smlouva</TableHead>
+              <TableHead>Období</TableHead>
+              <TableHead>Stav</TableHead>
+              <TableHead>Celkový rozdíl</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -114,13 +114,13 @@ export function ReconciliationsPage() {
                 <TableCell>{r.status}</TableCell>
                 <TableCell>{fmtKc(totalDiff(r.items ?? []))}</TableCell>
                 <TableCell>
-                  <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Open</Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
                 </TableCell>
               </TableRow>
             ))}
             {reconciliations.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">No reconciliations yet.</TableCell>
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Zatím žádná vyúčtování.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -131,34 +131,34 @@ export function ReconciliationsPage() {
       {computeOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setComputeOpen(false)}>
           <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Compute reconciliation</h2>
+            <h2 className="text-xl font-semibold">Spočítat vyúčtování</h2>
             <div>
-              <Label>Contract</Label>
+              <Label>Smlouva</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={computeForm.contractId}
                 onChange={e => setComputeForm({ ...computeForm, contractId: e.target.value })}
               >
-                <option value="">Select contract…</option>
+                <option value="">Vyber smlouvu…</option>
                 {contracts.map(c => <option key={c.id} value={c.id}>{contractLabel(c.id)}</option>)}
               </select>
             </div>
             <div>
-              <Label>Period from</Label>
+              <Label>Období od</Label>
               <Input type="date" value={computeForm.periodFrom} onChange={e => setComputeForm({ ...computeForm, periodFrom: e.target.value })} />
             </div>
             <div>
-              <Label>Period to</Label>
+              <Label>Období do</Label>
               <Input type="date" value={computeForm.periodTo} onChange={e => setComputeForm({ ...computeForm, periodTo: e.target.value })} />
             </div>
             {computeErr && <p className="text-sm text-destructive">{computeErr}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setComputeOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setComputeOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => computeMutation.mutate()}
                 disabled={!computeForm.contractId || !computeForm.periodFrom || !computeForm.periodTo || computeMutation.isPending}
               >
-                Compute
+                Spočítat
               </Button>
             </div>
           </Card>

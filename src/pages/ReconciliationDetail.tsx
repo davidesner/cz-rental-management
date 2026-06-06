@@ -53,31 +53,31 @@ export function ReconciliationDetailPage() {
   const items = r?.items ?? [];
   const totalDiff = items.reduce((sum, i) => sum + i.difference, 0);
 
-  if (isLoading) return <div className="p-8 text-muted-foreground">Loading…</div>;
-  if (!r) return <div className="p-8 text-muted-foreground">Not found.</div>;
+  if (isLoading) return <div className="p-8 text-muted-foreground">Načítání…</div>;
+  if (!r) return <div className="p-8 text-muted-foreground">Nenalezeno.</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link to="/reconciliations" className="text-sm text-muted-foreground hover:underline">← Reconciliations</Link>
-        <h1 className="text-3xl font-bold">Reconciliation</h1>
+        <Link to="/reconciliations" className="text-sm text-muted-foreground hover:underline">← Vyúčtování nájemci</Link>
+        <h1 className="text-3xl font-bold">Vyúčtování</h1>
       </div>
 
       <Card className="p-6 space-y-2">
-        <p><span className="font-medium">Contract:</span> {r.contractId}</p>
-        <p><span className="font-medium">Period:</span> {r.periodFrom} – {r.periodTo}</p>
-        <p><span className="font-medium">Status:</span> {r.status}</p>
-        {r.computedAt && <p><span className="font-medium">Computed at:</span> {r.computedAt}</p>}
+        <p><span className="font-medium">Smlouva:</span> {r.contractId}</p>
+        <p><span className="font-medium">Období:</span> {r.periodFrom} – {r.periodTo}</p>
+        <p><span className="font-medium">Stav:</span> {r.status}</p>
+        {r.computedAt && <p><span className="font-medium">Spočítáno dne:</span> {r.computedAt}</p>}
       </Card>
 
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Kind</TableHead>
-              <TableHead className="text-right">Paid</TableHead>
-              <TableHead className="text-right">Actual cost</TableHead>
-              <TableHead className="text-right">Difference</TableHead>
+              <TableHead>Druh</TableHead>
+              <TableHead className="text-right">Zaplaceno</TableHead>
+              <TableHead className="text-right">Skutečné náklady</TableHead>
+              <TableHead className="text-right">Rozdíl</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -93,14 +93,14 @@ export function ReconciliationDetailPage() {
             ))}
             {items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-6">No items.</TableCell>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-6">Žádné položky.</TableCell>
               </TableRow>
             )}
           </TableBody>
           {items.length > 0 && (
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={3} className="font-medium">Total difference</TableCell>
+                <TableCell colSpan={3} className="font-medium">Celkový rozdíl</TableCell>
                 <TableCell className={`text-right font-bold ${totalDiff < 0 ? 'text-destructive' : 'text-green-600'}`}>
                   {fmtKc(totalDiff)}
                 </TableCell>
@@ -116,16 +116,16 @@ export function ReconciliationDetailPage() {
             onClick={() => finalize.mutate()}
             disabled={finalize.isPending}
           >
-            Finalize
+            Finalizovat
           </Button>
           <Button
             variant="destructive"
             onClick={() => {
-              if (confirm('Delete this reconciliation?')) deleteMutation.mutate();
+              if (confirm('Smazat toto vyúčtování?')) deleteMutation.mutate();
             }}
             disabled={deleteMutation.isPending}
           >
-            Delete
+            Smazat
           </Button>
         </div>
       )}

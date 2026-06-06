@@ -104,35 +104,35 @@ export function ContractDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link to="/contracts" className="text-sm text-muted-foreground hover:underline">← Contracts</Link>
-        <h1 className="text-3xl font-bold">Contract detail</h1>
+        <Link to="/contracts" className="text-sm text-muted-foreground hover:underline">← Smlouvy</Link>
+        <h1 className="text-3xl font-bold">Detail smlouvy</h1>
       </div>
 
       {contract && (
         <Card className="p-6 space-y-2">
-          <p><span className="font-medium">Property ID:</span> {contract.propertyId}</p>
-          <p><span className="font-medium">Tenant ID:</span> {contract.tenantId}</p>
-          <p><span className="font-medium">Start:</span> {contract.startDate}</p>
-          <p><span className="font-medium">End:</span> {contract.endDate ?? '—'}</p>
-          <p><span className="font-medium">Security deposit:</span> {contract.securityDeposit != null ? fmtKc(contract.securityDeposit) : '—'}</p>
+          <p><span className="font-medium">ID nemovitosti:</span> {contract.propertyId}</p>
+          <p><span className="font-medium">ID nájemce:</span> {contract.tenantId}</p>
+          <p><span className="font-medium">Začátek:</span> {contract.startDate}</p>
+          <p><span className="font-medium">Konec:</span> {contract.endDate ?? '—'}</p>
+          <p><span className="font-medium">Kauce:</span> {contract.securityDeposit != null ? fmtKc(contract.securityDeposit) : '—'}</p>
         </Card>
       )}
 
       {/* Terms */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Terms</h2>
-          <Button size="sm" onClick={() => { setTermsErr(null); setTermsOpen(true); }}>Add terms</Button>
+          <h2 className="text-xl font-semibold">Podmínky</h2>
+          <Button size="sm" onClick={() => { setTermsErr(null); setTermsOpen(true); }}>Přidat podmínky</Button>
         </div>
         <Card className="overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Valid from</TableHead>
-                <TableHead>Base rent</TableHead>
-                <TableHead>Service advance</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Note</TableHead>
+                <TableHead>Platnost od</TableHead>
+                <TableHead>Nájem (čistý)</TableHead>
+                <TableHead>Záloha na služby</TableHead>
+                <TableHead>Zdroj</TableHead>
+                <TableHead>Poznámka</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -147,7 +147,7 @@ export function ContractDetailPage() {
               ))}
               {(termsData?.terms ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-6">No terms yet.</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-6">Zatím žádné podmínky.</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -158,17 +158,17 @@ export function ContractDetailPage() {
       {/* Utilities */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Utilities</h2>
-          <Button size="sm" onClick={() => { setUtilErr(null); setUtilOpen(true); }}>Add utility</Button>
+          <h2 className="text-xl font-semibold">Energie</h2>
+          <Button size="sm" onClick={() => { setUtilErr(null); setUtilOpen(true); }}>Přidat energii</Button>
         </div>
         <Card className="overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Kind</TableHead>
-                <TableHead>Valid from</TableHead>
-                <TableHead>Monthly advance</TableHead>
-                <TableHead>Note</TableHead>
+                <TableHead>Druh</TableHead>
+                <TableHead>Platnost od</TableHead>
+                <TableHead>Měsíční záloha</TableHead>
+                <TableHead>Poznámka</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -182,7 +182,7 @@ export function ContractDetailPage() {
               ))}
               {(utilitiesData?.utilities ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-6">No utilities yet.</TableCell>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-6">Zatím žádné energie.</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -194,43 +194,43 @@ export function ContractDetailPage() {
       {termsOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setTermsOpen(false)}>
           <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Add terms</h2>
+            <h2 className="text-xl font-semibold">Přidat podmínky</h2>
             <div>
-              <Label>Valid from</Label>
+              <Label>Platnost od</Label>
               <Input type="date" value={termsForm.validFrom} onChange={e => setTermsForm({ ...termsForm, validFrom: e.target.value })} />
             </div>
             <div>
-              <Label>Base rent (Kč)</Label>
+              <Label>Nájem (čistý) (Kč)</Label>
               <Input type="text" placeholder="0.00" value={termsForm.baseRent} onChange={e => setTermsForm({ ...termsForm, baseRent: e.target.value })} />
             </div>
             <div>
-              <Label>Service advance (Kč)</Label>
+              <Label>Záloha na služby (Kč)</Label>
               <Input type="text" placeholder="0.00" value={termsForm.serviceAdvance} onChange={e => setTermsForm({ ...termsForm, serviceAdvance: e.target.value })} />
             </div>
             <div>
-              <Label>Source</Label>
+              <Label>Zdroj</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={termsForm.source}
                 onChange={e => setTermsForm({ ...termsForm, source: e.target.value })}
               >
-                <option value="initial">initial</option>
-                <option value="addendum">addendum</option>
-                <option value="change">change</option>
+                <option value="initial">Počáteční</option>
+                <option value="addendum">Dodatek</option>
+                <option value="change">Změna</option>
               </select>
             </div>
             <div>
-              <Label>Note (optional)</Label>
+              <Label>Poznámka (volitelné)</Label>
               <Input value={termsForm.note} onChange={e => setTermsForm({ ...termsForm, note: e.target.value })} />
             </div>
             {termsErr && <p className="text-sm text-destructive">{termsErr}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setTermsOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setTermsOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => addTerms.mutate()}
                 disabled={!termsForm.validFrom || !termsForm.baseRent || !termsForm.serviceAdvance || addTerms.isPending}
               >
-                Add
+                Přidat
               </Button>
             </div>
           </Card>
@@ -241,41 +241,41 @@ export function ContractDetailPage() {
       {utilOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setUtilOpen(false)}>
           <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Add utility</h2>
+            <h2 className="text-xl font-semibold">Přidat energii</h2>
             <div>
-              <Label>Kind</Label>
+              <Label>Druh</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={utilForm.kind}
                 onChange={e => setUtilForm({ ...utilForm, kind: e.target.value })}
               >
-                <option value="electricity">electricity</option>
-                <option value="gas">gas</option>
-                <option value="internet">internet</option>
-                <option value="water">water</option>
-                <option value="other">other</option>
+                <option value="electricity">Elektřina</option>
+                <option value="gas">Plyn</option>
+                <option value="internet">Internet</option>
+                <option value="water">Voda</option>
+                <option value="other">Ostatní</option>
               </select>
             </div>
             <div>
-              <Label>Valid from</Label>
+              <Label>Platnost od</Label>
               <Input type="date" value={utilForm.validFrom} onChange={e => setUtilForm({ ...utilForm, validFrom: e.target.value })} />
             </div>
             <div>
-              <Label>Monthly advance (Kč)</Label>
+              <Label>Měsíční záloha (Kč)</Label>
               <Input type="text" placeholder="0.00" value={utilForm.monthlyAdvance} onChange={e => setUtilForm({ ...utilForm, monthlyAdvance: e.target.value })} />
             </div>
             <div>
-              <Label>Note (optional)</Label>
+              <Label>Poznámka (volitelné)</Label>
               <Input value={utilForm.note} onChange={e => setUtilForm({ ...utilForm, note: e.target.value })} />
             </div>
             {utilErr && <p className="text-sm text-destructive">{utilErr}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setUtilOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setUtilOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => addUtility.mutate()}
                 disabled={!utilForm.validFrom || !utilForm.monthlyAdvance || addUtility.isPending}
               >
-                Add
+                Přidat
               </Button>
             </div>
           </Card>

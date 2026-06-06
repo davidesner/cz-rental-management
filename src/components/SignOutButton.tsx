@@ -10,5 +10,5 @@ export function SignOutButton() {
     qc.clear();
     navigate('/login');
   }
-  return <Button variant="ghost" onClick={signOut}>Sign out</Button>;
+  return <Button variant="ghost" onClick={signOut}>Odhlásit</Button>;
 }

@@ -3,6 +3,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import type { DB } from '../db/client.js';
 import * as schema from '../db/schema.js';
+import { createOrganization } from '../services/organization.js';
 
 export function createAuth(db: DB) {
   return betterAuth({
@@ -22,6 +23,20 @@ export function createAuth(db: DB) {
       ? process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(',')
       : ['http://localhost:5173'],
     emailAndPassword: { enabled: true, requireEmailVerification: false },
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            // Auto-create a personal organization for every new user.
+            // Multi-user sharing (invites) comes later; for now user === org.
+            await createOrganization(db, {
+              userId: user.id,
+              name: `${user.name}'s workspace`,
+            });
+          },
+        },
+      },
+    },
   });
 }
 

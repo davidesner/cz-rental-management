@@ -7,21 +7,21 @@ export function ProtectedLayout() {
   const { data: me, isLoading, isError } = useMe();
   const navigate = useNavigate();
   useEffect(() => { if (isError) navigate('/login'); }, [isError, navigate]);
-  if (isLoading) return <div className="p-8">Loading…</div>;
+  if (isLoading) return <div className="p-8">Načítání…</div>;
   if (!me) return null;
   return (
     <div className="min-h-screen flex">
       <aside className="w-60 border-r p-6 space-y-3">
-        <div className="font-bold mb-6">Rental Management</div>
+        <div className="font-bold mb-6">Správa pronájmu</div>
         <nav className="flex flex-col space-y-1 text-sm">
-          <Link className="hover:underline" to="/">Dashboard</Link>
-          <Link className="hover:underline" to="/properties">Properties</Link>
-          <Link className="hover:underline" to="/tenants">Tenants</Link>
-          <Link className="hover:underline" to="/contracts">Contracts</Link>
-          <Link className="hover:underline" to="/payments">Payments</Link>
-          <Link className="hover:underline" to="/cost-statements">Cost statements</Link>
-          <Link className="hover:underline" to="/reconciliations">Reconciliations</Link>
-          <Link className="hover:underline" to="/settings/api-tokens">API tokens</Link>
+          <Link className="hover:underline" to="/">Přehled</Link>
+          <Link className="hover:underline" to="/properties">Nemovitosti</Link>
+          <Link className="hover:underline" to="/tenants">Nájemci</Link>
+          <Link className="hover:underline" to="/contracts">Smlouvy</Link>
+          <Link className="hover:underline" to="/payments">Platby</Link>
+          <Link className="hover:underline" to="/cost-statements">Vyúčtování nákladů</Link>
+          <Link className="hover:underline" to="/reconciliations">Vyúčtování nájemci</Link>
+          <Link className="hover:underline" to="/settings/api-tokens">API tokeny</Link>
         </nav>
         <div className="pt-6 mt-6 border-t text-xs text-muted-foreground">
           <div>{me.user.email}</div>

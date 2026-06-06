@@ -76,18 +76,18 @@ export function CostStatementsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Cost statements</h1>
-        <Button onClick={() => { setErr(null); setOpen(true); }}>New statement</Button>
+        <h1 className="text-3xl font-bold">Vyúčtování nákladů</h1>
+        <Button onClick={() => { setErr(null); setOpen(true); }}>Nový výkaz</Button>
       </div>
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Property</TableHead>
-              <TableHead>Kind</TableHead>
-              <TableHead>Period</TableHead>
-              <TableHead>Total</TableHead>
-              <TableHead>Adjustment</TableHead>
+              <TableHead>Nemovitost</TableHead>
+              <TableHead>Druh</TableHead>
+              <TableHead>Období</TableHead>
+              <TableHead>Celkem</TableHead>
+              <TableHead>Úprava</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -102,7 +102,7 @@ export function CostStatementsPage() {
             ))}
             {statements.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">No cost statements yet.</TableCell>
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Zatím žádné výkazy nákladů.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -112,65 +112,65 @@ export function CostStatementsPage() {
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setOpen(false)}>
           <Card className="w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">New cost statement</h2>
+            <h2 className="text-xl font-semibold">Nový výkaz nákladů</h2>
             <div>
-              <Label>Property</Label>
+              <Label>Nemovitost</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={form.propertyId}
                 onChange={e => setForm({ ...form, propertyId: e.target.value })}
               >
-                <option value="">Select property…</option>
+                <option value="">Vyber nemovitost…</option>
                 {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div>
-              <Label>Kind</Label>
+              <Label>Druh</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={form.kind}
                 onChange={e => setForm({ ...form, kind: e.target.value })}
               >
-                <option value="services">services</option>
-                <option value="electricity">electricity</option>
-                <option value="gas">gas</option>
-                <option value="internet">internet</option>
-                <option value="water">water</option>
-                <option value="other">other</option>
+                <option value="services">Služby (SVJ)</option>
+                <option value="electricity">Elektřina</option>
+                <option value="gas">Plyn</option>
+                <option value="internet">Internet</option>
+                <option value="water">Voda</option>
+                <option value="other">Ostatní</option>
               </select>
             </div>
             <div>
-              <Label>Period from</Label>
+              <Label>Období od</Label>
               <Input type="date" value={form.periodFrom} onChange={e => setForm({ ...form, periodFrom: e.target.value })} />
             </div>
             <div>
-              <Label>Period to</Label>
+              <Label>Období do</Label>
               <Input type="date" value={form.periodTo} onChange={e => setForm({ ...form, periodTo: e.target.value })} />
             </div>
             <div>
-              <Label>Total amount (Kč)</Label>
+              <Label>Celková částka (Kč)</Label>
               <Input type="text" placeholder="0.00" value={form.totalAmount} onChange={e => setForm({ ...form, totalAmount: e.target.value })} />
             </div>
             <div>
-              <Label>Adjustment amount (Kč, signed, optional)</Label>
+              <Label>Částka úpravy (Kč, se znaménkem, volitelné)</Label>
               <Input type="text" placeholder="0.00" value={form.adjustmentAmount} onChange={e => setForm({ ...form, adjustmentAmount: e.target.value })} />
             </div>
             <div>
-              <Label>Adjustment note (optional)</Label>
+              <Label>Poznámka k úpravě (volitelné)</Label>
               <Input value={form.adjustmentNote} onChange={e => setForm({ ...form, adjustmentNote: e.target.value })} />
             </div>
             <div>
-              <Label>Document ref (optional)</Label>
+              <Label>Reference dokumentu (volitelné)</Label>
               <Input value={form.documentRef} onChange={e => setForm({ ...form, documentRef: e.target.value })} />
             </div>
             {err && <p className="text-sm text-destructive">{err}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => create.mutate()}
                 disabled={!form.propertyId || !form.periodFrom || !form.periodTo || !form.totalAmount || create.isPending}
               >
-                Create
+                Vytvořit
               </Button>
             </div>
           </Card>

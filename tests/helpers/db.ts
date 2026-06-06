@@ -17,8 +17,16 @@ let counter = 0;
 // Path used to share the container URL between the globalSetup process and test workers.
 const URL_FILE = '/tmp/vitest-postgres-url.txt';
 
+// If TEST_DATABASE_URL is set, use that existing Postgres (e.g. docker compose's rental-pg).
+// Otherwise spin up a fresh testcontainers Postgres (slow on macOS Docker Desktop).
+const FIXED_URL = process.env['TEST_DATABASE_URL'] ?? null;
+
 export async function ensureContainer(): Promise<string> {
   if (sharedUrl) return sharedUrl;
+  if (FIXED_URL) {
+    sharedUrl = FIXED_URL;
+    return sharedUrl;
+  }
   // Check if globalSetup already started a container and wrote its URL to a file.
   try {
     const url = readFileSync(URL_FILE, 'utf8').trim();

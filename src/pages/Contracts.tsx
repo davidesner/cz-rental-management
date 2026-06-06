@@ -60,17 +60,17 @@ export function ContractsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Contracts</h1>
-        <Button onClick={() => { setErr(null); setOpen(true); }}>New contract</Button>
+        <h1 className="text-3xl font-bold">Smlouvy</h1>
+        <Button onClick={() => { setErr(null); setOpen(true); }}>Nová smlouva</Button>
       </div>
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Property</TableHead>
-              <TableHead>Tenant</TableHead>
-              <TableHead>Start date</TableHead>
-              <TableHead>End date</TableHead>
+              <TableHead>Nemovitost</TableHead>
+              <TableHead>Nájemce</TableHead>
+              <TableHead>Datum začátku</TableHead>
+              <TableHead>Datum konce</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -88,7 +88,7 @@ export function ContractsPage() {
             ))}
             {(data?.contracts ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">No contracts yet.</TableCell>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Zatím žádné smlouvy.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -98,49 +98,49 @@ export function ContractsPage() {
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setOpen(false)}>
           <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">New contract</h2>
+            <h2 className="text-xl font-semibold">Nová smlouva</h2>
             <div>
-              <Label>Property</Label>
+              <Label>Nemovitost</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={form.propertyId}
                 onChange={e => setForm({ ...form, propertyId: e.target.value })}
               >
-                <option value="">Select property…</option>
+                <option value="">Vyber nemovitost…</option>
                 {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div>
-              <Label>Tenant</Label>
+              <Label>Nájemce</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={form.tenantId}
                 onChange={e => setForm({ ...form, tenantId: e.target.value })}
               >
-                <option value="">Select tenant…</option>
+                <option value="">Vyber nájemce…</option>
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div>
-              <Label>Start date</Label>
+              <Label>Datum začátku</Label>
               <Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
             </div>
             <div>
-              <Label>End date (optional)</Label>
+              <Label>Datum konce (volitelné)</Label>
               <Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
             </div>
             <div>
-              <Label>Security deposit (Kč)</Label>
+              <Label>Kauce (Kč)</Label>
               <Input type="text" placeholder="0.00" value={form.securityDeposit} onChange={e => setForm({ ...form, securityDeposit: e.target.value })} />
             </div>
             {err && <p className="text-sm text-destructive">{err}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => create.mutate()}
                 disabled={!form.propertyId || !form.tenantId || !form.startDate || create.isPending}
               >
-                Create
+                Vytvořit
               </Button>
             </div>
           </Card>

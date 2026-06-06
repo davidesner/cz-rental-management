@@ -84,22 +84,22 @@ export function PaymentsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Payments</h1>
+        <h1 className="text-3xl font-bold">Platby</h1>
         <div className="flex gap-2">
-          <Button variant={showUnassigned ? 'outline' : 'default'} size="sm" onClick={() => setShowUnassigned(false)}>All</Button>
-          <Button variant={showUnassigned ? 'default' : 'outline'} size="sm" onClick={() => setShowUnassigned(true)}>Inbox (unassigned)</Button>
-          <Button onClick={() => { setNewErr(null); setNewOpen(true); }}>New payment</Button>
+          <Button variant={showUnassigned ? 'outline' : 'default'} size="sm" onClick={() => setShowUnassigned(false)}>Všechny</Button>
+          <Button variant={showUnassigned ? 'default' : 'outline'} size="sm" onClick={() => setShowUnassigned(true)}>Inbox (nepřiřazené)</Button>
+          <Button onClick={() => { setNewErr(null); setNewOpen(true); }}>Nová platba</Button>
         </div>
       </div>
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Paid at</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Counterparty</TableHead>
-              <TableHead>Contract</TableHead>
-              <TableHead>Source</TableHead>
+              <TableHead>Zaplaceno dne</TableHead>
+              <TableHead>Částka</TableHead>
+              <TableHead>Protistrana</TableHead>
+              <TableHead>Smlouva</TableHead>
+              <TableHead>Zdroj</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -117,14 +117,14 @@ export function PaymentsPage() {
                     variant="outline"
                     onClick={() => { setAssignErr(null); setAssignContractId(p.contractId ?? ''); setAssignPayment(p); }}
                   >
-                    Assign
+                    Přiřadit
                   </Button>
                 </TableCell>
               </TableRow>
             ))}
             {(data?.payments ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No payments.</TableCell>
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Žádné platby.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -135,53 +135,53 @@ export function PaymentsPage() {
       {newOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setNewOpen(false)}>
           <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">New payment</h2>
+            <h2 className="text-xl font-semibold">Nová platba</h2>
             <div>
-              <Label>Contract (optional)</Label>
+              <Label>Smlouva (volitelné)</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={newForm.contractId}
                 onChange={e => setNewForm({ ...newForm, contractId: e.target.value })}
               >
-                <option value="">None</option>
+                <option value="">Žádná</option>
                 {contracts.map(c => <option key={c.id} value={c.id}>{contractLabel(c)}</option>)}
               </select>
             </div>
             <div>
-              <Label>Amount (Kč)</Label>
+              <Label>Částka (Kč)</Label>
               <Input type="text" placeholder="0.00" value={newForm.amount} onChange={e => setNewForm({ ...newForm, amount: e.target.value })} />
             </div>
             <div>
-              <Label>Paid at</Label>
+              <Label>Zaplaceno dne</Label>
               <Input type="date" value={newForm.paidAt} onChange={e => setNewForm({ ...newForm, paidAt: e.target.value })} />
             </div>
             <div>
-              <Label>Counterparty</Label>
+              <Label>Protistrana</Label>
               <Input value={newForm.counterparty} onChange={e => setNewForm({ ...newForm, counterparty: e.target.value })} />
             </div>
             <div>
-              <Label>Source</Label>
+              <Label>Zdroj</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={newForm.source}
                 onChange={e => setNewForm({ ...newForm, source: e.target.value })}
               >
-                <option value="manual">manual</option>
-                <option value="bank">bank</option>
+                <option value="manual">Ručně</option>
+                <option value="bank">Banka</option>
               </select>
             </div>
             <div>
-              <Label>External ID (optional)</Label>
+              <Label>Externí ID (volitelné)</Label>
               <Input value={newForm.externalId} onChange={e => setNewForm({ ...newForm, externalId: e.target.value })} />
             </div>
             {newErr && <p className="text-sm text-destructive">{newErr}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setNewOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setNewOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => createPayment.mutate()}
                 disabled={!newForm.amount || !newForm.paidAt || createPayment.isPending}
               >
-                Create
+                Vytvořit
               </Button>
             </div>
           </Card>
@@ -192,23 +192,23 @@ export function PaymentsPage() {
       {assignPayment && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setAssignPayment(null)}>
           <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Assign payment</h2>
-            <p className="text-sm text-muted-foreground">Amount: {fmtKc(assignPayment.amount)} on {assignPayment.paidAt}</p>
+            <h2 className="text-xl font-semibold">Přiřadit platbu</h2>
+            <p className="text-sm text-muted-foreground">Částka: {fmtKc(assignPayment.amount)} dne {assignPayment.paidAt}</p>
             <div>
-              <Label>Contract</Label>
+              <Label>Smlouva</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={assignContractId}
                 onChange={e => setAssignContractId(e.target.value)}
               >
-                <option value="">Select contract…</option>
+                <option value="">Vyber smlouvu…</option>
                 {contracts.map(c => <option key={c.id} value={c.id}>{contractLabel(c)}</option>)}
               </select>
             </div>
             {assignErr && <p className="text-sm text-destructive">{assignErr}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setAssignPayment(null)}>Cancel</Button>
-              <Button onClick={() => assignMutation.mutate()} disabled={!assignContractId || assignMutation.isPending}>Assign</Button>
+              <Button variant="outline" onClick={() => setAssignPayment(null)}>Zrušit</Button>
+              <Button onClick={() => assignMutation.mutate()} disabled={!assignContractId || assignMutation.isPending}>Přiřadit</Button>
             </div>
           </Card>
         </div>

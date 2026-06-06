@@ -47,16 +47,16 @@ export function ApiTokensPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">API tokens</h1>
-        <Button onClick={() => { setErr(null); setOpen(true); }}>New token</Button>
+        <h1 className="text-3xl font-bold">API tokeny</h1>
+        <Button onClick={() => { setErr(null); setOpen(true); }}>Nový token</Button>
       </div>
 
       {/* One-time issued token alert */}
       {issuedToken && (
         <Card className="p-4 border-green-500 bg-green-50 space-y-2">
-          <p className="font-semibold text-green-800">Save this token now — it won't be shown again:</p>
+          <p className="font-semibold text-green-800">Ulož si tento token, podruhé se nezobrazí:</p>
           <p className="font-mono text-sm break-all text-green-900">{issuedToken}</p>
-          <Button size="sm" variant="outline" onClick={() => setIssuedToken(null)}>Dismiss</Button>
+          <Button size="sm" variant="outline" onClick={() => setIssuedToken(null)}>Zavřít</Button>
         </Card>
       )}
 
@@ -64,9 +64,9 @@ export function ApiTokensPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Last used</TableHead>
-              <TableHead>Created</TableHead>
+              <TableHead>Jméno</TableHead>
+              <TableHead>Naposledy použit</TableHead>
+              <TableHead>Vytvořen</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -81,18 +81,18 @@ export function ApiTokensPage() {
                     size="sm"
                     variant="destructive"
                     onClick={() => {
-                      if (confirm(`Revoke token "${t.name}"?`)) revoke.mutate(t.id);
+                      if (confirm(`Odvolat token "${t.name}"?`)) revoke.mutate(t.id);
                     }}
                     disabled={revoke.isPending}
                   >
-                    Revoke
+                    Odvolat
                   </Button>
                 </TableCell>
               </TableRow>
             ))}
             {tokens.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">No API tokens yet.</TableCell>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Zatím žádné API tokeny.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -102,15 +102,15 @@ export function ApiTokensPage() {
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setOpen(false)}>
           <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">New API token</h2>
+            <h2 className="text-xl font-semibold">Nový API token</h2>
             <div>
-              <Label>Name</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. ci-deploy" />
+              <Label>Jméno</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="např. ci-deploy" />
             </div>
             {err && <p className="text-sm text-destructive">{err}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={() => create.mutate()} disabled={!name || create.isPending}>Create</Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
+              <Button onClick={() => create.mutate()} disabled={!name || create.isPending}>Vytvořit</Button>
             </div>
           </Card>
         </div>

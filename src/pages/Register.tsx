@@ -36,27 +36,27 @@ export function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Create account</CardTitle>
-          <CardDescription>Start managing your rentals today.</CardDescription>
+          <CardTitle>Vytvořit účet</CardTitle>
+          <CardDescription>Začni spravovat své pronájmy dnes.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <div>
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">Jméno</Label>
               <Input id="name" type="text" {...register('name', { required: true })} />
             </div>
             <div>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">E-mail</Label>
               <Input id="email" type="email" {...register('email', { required: true })} />
             </div>
             <div>
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Heslo</Label>
               <Input id="password" type="password" {...register('password', { required: true })} />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full">Create account</Button>
+            <Button type="submit" className="w-full">Vytvořit účet</Button>
             <p className="text-sm text-muted-foreground text-center">
-              Already have an account? <Link className="underline" to="/login">Sign in</Link>
+              Už máš účet? <Link className="underline" to="/login">Přihlásit</Link>
             </p>
           </form>
         </CardContent>

@@ -1,12 +1,14 @@
 {
-  "enabledMcpjsonServers": [
-    "google-sheets"
-  ],
   "permissions": {
     "allow": [
       "Read(//Users/esner/Documents/Fun/VMP_TEST/server/**)",
       "Read(//Users/esner/Documents/Fun/VMP_TEST/src/**)",
-      "Read(//Users/esner/Documents/Fun/VMP_TEST/**)"
+      "Read(//Users/esner/Documents/Fun/VMP_TEST/**)",
+      "mcp__rental-management__me_get"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "google-sheets",
+    "rental-management"
+  ]
 }

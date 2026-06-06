@@ -36,14 +36,14 @@ export function PropertiesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Properties</h1>
-        <Button onClick={() => { setErr(null); setOpen(true); }}>New property</Button>
+        <h1 className="text-3xl font-bold">Nemovitosti</h1>
+        <Button onClick={() => { setErr(null); setOpen(true); }}>Nová nemovitost</Button>
       </div>
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead><TableHead>Address</TableHead><TableHead>Skill</TableHead>
+              <TableHead>Jméno</TableHead><TableHead>Adresa</TableHead><TableHead>Skill</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -56,7 +56,7 @@ export function PropertiesPage() {
             ))}
             {(data?.properties ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-muted-foreground py-8">No properties yet.</TableCell>
+                <TableCell colSpan={3} className="text-center text-muted-foreground py-8">Zatím žádné nemovitosti.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -66,23 +66,23 @@ export function PropertiesPage() {
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setOpen(false)}>
           <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">New property</h2>
+            <h2 className="text-xl font-semibold">Nová nemovitost</h2>
             <div>
-              <Label>Name</Label>
+              <Label>Jméno</Label>
               <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <Label>Address</Label>
+              <Label>Adresa</Label>
               <Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
             </div>
             <div>
               <Label>Reconciliation skill</Label>
-              <Input placeholder="e.g. reference-reconciliation" value={form.reconciliationSkill} onChange={e => setForm({ ...form, reconciliationSkill: e.target.value })} />
+              <Input placeholder="např. reference-reconciliation" value={form.reconciliationSkill} onChange={e => setForm({ ...form, reconciliationSkill: e.target.value })} />
             </div>
             {err && <p className="text-sm text-destructive">{err}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={() => create.mutate()} disabled={!form.name || create.isPending}>Create</Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
+              <Button onClick={() => create.mutate()} disabled={!form.name || create.isPending}>Vytvořit</Button>
             </div>
           </Card>
         </div>

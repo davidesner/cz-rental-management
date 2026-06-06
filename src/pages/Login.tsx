@@ -23,7 +23,7 @@ export function LoginPage() {
       credentials: 'include',
       body: JSON.stringify(values),
     });
-    if (!res.ok) { setError('Invalid credentials'); return; }
+    if (!res.ok) { setError('Nesprávné přihlašovací údaje'); return; }
     await queryClient.invalidateQueries({ queryKey: ['me'] });
     navigate('/');
   }
@@ -32,23 +32,23 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Sign in</CardTitle>
-          <CardDescription>Welcome back to rental management.</CardDescription>
+          <CardTitle>Přihlásit</CardTitle>
+          <CardDescription>Vítej zpátky na správě pronájmu.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <div>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">E-mail</Label>
               <Input id="email" type="email" {...register('email', { required: true })} />
             </div>
             <div>
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Heslo</Label>
               <Input id="password" type="password" {...register('password', { required: true })} />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full">Sign in</Button>
+            <Button type="submit" className="w-full">Přihlásit</Button>
             <p className="text-sm text-muted-foreground text-center">
-              No account? <Link className="underline" to="/register">Register</Link>
+              Nemáš účet? <Link className="underline" to="/register">Registrovat</Link>
             </p>
           </form>
         </CardContent>

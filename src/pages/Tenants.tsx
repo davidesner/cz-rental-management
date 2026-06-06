@@ -36,14 +36,14 @@ export function TenantsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Tenants</h1>
-        <Button onClick={() => { setErr(null); setOpen(true); }}>New tenant</Button>
+        <h1 className="text-3xl font-bold">Nájemci</h1>
+        <Button onClick={() => { setErr(null); setOpen(true); }}>Nový nájemce</Button>
       </div>
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Account number</TableHead>
+              <TableHead>Jméno</TableHead><TableHead>E-mail</TableHead><TableHead>Číslo účtu</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -56,7 +56,7 @@ export function TenantsPage() {
             ))}
             {(data?.tenants ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-muted-foreground py-8">No tenants yet.</TableCell>
+                <TableCell colSpan={3} className="text-center text-muted-foreground py-8">Zatím žádní nájemci.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -66,27 +66,27 @@ export function TenantsPage() {
       {open && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setOpen(false)}>
           <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">New tenant</h2>
+            <h2 className="text-xl font-semibold">Nový nájemce</h2>
             <div>
-              <Label>Name</Label>
+              <Label>Jméno</Label>
               <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <Label>Email</Label>
+              <Label>E-mail</Label>
               <Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
             </div>
             <div>
-              <Label>Phone</Label>
+              <Label>Telefon</Label>
               <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
             </div>
             <div>
-              <Label>Account number</Label>
+              <Label>Číslo účtu</Label>
               <Input value={form.accountNumber} onChange={e => setForm({ ...form, accountNumber: e.target.value })} />
             </div>
             {err && <p className="text-sm text-destructive">{err}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={() => create.mutate()} disabled={!form.name || create.isPending}>Create</Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
+              <Button onClick={() => create.mutate()} disabled={!form.name || create.isPending}>Vytvořit</Button>
             </div>
           </Card>
         </div>

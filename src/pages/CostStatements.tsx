@@ -72,6 +72,9 @@ export function CostStatementsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [adjustmentTouched, setAdjustmentTouched] = useState(false);
   const [autoFillLabel, setAutoFillLabel] = useState<string | null>(null);
+  const [periodMode, setPeriodMode] = useState<'year' | 'custom'>('year');
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [yearTouched, setYearTouched] = useState(false);
 
   // Fetch tariffs for the selected property when kind=services
   const tariffsQuery = useQuery({
@@ -79,6 +82,42 @@ export function CostStatementsPage() {
     queryFn: () => api.get<{ tariffs: Tariff[] }>(`/api/properties/${form.propertyId}/tariffs`),
     enabled: !!form.propertyId && form.kind === 'services' && open,
   });
+
+  // Fetch existing cost statements for auto-suggest
+  const existingStatementsQuery = useQuery({
+    queryKey: ['cost-statements-for-suggest', form.propertyId, form.kind],
+    queryFn: () => api.get<{ statements: Array<{ periodFrom: string }> }>(
+      `/api/cost-statements?propertyId=${form.propertyId}&kind=${form.kind}`
+    ),
+    enabled: !!(form.propertyId && form.kind && open),
+  });
+
+  // Auto-suggest year based on existing cost statements
+  useEffect(() => {
+    if (yearTouched || !existingStatementsQuery.data) return;
+
+    const years = existingStatementsQuery.data.statements
+      .map(s => parseInt(s.periodFrom.slice(0, 4), 10))
+      .filter(n => !isNaN(n));
+
+    const suggested = years.length > 0 ? Math.max(...years) + 1 : new Date().getFullYear() - 1;
+    setYear(suggested);
+  }, [existingStatementsQuery.data, yearTouched]);
+
+  // Update form periodFrom/periodTo when year mode changes or year changes
+  useEffect(() => {
+    if (periodMode === 'year') {
+      const newPeriodFrom = `${year}-01-01`;
+      const newPeriodTo = `${year}-12-31`;
+      setForm(prev => ({
+        ...prev,
+        periodFrom: newPeriodFrom,
+        periodTo: newPeriodTo,
+      }));
+      setAdjustmentTouched(false);
+      setAutoFillLabel(null);
+    }
+  }, [periodMode, year]);
 
   // Auto-prefill adjustmentAmount when kind=services and all required fields are set
   useEffect(() => {
@@ -125,18 +164,22 @@ export function CostStatementsPage() {
   ]);
 
   const create = useMutation({
-    mutationFn: () => api.post<{ statement: CostStatement }>('/api/cost-statements', {
-      propertyId: form.propertyId,
-      kind: form.kind,
-      periodFrom: form.periodFrom,
-      periodTo: form.periodTo,
-      totalAmount: Math.round(parseFloat(form.totalAmount) * 100),
-      adjustmentAmount: form.adjustmentAmount !== '' && form.adjustmentAmount !== '0'
-        ? Math.round(parseFloat(form.adjustmentAmount.replace(',', '.')) * 100)
-        : null,
-      adjustmentNote: form.adjustmentNote || null,
-      documentRef: form.documentRef || null,
-    }),
+    mutationFn: () => {
+      const periodFrom = periodMode === 'year' ? `${year}-01-01` : form.periodFrom;
+      const periodTo = periodMode === 'year' ? `${year}-12-31` : form.periodTo;
+      return api.post<{ statement: CostStatement }>('/api/cost-statements', {
+        propertyId: form.propertyId,
+        kind: form.kind,
+        periodFrom,
+        periodTo,
+        totalAmount: Math.round(parseFloat(form.totalAmount) * 100),
+        adjustmentAmount: form.adjustmentAmount !== '' && form.adjustmentAmount !== '0'
+          ? Math.round(parseFloat(form.adjustmentAmount.replace(',', '.')) * 100)
+          : null,
+        adjustmentNote: form.adjustmentNote || null,
+        documentRef: form.documentRef || null,
+      });
+    },
     onSuccess: () => {
       setOpen(false);
       resetForm();
@@ -149,6 +192,9 @@ export function CostStatementsPage() {
     setForm({ propertyId: '', kind: 'services', periodFrom: '', periodTo: '', totalAmount: '', adjustmentAmount: '0', adjustmentNote: '', documentRef: '' });
     setAdjustmentTouched(false);
     setAutoFillLabel(null);
+    setPeriodMode('year');
+    setYearTouched(false);
+    setYear(new Date().getFullYear());
   }
 
   const statements = data?.statements ?? [];
@@ -238,28 +284,74 @@ export function CostStatementsPage() {
               </select>
             </div>
             <div>
-              <Label>Období od</Label>
-              <Input
-                type="date"
-                value={form.periodFrom}
-                onChange={e => {
-                  setAdjustmentTouched(false);
-                  setAutoFillLabel(null);
-                  setForm(prev => ({ ...prev, periodFrom: e.target.value, adjustmentAmount: '0', adjustmentNote: '' }));
-                }}
-              />
-            </div>
-            <div>
-              <Label>Období do</Label>
-              <Input
-                type="date"
-                value={form.periodTo}
-                onChange={e => {
-                  setAdjustmentTouched(false);
-                  setAutoFillLabel(null);
-                  setForm(prev => ({ ...prev, periodTo: e.target.value, adjustmentAmount: '0', adjustmentNote: '' }));
-                }}
-              />
+              <Label>Období</Label>
+              <div className="flex gap-2 mb-2">
+                <Button
+                  type="button"
+                  variant={periodMode === 'year' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPeriodMode('year')}
+                >
+                  Rok
+                </Button>
+                <Button
+                  type="button"
+                  variant={periodMode === 'custom' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPeriodMode('custom')}
+                >
+                  Vlastní období
+                </Button>
+              </div>
+              {periodMode === 'year' ? (
+                <div className="space-y-1">
+                  <Input
+                    type="number"
+                    min={2000}
+                    max={2100}
+                    value={year}
+                    onChange={e => {
+                      setYearTouched(true);
+                      setYear(parseInt(e.target.value, 10) || new Date().getFullYear());
+                    }}
+                  />
+                  {!yearTouched && form.propertyId && form.kind && (
+                    <p className="text-xs text-muted-foreground">
+                      Návrh: další rok bez vyúčtování pro tuto kombinaci.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {`Od ${year}-01-01 do ${year}-12-31`}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs">Od</Label>
+                    <Input
+                      type="date"
+                      value={form.periodFrom}
+                      onChange={e => {
+                        setAdjustmentTouched(false);
+                        setAutoFillLabel(null);
+                        setForm(prev => ({ ...prev, periodFrom: e.target.value, adjustmentAmount: '0', adjustmentNote: '' }));
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Do</Label>
+                    <Input
+                      type="date"
+                      value={form.periodTo}
+                      onChange={e => {
+                        setAdjustmentTouched(false);
+                        setAutoFillLabel(null);
+                        setForm(prev => ({ ...prev, periodTo: e.target.value, adjustmentAmount: '0', adjustmentNote: '' }));
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <Label>Celková částka (Kč)</Label>
@@ -299,7 +391,12 @@ export function CostStatementsPage() {
               <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => create.mutate()}
-                disabled={!form.propertyId || !form.periodFrom || !form.periodTo || !form.totalAmount || create.isPending}
+                disabled={
+                  !form.propertyId ||
+                  !form.totalAmount ||
+                  (periodMode === 'custom' && (!form.periodFrom || !form.periodTo)) ||
+                  create.isPending
+                }
               >
                 Vytvořit
               </Button>

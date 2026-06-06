@@ -15,6 +15,7 @@ import { ReconciliationsPage } from './pages/Reconciliations';
 import { ApiTokensPage } from './pages/ApiTokens';
 import { ContractDetailPage } from './pages/ContractDetail';
 import { ReconciliationDetailPage } from './pages/ReconciliationDetail';
+import { PropertyDetailPage } from './pages/PropertyDetail';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -39,6 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/settings/api-tokens" element={<ApiTokensPage />} />
             <Route path="/contracts/:id" element={<ContractDetailPage />} />
             <Route path="/reconciliations/:id" element={<ReconciliationDetailPage />} />
+            <Route path="/properties/:id" element={<PropertyDetailPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

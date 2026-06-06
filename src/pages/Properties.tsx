@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -49,7 +50,9 @@ export function PropertiesPage() {
           <TableBody>
             {(data?.properties ?? []).map(p => (
               <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.name}</TableCell>
+                <TableCell className="font-medium">
+                  <Link to={`/properties/${p.id}`} className="hover:underline">{p.name}</Link>
+                </TableCell>
                 <TableCell>{p.address ?? '—'}</TableCell>
                 <TableCell className="font-mono text-xs">{p.reconciliationSkill ?? '—'}</TableCell>
               </TableRow>

@@ -31,7 +31,7 @@ interface Property { id: string; name: string; }
 interface Tenant { id: string; name: string; }
 
 function fmtKc(halere: number) {
-  return (halere / 100).toFixed(2) + ' Kč';
+  return (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 }
 
 const MAX_NOTES_DISPLAY = 80;

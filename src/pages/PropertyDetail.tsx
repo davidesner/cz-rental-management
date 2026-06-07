@@ -60,7 +60,7 @@ export function PropertyDetailPage() {
   if (!property.data) return <div>Nemovitost nenalezena.</div>;
   const p = property.data.property;
 
-  const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' Kč';
+  const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 
   return (
     <div className="space-y-6">

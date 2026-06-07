@@ -52,13 +52,13 @@ interface Reconciliation {
 }
 
 function fmtKc(halere: number) {
-  return (halere / 100).toFixed(2) + ' Kč';
+  return (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 }
 
 function fmtKcSigned(halere: number) {
-  const kc = halere / 100;
-  const sign = kc >= 0 ? '+' : '';
-  return sign + kc.toFixed(2) + ' Kč';
+  const s = (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
+  const sign = halere >= 0 ? '+' : '';
+  return sign + s;
 }
 
 function ItemBreakdownPanel({ breakdown }: { breakdown: ItemBreakdown | undefined }) {

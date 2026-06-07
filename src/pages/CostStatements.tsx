@@ -34,11 +34,11 @@ interface Tariff {
 }
 
 function fmtKc(halere: number) {
-  return (halere / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' Kč';
+  return (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 }
 
 function fmtKcSigned(halere: number) {
-  const s = (halere / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' Kč';
+  const s = (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
   if (halere < 0) return <span className="text-red-600">{s}</span>;
   if (halere > 0) return <span className="text-green-600">+{s}</span>;
   return <span className="text-muted-foreground">{s}</span>;

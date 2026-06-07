@@ -584,7 +584,7 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
       <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">Přidat podmínky</h2>
+        <h2 className="text-xl font-semibold">Přidat změnu</h2>
         <div>
           <Label>Platnost od</Label>
           <Input type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} />
@@ -877,7 +877,7 @@ export function ContractDetailPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Historie smlouvy</CardTitle>
-              <Button onClick={() => setPodminkyOpen(true)}>Přidat podmínky</Button>
+              <Button onClick={() => setPodminkyOpen(true)}>Přidat změnu</Button>
             </CardHeader>
             <CardContent>
               <PodminkyTable terms={terms} utilities={utilities} />

@@ -17,6 +17,8 @@ interface Contract {
   startDate: string;
   endDate: string | null;
   securityDeposit: number | null;
+  paymentDueDay: number;
+  paymentAppliesTo: 'current' | 'next';
 }
 
 export function ContractsPage() {
@@ -26,7 +28,7 @@ export function ContractsPage() {
   const { data: propertiesData } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
   const { data: tenantsData } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ propertyId: '', tenantId: '', startDate: '', endDate: '', securityDeposit: '' });
+  const [form, setForm] = useState({ propertyId: '', tenantId: '', startDate: '', endDate: '', securityDeposit: '', paymentDueDay: '10', paymentAppliesTo: 'current' as 'current' | 'next' });
   const [err, setErr] = useState<string | null>(null);
 
   const properties = propertiesData?.properties ?? [];
@@ -46,11 +48,13 @@ export function ContractsPage() {
         startDate: form.startDate,
         endDate: form.endDate || null,
         securityDeposit: depositHalere,
+        paymentDueDay: parseInt(form.paymentDueDay, 10) || 10,
+        paymentAppliesTo: form.paymentAppliesTo,
       });
     },
     onSuccess: () => {
       setOpen(false);
-      setForm({ propertyId: '', tenantId: '', startDate: '', endDate: '', securityDeposit: '' });
+      setForm({ propertyId: '', tenantId: '', startDate: '', endDate: '', securityDeposit: '', paymentDueDay: '10', paymentAppliesTo: 'current' });
       qc.invalidateQueries({ queryKey: ['contracts'] });
     },
     onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
@@ -151,6 +155,21 @@ export function ContractsPage() {
             <div>
               <Label>Kauce (Kč)</Label>
               <Input type="text" placeholder="0.00" value={form.securityDeposit} onChange={e => setForm({ ...form, securityDeposit: e.target.value })} />
+            </div>
+            <div>
+              <Label>Splatnost ke dni</Label>
+              <Input type="number" min={1} max={31} value={form.paymentDueDay} onChange={e => setForm({ ...form, paymentDueDay: e.target.value })} />
+            </div>
+            <div>
+              <Label>Platba za</Label>
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={form.paymentAppliesTo}
+                onChange={e => setForm({ ...form, paymentAppliesTo: e.target.value as 'current' | 'next' })}
+              >
+                <option value="current">Aktuální měsíc</option>
+                <option value="next">Následující měsíc (zaplaceno předem)</option>
+              </select>
             </div>
             {err && <p className="text-sm text-destructive">{err}</p>}
             <div className="flex justify-end gap-2">

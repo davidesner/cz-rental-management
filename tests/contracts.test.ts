@@ -37,6 +37,9 @@ describe('contracts REST', () => {
     expect(create.status).toBe(201);
     const ctr = (await create.json() as any).contract;
     expect(ctr.startDate).toBe('2024-09-20');
+    // default payment timing
+    expect(ctr.paymentDueDay).toBe(10);
+    expect(ctr.paymentAppliesTo).toBe('current');
 
     const list = await app.request('/api/contracts', { headers: { cookie } });
     expect((await list.json() as any).contracts).toHaveLength(1);
@@ -46,6 +49,34 @@ describe('contracts REST', () => {
       body: JSON.stringify({ note: 'extended via dodatek 1' }),
     });
     expect((await patch.json() as any).contract.note).toBe('extended via dodatek 1');
+
+    // patch payment timing fields
+    const patchTiming = await app.request(`/api/contracts/${ctr.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ paymentDueDay: 5, paymentAppliesTo: 'next' }),
+    });
+    const patched = (await patchTiming.json() as any).contract;
+    expect(patched.paymentDueDay).toBe(5);
+    expect(patched.paymentAppliesTo).toBe('next');
+
+    await client.close();
+  });
+
+  it('create with explicit paymentDueDay + paymentAppliesTo', async () => {
+    const { client, app, cookie, property, tenant } = await setup();
+    const res = await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        propertyId: property.id, tenantId: tenant.id,
+        startDate: '2024-01-01',
+        paymentDueDay: 15,
+        paymentAppliesTo: 'next',
+      }),
+    });
+    expect(res.status).toBe(201);
+    const ctr = (await res.json() as any).contract;
+    expect(ctr.paymentDueDay).toBe(15);
+    expect(ctr.paymentAppliesTo).toBe('next');
     await client.close();
   });
 

@@ -20,6 +20,8 @@ interface Contract {
   endDate: string | null;
   securityDeposit: number | null;
   note?: string | null;
+  paymentDueDay: number;
+  paymentAppliesTo: 'current' | 'next';
 }
 
 interface ContractTerm {
@@ -107,6 +109,13 @@ interface RentReductionItem {
   reason: string | null;
 }
 
+interface AppliedPayment {
+  paymentId: string;
+  paidAt: string;
+  amount: number;
+  lateDays: number;
+}
+
 interface MonthBreakdown {
   month: string;
   daysActive: number;
@@ -127,6 +136,10 @@ interface MonthBreakdown {
     surplus: number;
     deficitTotal: number;
   };
+  dueDate: string;
+  appliedPayments: AppliedPayment[];
+  isLate: boolean;
+  maxLateDays: number;
   paymentIds: string[];
 }
 
@@ -932,6 +945,7 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
             <TableRow>
               <TableHead className="w-8"></TableHead>
               <TableHead>Měsíc</TableHead>
+              <TableHead>Splatnost</TableHead>
               <TableHead className="text-right">Plán</TableHead>
               <TableHead className="text-right">Srážka</TableHead>
               <TableHead className="text-right">Předepsáno</TableHead>
@@ -960,7 +974,15 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
                         {isExpanded ? '▲' : '▼'}
                       </button>
                     </TableCell>
-                    <TableCell className="font-medium">{row.month}</TableCell>
+                    <TableCell className="font-medium">
+                      <span>{row.month}</span>
+                      {row.isLate && (
+                        <span className="ml-2 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700" title={`Pozdě o ${row.maxLateDays} dní`}>
+                          +{row.maxLateDays} dní
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{row.dueDate ?? '—'}</TableCell>
                     <TableCell className="text-right">{fmtKc(row.expected.total)}</TableCell>
                     <TableCell className="text-right">
                       {reductionEntry ? (
@@ -992,7 +1014,7 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
                   </TableRow>
                   {isExpanded && (
                     <TableRow key={`${row.month}-detail`} className="bg-muted/30">
-                      <TableCell colSpan={7} className="py-3 px-6">
+                      <TableCell colSpan={8} className="py-3 px-6">
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
                           <div>
                             <p className="text-muted-foreground">Nájem uhrazen</p>
@@ -1027,6 +1049,24 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
                             </div>
                           )}
                         </div>
+                        {(row.appliedPayments ?? []).length > 0 && (
+                          <div className="mt-3 border-t pt-2">
+                            <p className="text-xs text-muted-foreground mb-1">Přiřazené platby (FIFO)</p>
+                            <div className="space-y-1">
+                              {(row.appliedPayments ?? []).map(ap => (
+                                <div key={ap.paymentId} className="flex items-center gap-3 text-xs">
+                                  <span className="text-muted-foreground">{ap.paidAt}</span>
+                                  <span className="font-medium">{fmtKc(ap.amount)}</span>
+                                  {ap.lateDays > 0 ? (
+                                    <span className="text-red-600 font-semibold">pozdě o {ap.lateDays} dní</span>
+                                  ) : (
+                                    <span className="text-green-600">včas</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   )}
@@ -1203,6 +1243,12 @@ export function ContractDetailPage() {
                 <div>
                   <span className="text-muted-foreground">Kauce</span>
                   <p className="font-medium">{contract.securityDeposit != null ? fmtKc(contract.securityDeposit) : '—'}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Splatnost</span>
+                  <p className="font-medium">
+                    do {contract.paymentDueDay ?? 10}. dne {contract.paymentAppliesTo === 'next' ? 'předchozího' : 'aktuálního'} měsíce
+                  </p>
                 </div>
                 {contract.note && (
                   <div className="col-span-2">

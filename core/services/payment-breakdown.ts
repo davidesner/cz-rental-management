@@ -3,6 +3,14 @@ import type { DB } from '../db/client.js';
 import { contract, contractTerms, contractUtility, payment, rentReduction } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { expectedForMonth, allocate, UTILITY_ORDER, type UtilityKind } from '../lib/allocation.js';
+import { matchPayments, computeDueDate, type MonthSlot } from '../lib/payment-matching.js';
+
+export interface AppliedPaymentBreakdown {
+  paymentId: string;
+  paidAt: string;
+  amount: number;
+  lateDays: number;
+}
 
 export interface MonthBreakdown {
   month: string;             // YYYY-MM
@@ -24,6 +32,11 @@ export interface MonthBreakdown {
     surplus: number;
     deficitTotal: number;
   };
+  dueDate: string;           // YYYY-MM-DD
+  appliedPayments: AppliedPaymentBreakdown[];
+  isLate: boolean;           // any applied payment has lateDays > 0
+  maxLateDays: number;       // max lateDays across applied payments
+  /** @deprecated use appliedPayments */
   paymentIds: string[];
 }
 
@@ -46,41 +59,75 @@ export async function paymentBreakdown(
   ));
   const reductions = await db.select().from(rentReduction).where(eq(rentReduction.contractId, contractId));
 
-  // Iterate months from periodFrom to periodTo
-  const months: MonthBreakdown[] = [];
+  const paymentDueDay = c.paymentDueDay;
+  const paymentAppliesTo = c.paymentAppliesTo as 'current' | 'next';
+
+  // Build month slots
+  const slots: MonthSlot[] = [];
   const [y0, m0] = periodFrom.split('-').map(Number) as [number, number];
   const [y1, m1] = periodTo.split('-').map(Number) as [number, number];
   let y = y0, m = m0;
   while (y < y1 || (y === y1 && m <= m1)) {
-    const monthFirst = `${y}-${String(m).padStart(2, '0')}-01`;
-    const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    const monthLast = `${y}-${String(m).padStart(2, '0')}-${String(dim).padStart(2, '0')}`;
+    const monthStr = `${y}-${String(m).padStart(2, '0')}`;
+    const monthFirst = `${monthStr}-01`;
     const exp = expectedForMonth(
       y, m, c.startDate, c.endDate ?? null,
       terms.map(t => ({ validFrom: t.validFrom, validTo: t.validTo, baseRent: t.baseRent, serviceAdvance: t.serviceAdvance })),
       utilities.map(u => ({ kind: u.kind as UtilityKind, validFrom: u.validFrom, validTo: u.validTo, monthlyAdvance: u.monthlyAdvance })),
     );
-    const periodPayments = payments.filter(p => p.paidAt >= monthFirst && p.paidAt <= monthLast);
-    const received = periodPayments.reduce((s, p) => s + p.amount, 0);
-    const alloc = allocate(received, exp);
     const reduction = reductions.find(r => r.forMonth === monthFirst);
     const expectedTotal = exp.baseRent + exp.serviceAdvance + Object.values(exp.utilities).reduce((s, v) => s + v, 0);
-    const deficitTotal = alloc.deficit.baseRent + alloc.deficit.serviceAdvance + Object.values(alloc.deficit.utilities).reduce((s, v) => s + v, 0);
-    months.push({
-      month: `${y}-${String(m).padStart(2, '0')}`,
-      daysActive: exp.daysActive, daysInMonth: exp.daysInMonth,
-      expected: { baseRent: exp.baseRent, serviceAdvance: exp.serviceAdvance, utilities: exp.utilities, total: expectedTotal },
-      rentReduction: reduction?.amount ?? 0,
-      effectiveExpected: expectedTotal - (reduction?.amount ?? 0),
-      receivedTotal: received,
-      allocation: {
-        baseRentPaid: alloc.baseRentPaid, servicePaid: alloc.servicePaid,
-        utilityPaid: alloc.utilityPaid, surplus: alloc.surplus, deficitTotal,
-      },
-      paymentIds: periodPayments.map(p => p.id),
+    const rentReductionAmt = reduction?.amount ?? 0;
+    const dueDate = computeDueDate(monthStr, paymentDueDay, paymentAppliesTo);
+    slots.push({
+      month: monthStr,
+      expected: exp,
+      effectiveExpected: expectedTotal - rentReductionAmt,
+      rentReduction: rentReductionAmt,
+      dueDate,
     });
     m++; if (m > 12) { y++; m = 1; }
   }
+
+  // FIFO matching
+  const paymentRefs = payments.map(p => ({ id: p.id, amount: p.amount, paidAt: p.paidAt }));
+  const { perMonth } = matchPayments(slots, paymentRefs);
+
+  // Build month breakdowns
+  const months: MonthBreakdown[] = slots.map(slot => {
+    const match = perMonth[slot.month]!;
+    const received = match.receivedTotal;
+    const alloc = allocate(received, slot.expected);
+    const expectedTotal = slot.expected.baseRent + slot.expected.serviceAdvance + Object.values(slot.expected.utilities).reduce((s, v) => s + v, 0);
+    const deficitTotal = alloc.deficit.baseRent + alloc.deficit.serviceAdvance + Object.values(alloc.deficit.utilities).reduce((s, v) => s + v, 0);
+    const maxLateDays = match.appliedPayments.reduce((max, ap) => Math.max(max, ap.lateDays), 0);
+    return {
+      month: slot.month,
+      daysActive: slot.expected.daysActive,
+      daysInMonth: slot.expected.daysInMonth,
+      expected: {
+        baseRent: slot.expected.baseRent,
+        serviceAdvance: slot.expected.serviceAdvance,
+        utilities: slot.expected.utilities,
+        total: expectedTotal,
+      },
+      rentReduction: slot.rentReduction,
+      effectiveExpected: slot.effectiveExpected,
+      receivedTotal: received,
+      allocation: {
+        baseRentPaid: alloc.baseRentPaid,
+        servicePaid: alloc.servicePaid,
+        utilityPaid: alloc.utilityPaid,
+        surplus: alloc.surplus,
+        deficitTotal,
+      },
+      dueDate: slot.dueDate,
+      appliedPayments: match.appliedPayments,
+      isLate: maxLateDays > 0,
+      maxLateDays,
+      paymentIds: match.appliedPayments.map(ap => ap.paymentId),
+    };
+  });
 
   return {
     months,

@@ -1,9 +1,10 @@
 import { createId } from '@paralleldrive/cuid2';
 import { and, asc, eq, gte, lte } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
-import { reconciliation, reconciliationItem, contract, contractTerms, contractUtility, payment, costStatement } from '../db/schema.js';
+import { reconciliation, reconciliationItem, contract, contractTerms, contractUtility, payment, costStatement, rentReduction } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { expectedForMonth, allocate, UTILITY_ORDER, type UtilityKind } from '../lib/allocation.js';
+import { matchPayments, computeDueDate, type MonthSlot } from '../lib/payment-matching.js';
 
 type Kind = 'services' | UtilityKind;
 
@@ -83,12 +84,13 @@ function eachMonthInPeriod(periodFrom: string, periodTo: string): Array<{ year: 
  * compute items with full breakdown. Does not touch the DB.
  */
 function computeItemsWithBreakdown(
-  contractRow: { id: string; startDate: string; endDate: string | null },
+  contractRow: { id: string; startDate: string; endDate: string | null; paymentDueDay: number; paymentAppliesTo: string },
   periodFrom: string,
   periodTo: string,
   terms: Array<{ validFrom: string; validTo: string | null; baseRent: number; serviceAdvance: number }>,
   utilities: Array<{ kind: string; validFrom: string; validTo: string | null; monthlyAdvance: number }>,
-  payments: Array<{ amount: number; paidAt: string }>,
+  payments: Array<{ id: string; amount: number; paidAt: string }>,
+  reductions: Array<{ forMonth: string; amount: number }>,
   statements: Array<{
     id: string;
     kind: string;
@@ -102,6 +104,37 @@ function computeItemsWithBreakdown(
   }>,
 ): Array<{ kind: Kind; actualCost: number; paid: number; difference: number; breakdown: ItemBreakdown }> {
 
+  const paymentDueDay = contractRow.paymentDueDay;
+  const paymentAppliesTo = contractRow.paymentAppliesTo as 'current' | 'next';
+
+  // Build month slots for FIFO matching
+  const slots: MonthSlot[] = [];
+  for (const { year, month } of eachMonthInPeriod(periodFrom, periodTo)) {
+    const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+    const monthFirst = `${monthStr}-01`;
+    const exp = expectedForMonth(
+      year, month,
+      contractRow.startDate, contractRow.endDate,
+      terms.map(t => ({ validFrom: t.validFrom, validTo: t.validTo, baseRent: t.baseRent, serviceAdvance: t.serviceAdvance })),
+      utilities.map(u => ({ kind: u.kind as UtilityKind, validFrom: u.validFrom, validTo: u.validTo, monthlyAdvance: u.monthlyAdvance })),
+    );
+    const reduction = reductions.find(r => r.forMonth === monthFirst);
+    const expectedTotal = exp.baseRent + exp.serviceAdvance + UTILITY_ORDER.reduce((s, k) => s + exp.utilities[k], 0);
+    const rentReductionAmt = reduction?.amount ?? 0;
+    const dueDate = computeDueDate(monthStr, paymentDueDay, paymentAppliesTo);
+    slots.push({
+      month: monthStr,
+      expected: exp,
+      effectiveExpected: expectedTotal - rentReductionAmt,
+      rentReduction: rentReductionAmt,
+      dueDate,
+    });
+  }
+
+  // FIFO match
+  const paymentRefs = payments.map(p => ({ id: p.id, amount: p.amount, paidAt: p.paidAt }));
+  const { perMonth } = matchPayments(slots, paymentRefs);
+
   const paidPerKind: Record<Kind, number> = {
     services: 0, electricity: 0, gas: 0, internet: 0, water: 0, other: 0,
   };
@@ -111,29 +144,20 @@ function computeItemsWithBreakdown(
     services: [], electricity: [], gas: [], internet: [], water: [], other: [],
   };
 
-  for (const { year, month } of eachMonthInPeriod(periodFrom, periodTo)) {
-    const exp = expectedForMonth(
-      year, month,
-      contractRow.startDate, contractRow.endDate,
-      terms.map(t => ({ validFrom: t.validFrom, validTo: t.validTo, baseRent: t.baseRent, serviceAdvance: t.serviceAdvance })),
-      utilities.map(u => ({ kind: u.kind as UtilityKind, validFrom: u.validFrom, validTo: u.validTo, monthlyAdvance: u.monthlyAdvance })),
-    );
-    const monthFirst = `${year}-${String(month).padStart(2, '0')}-01`;
-    const monthLast = `${year}-${String(month).padStart(2, '0')}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0')}`;
-    const received = payments
-      .filter(p => p.paidAt >= monthFirst && p.paidAt <= monthLast)
-      .reduce((s, p) => s + p.amount, 0);
+  for (const slot of slots) {
+    const match = perMonth[slot.month]!;
+    const received = match.receivedTotal;
+    const exp = slot.expected;
     const a = allocate(received, exp);
 
     paidPerKind.services += a.servicePaid;
     for (const kind of UTILITY_ORDER) paidPerKind[kind] += a.utilityPaid[kind];
 
     const expectedTotal = exp.baseRent + exp.serviceAdvance + UTILITY_ORDER.reduce((s, k) => s + exp.utilities[k], 0);
-    const monthStr = `${year}-${String(month).padStart(2, '0')}`;
 
     // services
     monthsPerKind.services.push({
-      month: monthStr,
+      month: slot.month,
       daysActive: exp.daysActive,
       daysInMonth: exp.daysInMonth,
       expectedThisKind: exp.serviceAdvance,
@@ -145,7 +169,7 @@ function computeItemsWithBreakdown(
     // utilities
     for (const kind of UTILITY_ORDER) {
       monthsPerKind[kind].push({
-        month: monthStr,
+        month: slot.month,
         daysActive: exp.daysActive,
         daysInMonth: exp.daysInMonth,
         expectedThisKind: exp.utilities[kind],
@@ -205,7 +229,7 @@ function computeItemsWithBreakdown(
  */
 async function buildItemsWithBreakdown(
   db: DB,
-  contractRow: { id: string; orgId: string; propertyId: string; startDate: string; endDate: string | null },
+  contractRow: { id: string; orgId: string; propertyId: string; startDate: string; endDate: string | null; paymentDueDay: number; paymentAppliesTo: string },
   periodFrom: string,
   periodTo: string,
   placeholderRecId: string,
@@ -222,6 +246,10 @@ async function buildItemsWithBreakdown(
     and(eq(payment.contractId, contractRow.id), gte(payment.paidAt, periodFrom), lte(payment.paidAt, periodTo))
   );
 
+  const reductions = await db.select().from(rentReduction).where(
+    eq(rentReduction.contractId, contractRow.id)
+  );
+
   const statements = await db.select().from(costStatement).where(
     and(
       eq(costStatement.orgId, contractRow.orgId),
@@ -231,7 +259,7 @@ async function buildItemsWithBreakdown(
     ),
   );
 
-  const computed = computeItemsWithBreakdown(contractRow, periodFrom, periodTo, terms, utilities, payments, statements);
+  const computed = computeItemsWithBreakdown(contractRow, periodFrom, periodTo, terms, utilities, payments, reductions, statements);
 
   return computed.map(item => ({
     id: createId(),

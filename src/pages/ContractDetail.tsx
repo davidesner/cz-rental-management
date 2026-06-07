@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { computeDeductibleForPeriod } from '@/lib/proration';
 import { api } from '@/lib/api';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -675,6 +676,7 @@ export function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Core data fetches
   const { data: contractData } = useQuery({
@@ -757,6 +759,16 @@ export function ContractDetailPage() {
   // ── Reconciliation compute dialog state ───────────────────────────────────
   const [reconcileOpen, setReconcileOpen] = useState(false);
 
+  // ── Tab management ──────────────────────────────────────────────────────────
+  const tab = searchParams.get('tab') ?? 'prehled';
+  const setTab = (v: string) => {
+    setSearchParams(prev => {
+      const n = new URLSearchParams(prev);
+      n.set('tab', v);
+      return n;
+    }, { replace: true });
+  };
+
   return (
     <div className="space-y-6">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
@@ -779,165 +791,185 @@ export function ContractDetailPage() {
         )}
       </div>
 
-      {/* ── Sekce Smlouva ──────────────────────────────────────────────────── */}
-      {contract && (
-        <Card className="p-6 space-y-2">
-          <h2 className="text-lg font-semibold mb-3">Smlouva</h2>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Platnost</span>
-              <p className="font-medium">{contract.startDate} – {contract.endDate ?? 'běží'}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Kauce</span>
-              <p className="font-medium">{contract.securityDeposit != null ? fmtKc(contract.securityDeposit) : '—'}</p>
-            </div>
-            {contract.note && (
-              <div className="col-span-2">
-                <span className="text-muted-foreground">Poznámka</span>
-                <p className="font-medium">{contract.note}</p>
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
+      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList>
+          <TabsTrigger value="prehled">Přehled</TabsTrigger>
+          <TabsTrigger value="sluzby">Služby / Energie</TabsTrigger>
+          <TabsTrigger value="vyuctovani">Vyúčtování (nájemci)</TabsTrigger>
+        </TabsList>
 
-      {/* ── Sekce Aktuální zálohy ──────────────────────────────────────────── */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-3">Aktuální zálohy</h2>
-        {!currentTerm && currentUtilities.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Žádné aktuální podmínky.</p>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-3 text-sm">
-              {currentTerm && (
-                <>
-                  <div>
-                    <p className="text-muted-foreground">Nájem</p>
-                    <p className="font-medium">{fmtKc(currentTerm.baseRent)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Záloha na služby</p>
-                    <p className="font-medium">{fmtKc(currentTerm.serviceAdvance)}</p>
-                  </div>
-                </>
-              )}
-              {currentUtilities.map(u => (
-                <div key={u.id}>
-                  <p className="text-muted-foreground">Záloha {utilKindLabel(u.kind)}</p>
-                  <p className="font-medium">{fmtKc(u.monthlyAdvance)}</p>
-                </div>
-              ))}
-            </div>
-            {monthlyTotal !== null && (
-              <div className="border-t pt-3">
-                <span className="text-sm font-semibold">Měsíčně celkem: </span>
-                <span className="text-sm font-bold">{fmtKc(monthlyTotal)}</span>
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
-
-      {/* ── Sekce Historie podmínek (unified Terms + Utilities timeline) ──── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Historie podmínek</CardTitle>
-          <Button onClick={() => setPodminkyOpen(true)}>Přidat podmínky</Button>
-        </CardHeader>
-        <CardContent>
-          <PodminkyTable terms={terms} utilities={utilities} />
-        </CardContent>
-      </Card>
-
-      {/* ── Sekce Vyúčtování nákladů ───────────────────────────────────────── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Vyúčtování nákladů</h2>
+        {/* ── Tab 1: Přehled ─────────────────────────────────────────────── */}
+        <TabsContent value="prehled" className="space-y-6">
+          {/* Sekce Smlouva */}
           {contract && (
-            <Button size="sm" onClick={() => setCsOpen(true)}>Nové vyúčtování nákladů</Button>
+            <Card className="p-6 space-y-2">
+              <h2 className="text-lg font-semibold mb-3">Smlouva</h2>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Platnost</span>
+                  <p className="font-medium">{contract.startDate} – {contract.endDate ?? 'běží'}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Kauce</span>
+                  <p className="font-medium">{contract.securityDeposit != null ? fmtKc(contract.securityDeposit) : '—'}</p>
+                </div>
+                {contract.note && (
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Poznámka</span>
+                    <p className="font-medium">{contract.note}</p>
+                  </div>
+                )}
+              </div>
+            </Card>
           )}
-        </div>
-        <Card className="overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Druh</TableHead>
-                <TableHead>Období</TableHead>
-                <TableHead>Celkem</TableHead>
-                <TableHead>Úprava</TableHead>
-                <TableHead>Reconciliable</TableHead>
-                <TableHead>Poznámka k úpravě</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredStatements.map(s => {
-                const adj = s.adjustmentAmount ?? 0;
-                const reconciliable = s.totalAmount + adj;
-                return (
-                  <TableRow key={s.id}>
-                    <TableCell>{s.kind}</TableCell>
-                    <TableCell>{s.periodFrom} – {s.periodTo}</TableCell>
-                    <TableCell>{fmtKc(s.totalAmount)}</TableCell>
-                    <TableCell>{s.adjustmentAmount != null ? fmtKcSigned(s.adjustmentAmount) : <span className="text-muted-foreground">—</span>}</TableCell>
-                    <TableCell className="font-bold">{fmtKc(reconciliable)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
-                      {s.adjustmentNote ?? '—'}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {filteredStatements.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Žádné výkazy nákladů pro toto období.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Card>
-      </div>
 
-      {/* ── Sekce Vyúčtování nájemníkovi ──────────────────────────────────── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Vyúčtování nájemníkovi</h2>
-          {id && (
-            <Button size="sm" onClick={() => setReconcileOpen(true)}>Spočítat nové vyúčtování</Button>
-          )}
-        </div>
-        <Card className="overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Období</TableHead>
-                <TableHead>Stav</TableHead>
-                <TableHead>Celkový rozdíl</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {reconciliations.map(r => {
-                const totalDiff = (r.items ?? []).reduce((sum, i) => sum + i.difference, 0);
-                return (
-                  <TableRow key={r.id}>
-                    <TableCell>{r.periodFrom} – {r.periodTo}</TableCell>
-                    <TableCell>{r.status}</TableCell>
-                    <TableCell>{fmtKc(totalDiff)}</TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {reconciliations.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Žádná vyúčtování pro tento pronájem.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Card>
-      </div>
+          {/* Sekce Aktuální zálohy */}
+          <Card className="p-6">
+            <h2 className="text-lg font-semibold mb-3">Aktuální zálohy</h2>
+            {!currentTerm && currentUtilities.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Žádné aktuální podmínky.</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-3 text-sm">
+                  {currentTerm && (
+                    <>
+                      <div>
+                        <p className="text-muted-foreground">Nájem</p>
+                        <p className="font-medium">{fmtKc(currentTerm.baseRent)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Záloha na služby</p>
+                        <p className="font-medium">{fmtKc(currentTerm.serviceAdvance)}</p>
+                      </div>
+                    </>
+                  )}
+                  {currentUtilities.map(u => (
+                    <div key={u.id}>
+                      <p className="text-muted-foreground">Záloha {utilKindLabel(u.kind)}</p>
+                      <p className="font-medium">{fmtKc(u.monthlyAdvance)}</p>
+                    </div>
+                  ))}
+                </div>
+                {monthlyTotal !== null && (
+                  <div className="border-t pt-3">
+                    <span className="text-sm font-semibold">Měsíčně celkem: </span>
+                    <span className="text-sm font-bold">{fmtKc(monthlyTotal)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+
+          {/* Sekce Historie podmínek */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Historie podmínek</CardTitle>
+              <Button onClick={() => setPodminkyOpen(true)}>Přidat podmínky</Button>
+            </CardHeader>
+            <CardContent>
+              <PodminkyTable terms={terms} utilities={utilities} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Tab 2: Služby / Energie ────────────────────────────────────── */}
+        <TabsContent value="sluzby">
+          <Card>
+            <div className="p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Vyúčtování nákladů</h2>
+                {contract && (
+                  <Button size="sm" onClick={() => setCsOpen(true)}>Nové vyúčtování nákladů</Button>
+                )}
+              </div>
+              <div className="overflow-hidden border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Druh</TableHead>
+                      <TableHead>Období</TableHead>
+                      <TableHead>Celkem</TableHead>
+                      <TableHead>Úprava</TableHead>
+                      <TableHead>Reconciliable</TableHead>
+                      <TableHead>Poznámka k úpravě</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredStatements.map(s => {
+                      const adj = s.adjustmentAmount ?? 0;
+                      const reconciliable = s.totalAmount + adj;
+                      return (
+                        <TableRow key={s.id}>
+                          <TableCell>{s.kind}</TableCell>
+                          <TableCell>{s.periodFrom} – {s.periodTo}</TableCell>
+                          <TableCell>{fmtKc(s.totalAmount)}</TableCell>
+                          <TableCell>{s.adjustmentAmount != null ? fmtKcSigned(s.adjustmentAmount) : <span className="text-muted-foreground">—</span>}</TableCell>
+                          <TableCell className="font-bold">{fmtKc(reconciliable)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
+                            {s.adjustmentNote ?? '—'}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {filteredStatements.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Žádné výkazy nákladů pro toto období.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* ── Tab 3: Vyúčtování (nájemci) ────────────────────────────────── */}
+        <TabsContent value="vyuctovani">
+          <Card>
+            <div className="p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Vyúčtování nájemníkovi</h2>
+                {id && (
+                  <Button size="sm" onClick={() => setReconcileOpen(true)}>Spočítat nové vyúčtování</Button>
+                )}
+              </div>
+              <div className="overflow-hidden border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Období</TableHead>
+                      <TableHead>Stav</TableHead>
+                      <TableHead>Celkový rozdíl</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reconciliations.map(r => {
+                      const totalDiff = (r.items ?? []).reduce((sum, i) => sum + i.difference, 0);
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell>{r.periodFrom} – {r.periodTo}</TableCell>
+                          <TableCell>{r.status}</TableCell>
+                          <TableCell>{fmtKc(totalDiff)}</TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {reconciliations.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Žádná vyúčtování pro tento pronájem.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* ── Podmínky dialog ────────────────────────────────────────────────── */}
       {podminkyOpen && id && (

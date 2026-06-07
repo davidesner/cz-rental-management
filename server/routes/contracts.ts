@@ -14,6 +14,8 @@ const CreateContract = z.object({
   endDate: DateStr.nullable().optional(),
   securityDeposit: z.number().int().nonnegative().nullable().optional(),
   note: z.string().nullable().optional(),
+  paymentDueDay: z.number().int().min(1).max(31).optional(),
+  paymentAppliesTo: z.enum(['current', 'next']).optional(),
 });
 
 const UpdateContract = z.object({
@@ -21,6 +23,8 @@ const UpdateContract = z.object({
   endDate: DateStr.nullable().optional(),
   securityDeposit: z.number().int().nonnegative().nullable().optional(),
   note: z.string().nullable().optional(),
+  paymentDueDay: z.number().int().min(1).max(31).optional(),
+  paymentAppliesTo: z.enum(['current', 'next']).optional(),
 });
 
 export function contractRoutes() {

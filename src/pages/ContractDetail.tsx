@@ -85,14 +85,27 @@ interface Reconciliation {
 interface Property { id: string; name: string; }
 interface Tenant { id: string; name: string; }
 
+interface Payment {
+  id: string;
+  paidAt: string;
+  amount: number;
+  counterparty: string | null;
+  counterpartyAccount: string | null;
+  contractId: string | null;
+  source: string;
+  externalId: string | null;
+  description: string | null;
+  note: string | null;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmtKc(halere: number) {
-  return (halere / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' Kč';
+  return (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 }
 
 function fmtKcSigned(halere: number) {
-  const s = (halere / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' Kč';
+  const s = (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
   if (halere < 0) return <span className="text-red-600">{s}</span>;
   if (halere > 0) return <span className="text-green-600">+{s}</span>;
   return <span className="text-muted-foreground">{s}</span>;
@@ -154,7 +167,7 @@ interface PodminkyTableProps {
 }
 
 function PodminkyTable({ terms, utilities }: PodminkyTableProps) {
-  const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' Kč';
+  const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 
   // Which utility kinds appear at all in this contract
   const presentKinds = UTILITY_KINDS.filter(k => utilities.some(u => u.kind === k));
@@ -420,6 +433,101 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
           <Button
             onClick={() => create.mutate()}
             disabled={!form.propertyId || !form.totalAmount || (periodMode === 'custom' && (!form.periodFrom || !form.periodTo)) || create.isPending}
+          >
+            Vytvořit
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Payment create dialog ────────────────────────────────────────────────────
+
+interface PaymentDialogProps {
+  fixedContractId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogProps) {
+  const [form, setForm] = useState({
+    amount: '',
+    paidAt: '',
+    counterparty: '',
+    counterpartyAccount: '',
+    source: 'manual' as 'manual' | 'bank',
+    externalId: '',
+    description: '',
+    note: '',
+  });
+  const [err, setErr] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: () => api.post<{ payment: Payment }>('/api/payments', {
+      contractId: fixedContractId,
+      amount: Math.round(parseFloat(form.amount.replace(',', '.')) * 100),
+      paidAt: form.paidAt,
+      counterparty: form.counterparty || null,
+      counterpartyAccount: form.counterpartyAccount || null,
+      source: form.source,
+      externalId: form.externalId || null,
+      description: form.description || null,
+      note: form.note || null,
+    }),
+    onSuccess: () => { onCreated(); onClose(); },
+    onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <Card className="w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-xl font-semibold">Nová platba</h2>
+        <div>
+          <Label>Částka (Kč)</Label>
+          <Input type="text" placeholder="0.00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+        </div>
+        <div>
+          <Label>Zaplaceno dne</Label>
+          <Input type="date" value={form.paidAt} onChange={e => setForm({ ...form, paidAt: e.target.value })} />
+        </div>
+        <div>
+          <Label>Protistrana (volitelné)</Label>
+          <Input value={form.counterparty} onChange={e => setForm({ ...form, counterparty: e.target.value })} />
+        </div>
+        <div>
+          <Label>Číslo účtu protistrany (volitelné)</Label>
+          <Input value={form.counterpartyAccount} onChange={e => setForm({ ...form, counterpartyAccount: e.target.value })} />
+        </div>
+        <div>
+          <Label>Zdroj</Label>
+          <select
+            className={SELECT_CLS}
+            value={form.source}
+            onChange={e => setForm({ ...form, source: e.target.value as 'manual' | 'bank' })}
+          >
+            <option value="manual">Ručně</option>
+            <option value="bank">Banka</option>
+          </select>
+        </div>
+        <div>
+          <Label>Externí ID (volitelné)</Label>
+          <Input value={form.externalId} onChange={e => setForm({ ...form, externalId: e.target.value })} />
+        </div>
+        <div>
+          <Label>Popis (volitelné)</Label>
+          <Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+        </div>
+        <div>
+          <Label>Poznámka (volitelné)</Label>
+          <Input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
+        </div>
+        {err && <p className="text-sm text-destructive">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Zrušit</Button>
+          <Button
+            onClick={() => create.mutate()}
+            disabled={!form.amount || !form.paidAt || create.isPending}
           >
             Vytvořit
           </Button>
@@ -727,6 +835,13 @@ export function ContractDetailPage() {
     enabled: !!id,
   });
 
+  // Payments for this contract
+  const { data: paymentsData } = useQuery({
+    queryKey: ['payments-by-contract', id],
+    queryFn: () => api.get<{ payments: Payment[] }>(`/api/payments?contractId=${id}`),
+    enabled: !!id,
+  });
+
   // ── Derived: current terms & utilities (validTo === null) ──────────────────
   const terms = termsData?.terms ?? [];
   const utilities = utilitiesData?.utilities ?? [];
@@ -758,6 +873,9 @@ export function ContractDetailPage() {
 
   // ── Reconciliation compute dialog state ───────────────────────────────────
   const [reconcileOpen, setReconcileOpen] = useState(false);
+
+  // ── Payment create dialog state ────────────────────────────────────────────
+  const [paymentOpen, setPaymentOpen] = useState(false);
 
   // ── Tab management ──────────────────────────────────────────────────────────
   const tab = searchParams.get('tab') ?? 'prehled';
@@ -795,6 +913,7 @@ export function ContractDetailPage() {
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList>
           <TabsTrigger value="prehled">Přehled</TabsTrigger>
+          <TabsTrigger value="platby">Platby</TabsTrigger>
           <TabsTrigger value="sluzby">Služby / Energie</TabsTrigger>
           <TabsTrigger value="vyuctovani">Vyúčtování (nájemci)</TabsTrigger>
         </TabsList>
@@ -885,7 +1004,56 @@ export function ContractDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* ── Tab 2: Služby / Energie ────────────────────────────────────── */}
+        {/* ── Tab 2: Platby ──────────────────────────────────────────────── */}
+        <TabsContent value="platby">
+          <Card>
+            <div className="p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Platby</h2>
+                {id && (
+                  <Button size="sm" onClick={() => setPaymentOpen(true)}>Nová platba</Button>
+                )}
+              </div>
+              <div className="overflow-hidden border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Datum</TableHead>
+                      <TableHead>Částka</TableHead>
+                      <TableHead>Protistrana</TableHead>
+                      <TableHead>Číslo účtu</TableHead>
+                      <TableHead>Zdroj</TableHead>
+                      <TableHead>Externí ID</TableHead>
+                      <TableHead>Poznámka</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(paymentsData?.payments ?? []).map(p => (
+                      <TableRow key={p.id}>
+                        <TableCell>{p.paidAt}</TableCell>
+                        <TableCell>{fmtKc(p.amount)}</TableCell>
+                        <TableCell>{p.counterparty ?? '—'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{p.counterpartyAccount ?? '—'}</TableCell>
+                        <TableCell>{p.source}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{p.externalId ?? '—'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={p.note ?? undefined}>
+                          {p.note ?? p.description ?? '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(paymentsData?.payments ?? []).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Žádné platby pro tento pronájem.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* ── Tab 3: Služby / Energie ────────────────────────────────────── */}
         <TabsContent value="sluzby">
           <Card>
             <div className="p-6 space-y-3">
@@ -982,6 +1150,15 @@ export function ContractDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Payment create dialog ─────────────────────────────────────────── */}
+      {paymentOpen && id && (
+        <PaymentDialog
+          fixedContractId={id}
+          onClose={() => setPaymentOpen(false)}
+          onCreated={() => qc.invalidateQueries({ queryKey: ['payments-by-contract', id] })}
+        />
+      )}
 
       {/* ── Podmínky dialog ────────────────────────────────────────────────── */}
       {podminkyOpen && id && (

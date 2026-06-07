@@ -824,47 +824,59 @@ export function ContractDetailPage() {
             </Card>
           )}
 
-          {/* Sekce Aktuální zálohy */}
+          {/* Sekce Aktuální podmínky */}
           <Card className="p-6">
-            <h2 className="text-lg font-semibold mb-3">Aktuální zálohy</h2>
+            <h2 className="text-lg font-semibold mb-3">Aktuální podmínky</h2>
             {!currentTerm && currentUtilities.length === 0 ? (
               <p className="text-sm text-muted-foreground">Žádné aktuální podmínky.</p>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-3 text-sm">
-                  {currentTerm && (
-                    <>
+            ) : (() => {
+                const sluzbyTotal = (currentTerm?.serviceAdvance ?? 0) + currentUtilities.reduce((s, u) => s + u.monthlyAdvance, 0);
+                return (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-3 text-sm">
                       <div>
                         <p className="text-muted-foreground">Nájem</p>
-                        <p className="font-medium">{fmtKc(currentTerm.baseRent)}</p>
+                        <p className="font-medium text-base">{fmtKc(currentTerm?.baseRent ?? 0)}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Záloha na služby</p>
-                        <p className="font-medium">{fmtKc(currentTerm.serviceAdvance)}</p>
+                        <p className="text-muted-foreground">Služby (celkem)</p>
+                        <p className="font-medium text-base">{fmtKc(sluzbyTotal)}</p>
                       </div>
-                    </>
-                  )}
-                  {currentUtilities.map(u => (
-                    <div key={u.id}>
-                      <p className="text-muted-foreground">Záloha {utilKindLabel(u.kind)}</p>
-                      <p className="font-medium">{fmtKc(u.monthlyAdvance)}</p>
+                      {monthlyTotal !== null && (
+                        <div>
+                          <p className="text-muted-foreground">Měsíčně celkem</p>
+                          <p className="font-bold text-base">{fmtKc(monthlyTotal)}</p>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-                {monthlyTotal !== null && (
-                  <div className="border-t pt-3">
-                    <span className="text-sm font-semibold">Měsíčně celkem: </span>
-                    <span className="text-sm font-bold">{fmtKc(monthlyTotal)}</span>
+                    {sluzbyTotal > 0 && (
+                      <div className="border-t pt-3">
+                        <p className="text-xs text-muted-foreground mb-2">Rozklad složek služeb</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm">
+                          {currentTerm && currentTerm.serviceAdvance > 0 && (
+                            <div>
+                              <p className="text-muted-foreground text-xs">Záloha SVJ</p>
+                              <p className="font-medium">{fmtKc(currentTerm.serviceAdvance)}</p>
+                            </div>
+                          )}
+                          {currentUtilities.map(u => (
+                            <div key={u.id}>
+                              <p className="text-muted-foreground text-xs">{utilKindLabel(u.kind)}</p>
+                              <p className="font-medium">{fmtKc(u.monthlyAdvance)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
+                );
+              })()}
           </Card>
 
-          {/* Sekce Historie podmínek */}
+          {/* Sekce Historie smlouvy */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Historie podmínek</CardTitle>
+              <CardTitle>Historie smlouvy</CardTitle>
               <Button onClick={() => setPodminkyOpen(true)}>Přidat podmínky</Button>
             </CardHeader>
             <CardContent>

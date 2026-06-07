@@ -14,6 +14,8 @@ import { listCostStatements, createCostStatement, deleteCostStatement } from '..
 import { listReconciliations, computeReconciliation } from '../mcp/tools/reconciliations.js';
 import { listOrganizations, createOrganization } from '../mcp/tools/organizations.js';
 import { getMe } from '../mcp/tools/me.js';
+import { addRentReduction, listRentReductions, deleteRentReduction } from '../mcp/tools/rent-reductions.js';
+import { paymentBreakdown } from '../mcp/tools/payment-breakdown.js';
 
 async function bootstrap() {
   const { db, client: dbClient } = await freshDb();
@@ -267,6 +269,63 @@ describe('MCP tools smoke', () => {
     expect(rec.items).toBeDefined();
     const recs = await listReconciliations(mcpClient, { contractId });
     expect(recs).toHaveLength(1);
+    await dbClient.close();
+  });
+
+  it('rent_reductions_add, list, and delete round-trip', async () => {
+    const { dbClient, mcpClient } = await bootstrap();
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
+    const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
+    const contractId = (contract as { id: string }).id;
+
+    // Add a rent reduction
+    const reduction = await addRentReduction(mcpClient, {
+      contractId,
+      forMonth: '2024-11-01',
+      amount: 50000,
+      reason: 'Tenant fixed leaky pipe',
+    });
+    expect((reduction as { forMonth: string; amount: number }).forMonth).toBe('2024-11-01');
+    expect((reduction as { forMonth: string; amount: number }).amount).toBe(50000);
+
+    // List should include it
+    const reductions = await listRentReductions(mcpClient, { contractId });
+    expect(reductions).toHaveLength(1);
+
+    // Delete it
+    const id = (reduction as { id: string }).id;
+    await deleteRentReduction(mcpClient, { contractId, id });
+
+    // List should be empty
+    const reductionsAfterDelete = await listRentReductions(mcpClient, { contractId });
+    expect(reductionsAfterDelete).toHaveLength(0);
+
+    await dbClient.close();
+  });
+
+  it('contracts_payment_breakdown returns months with rent reduction applied', async () => {
+    const { dbClient, mcpClient } = await bootstrap();
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
+    const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-11-01', endDate: null, securityDeposit: null, note: null });
+    const contractId = (contract as { id: string }).id;
+
+    // Add terms and utilities
+    await addContractTerms(mcpClient, { contractId, validFrom: '2024-11-01', baseRent: 1000000, serviceAdvance: 100000, source: 'initial', note: null });
+    await addContractUtility(mcpClient, { contractId, kind: 'electricity', validFrom: '2024-11-01', monthlyAdvance: 50000, note: null });
+
+    // Add a rent reduction for November
+    await addRentReduction(mcpClient, { contractId, forMonth: '2024-11-01', amount: 200000, reason: 'Tenant repair credit' });
+
+    // Get payment breakdown for November
+    const breakdown = await paymentBreakdown(mcpClient, { contractId, from: '2024-11-01', to: '2024-11-30' });
+    expect((breakdown as any).months).toHaveLength(1);
+    expect((breakdown as any).months[0].rentReduction).toBe(200000);
+    expect((breakdown as any).months[0].expected.total).toBe(1150000); // rent + service + utilities
+    expect((breakdown as any).months[0].effectiveExpected).toBe(950000); // after reduction
+    expect((breakdown as any).rentReductions).toHaveLength(1);
+
     await dbClient.close();
   });
 });

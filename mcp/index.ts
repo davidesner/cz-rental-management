@@ -13,6 +13,8 @@ import { addPropertyTariffTools } from './tools/property-tariffs.js';
 import { addPaymentTools } from './tools/payments.js';
 import { addCostStatementTools } from './tools/cost-statements.js';
 import { addReconciliationTools } from './tools/reconciliations.js';
+import { addRentReductionTools } from './tools/rent-reductions.js';
+import { addPaymentBreakdownTools } from './tools/payment-breakdown.js';
 
 const apiUrl = process.env['RENTAL_API_URL'] ?? 'http://localhost:3000';
 const apiToken = process.env['RENTAL_API_TOKEN'];
@@ -38,5 +40,7 @@ addPropertyTariffTools(server, client);
 addPaymentTools(server, client);
 addCostStatementTools(server, client);
 addReconciliationTools(server, client);
+addRentReductionTools(server, client);
+addPaymentBreakdownTools(server, client);
 
 server.start({ transportType: 'stdio' });

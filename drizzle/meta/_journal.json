@@ -36,6 +36,13 @@
       "when": 1780822088452,
       "tag": "0004_free_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780825084329,
+      "tag": "0005_wealthy_falcon",
+      "breakpoints": true
     }
   ]
 }

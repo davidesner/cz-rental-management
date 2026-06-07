@@ -114,6 +114,8 @@ export const contract = pgTable('contract', {
   endDate: date('end_date', { mode: 'string' }),
   securityDeposit: integer('security_deposit_haler'),
   note: text('note'),
+  paymentDueDay: integer('payment_due_day').notNull().default(10),
+  paymentAppliesTo: text('payment_applies_to', { enum: ['current', 'next'] }).notNull().default('current'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

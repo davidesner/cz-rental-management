@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -120,6 +120,114 @@ function periodsOverlap(
 }
 
 const SELECT_CLS = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+
+// ─── Podmínky (unified terms + utilities timeline) ────────────────────────────
+
+const UTILITY_KINDS = ['electricity', 'gas', 'internet', 'water', 'other'] as const;
+type UtilityKind = typeof UTILITY_KINDS[number];
+const UTILITY_LABEL: Record<UtilityKind, string> = {
+  electricity: 'Elektřina',
+  gas: 'Plyn',
+  internet: 'Internet',
+  water: 'Voda',
+  other: 'Ostatní',
+};
+
+function validAt<T extends { validFrom: string; validTo?: string | null }>(rows: T[], date: string): T | null {
+  // Return the most recent row where validFrom <= date and (validTo is null/undefined OR date < validTo)
+  // rows are assumed sorted so we iterate and take the last matching
+  let result: T | null = null;
+  for (const r of rows) {
+    if (r.validFrom <= date && (r.validTo === null || r.validTo === undefined || date < r.validTo)) {
+      if (result === null || r.validFrom >= result.validFrom) {
+        result = r;
+      }
+    }
+  }
+  return result;
+}
+
+interface PodminkyTableProps {
+  terms: ContractTerm[];
+  utilities: Utility[];
+}
+
+function PodminkyTable({ terms, utilities }: PodminkyTableProps) {
+  const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' Kč';
+
+  // Which utility kinds appear at all in this contract
+  const presentKinds = UTILITY_KINDS.filter(k => utilities.some(u => u.kind === k));
+
+  // All unique transition dates from both tables
+  const dates = Array.from(new Set([
+    ...terms.map(t => t.validFrom),
+    ...utilities.map(u => u.validFrom),
+  ])).sort();
+
+  if (dates.length === 0) {
+    return <p className="text-sm text-muted-foreground py-4">Zatím žádné podmínky. Přidej první.</p>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Platnost od</TableHead>
+            <TableHead>Nájem</TableHead>
+            <TableHead>Záloha SVJ</TableHead>
+            {presentKinds.map(k => <TableHead key={k}>{UTILITY_LABEL[k]}</TableHead>)}
+            <TableHead>Σ Měsíčně</TableHead>
+            <TableHead>Zdroj</TableHead>
+            <TableHead>Poznámka</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {dates.map(d => {
+            const activeTerm = validAt(terms, d);
+            const baseRent = activeTerm?.baseRent ?? 0;
+            const serviceAdvance = activeTerm?.serviceAdvance ?? 0;
+            const utilByKind: Partial<Record<UtilityKind, number>> = {};
+            let utilSum = 0;
+            for (const k of presentKinds) {
+              const u = validAt(utilities.filter(x => x.kind === k), d);
+              if (u) {
+                utilByKind[k] = u.monthlyAdvance;
+                utilSum += u.monthlyAdvance;
+              }
+            }
+            const total = baseRent + serviceAdvance + utilSum;
+            // Highlight the latest open row (active term with no validTo)
+            const isLatest = activeTerm?.validTo === null || activeTerm?.validTo === undefined;
+            // Collect notes from active term and active utilities
+            const noteParts: string[] = [];
+            if (activeTerm?.note) noteParts.push(`smlouva: ${activeTerm.note}`);
+            for (const k of presentKinds) {
+              const u = validAt(utilities.filter(x => x.kind === k), d);
+              if (u?.note) noteParts.push(`${UTILITY_LABEL[k]}: ${u.note}`);
+            }
+
+            return (
+              <TableRow key={d} className={isLatest ? 'bg-accent/30' : ''}>
+                <TableCell className="font-medium">{d}</TableCell>
+                <TableCell>{fmt(baseRent)}</TableCell>
+                <TableCell>{fmt(serviceAdvance)}</TableCell>
+                {presentKinds.map(k => (
+                  <TableCell key={k}>{utilByKind[k] !== undefined ? fmt(utilByKind[k]!) : '—'}</TableCell>
+                ))}
+                <TableCell className="font-semibold">{fmt(total)}</TableCell>
+                <TableCell className="text-xs">{activeTerm?.source ?? '—'}</TableCell>
+                <TableCell className="text-xs text-muted-foreground max-w-md truncate" title={noteParts.join(' · ')}>
+                  {noteParts.join(' · ') || '—'}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 // ─── CostStatement create dialog (extracted for reuse) ────────────────────────
 
@@ -369,6 +477,198 @@ function ComputeDialog({ contractId, onClose, onCreated }: ComputeDialogProps) {
   );
 }
 
+// ─── Podmínky dialog (unified terms + utilities entry) ────────────────────────
+
+interface PodminkyDialogProps {
+  contractId: string;
+  terms: ContractTerm[];
+  utilities: Utility[];
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: PodminkyDialogProps) {
+  const presentKinds = UTILITY_KINDS.filter(k => utilities.some(u => u.kind === k));
+  const hasExisting = terms.length > 0;
+
+  // Pre-fill from currently active term + utilities (validTo === null)
+  const activeTerm = terms.find(t => t.validTo === null || t.validTo === undefined);
+  const initialUtilities: Partial<Record<UtilityKind, string>> = {};
+  for (const k of presentKinds) {
+    const u = utilities.filter(x => x.kind === k).find(x => x.validTo === null || x.validTo === undefined);
+    if (u) initialUtilities[k] = (u.monthlyAdvance / 100).toFixed(2);
+  }
+
+  const [form, setForm] = useState({
+    validFrom: '',
+    baseRentCzk: activeTerm ? (activeTerm.baseRent / 100).toFixed(2) : '',
+    serviceAdvanceCzk: activeTerm ? (activeTerm.serviceAdvance / 100).toFixed(2) : '',
+    source: (hasExisting ? 'addendum' : 'initial') as 'initial' | 'addendum' | 'change',
+    note: '',
+    utilities: initialUtilities as Partial<Record<UtilityKind, string>>,
+  });
+
+  // New utility kind fields
+  const [newUtilityKind, setNewUtilityKind] = useState<UtilityKind | ''>('');
+  const [newUtilityCzk, setNewUtilityCzk] = useState('');
+
+  const [err, setErr] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const availableNewKinds = UTILITY_KINDS.filter(k => !presentKinds.includes(k));
+
+  async function handleSubmit() {
+    if (!form.validFrom || !form.baseRentCzk || !form.serviceAdvanceCzk) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      // 1. POST terms
+      await api.post(`/api/contracts/${contractId}/terms`, {
+        validFrom: form.validFrom,
+        baseRent: Math.round(parseFloat(form.baseRentCzk.replace(',', '.')) * 100),
+        serviceAdvance: Math.round(parseFloat(form.serviceAdvanceCzk.replace(',', '.')) * 100),
+        source: form.source,
+        note: form.note || null,
+      });
+
+      // 2. POST utilities for each kind that has a value and differs from current
+      const errors: string[] = [];
+      for (const k of presentKinds) {
+        const valStr = form.utilities[k];
+        if (!valStr || valStr.trim() === '') continue; // skip empty — no-op (known limitation: doesn't remove utility)
+        const newAmount = Math.round(parseFloat(valStr.replace(',', '.')) * 100);
+        const currentU = utilities.filter(x => x.kind === k).find(x => x.validTo === null || x.validTo === undefined);
+        const currentAmount = currentU?.monthlyAdvance ?? null;
+        // Only POST if value changed or it's a new entry
+        if (currentAmount === null || newAmount !== currentAmount) {
+          try {
+            await api.post(`/api/contracts/${contractId}/utilities`, {
+              kind: k,
+              validFrom: form.validFrom,
+              monthlyAdvance: newAmount,
+              note: null,
+            });
+          } catch (e) {
+            errors.push(`${UTILITY_LABEL[k]}: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+      }
+
+      // 3. POST new utility kind if filled in
+      if (newUtilityKind && newUtilityCzk.trim() !== '') {
+        try {
+          await api.post(`/api/contracts/${contractId}/utilities`, {
+            kind: newUtilityKind,
+            validFrom: form.validFrom,
+            monthlyAdvance: Math.round(parseFloat(newUtilityCzk.replace(',', '.')) * 100),
+            note: null,
+          });
+        } catch (e) {
+          errors.push(`${UTILITY_LABEL[newUtilityKind]}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        setErr(`Podmínky uloženy, ale chyba u energií: ${errors.join('; ')}`);
+      }
+      onCreated();
+      if (errors.length === 0) onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-xl font-semibold">Přidat podmínky</h2>
+        <div>
+          <Label>Platnost od</Label>
+          <Input type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} />
+        </div>
+        <div>
+          <Label>Nájem (Kč)</Label>
+          <Input type="text" placeholder="0.00" value={form.baseRentCzk} onChange={e => setForm({ ...form, baseRentCzk: e.target.value })} />
+        </div>
+        <div>
+          <Label>Záloha SVJ (Kč)</Label>
+          <Input type="text" placeholder="0.00" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
+        </div>
+        <div>
+          <Label>Zdroj</Label>
+          <select
+            className={SELECT_CLS}
+            value={form.source}
+            onChange={e => setForm({ ...form, source: e.target.value as 'initial' | 'addendum' | 'change' })}
+          >
+            <option value="initial">Počáteční</option>
+            <option value="addendum">Dodatek</option>
+            <option value="change">Změna</option>
+          </select>
+        </div>
+        <div>
+          <Label>Poznámka (volitelné)</Label>
+          <Input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
+        </div>
+
+        {presentKinds.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Energie</p>
+            <p className="text-xs text-muted-foreground">Ponech prázdné = beze změny. Vymazání hodnoty energii neodstraní (pro odstranění je potřeba backend podpora).</p>
+            {presentKinds.map(k => (
+              <div key={k}>
+                <Label className="text-sm">{UTILITY_LABEL[k]} (Kč)</Label>
+                <Input
+                  type="text"
+                  placeholder="0.00"
+                  value={form.utilities[k] ?? ''}
+                  onChange={e => setForm({ ...form, utilities: { ...form.utilities, [k]: e.target.value } })}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {availableNewKinds.length > 0 && (
+          <div className="space-y-2 border-t pt-4">
+            <p className="text-sm font-medium">Přidat další energii</p>
+            <div className="flex gap-2">
+              <select
+                className={SELECT_CLS}
+                value={newUtilityKind}
+                onChange={e => setNewUtilityKind(e.target.value as UtilityKind | '')}
+              >
+                <option value="">Vyber druh…</option>
+                {availableNewKinds.map(k => <option key={k} value={k}>{UTILITY_LABEL[k]}</option>)}
+              </select>
+              <Input
+                type="text"
+                placeholder="Kč"
+                className="w-32"
+                value={newUtilityCzk}
+                onChange={e => setNewUtilityCzk(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+
+        {err && <p className="text-sm text-destructive">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Zrušit</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!form.validFrom || !form.baseRentCzk || !form.serviceAdvanceCzk || submitting}
+          >
+            {submitting ? 'Ukládám…' : 'Přidat'}
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export function ContractDetailPage() {
@@ -448,46 +748,8 @@ export function ContractDetailPage() {
       currentUtilities.reduce((sum, u) => sum + u.monthlyAdvance, 0)
     : null;
 
-  // ── Terms dialog state ─────────────────────────────────────────────────────
-  const [termsOpen, setTermsOpen] = useState(false);
-  const [termsForm, setTermsForm] = useState({ validFrom: '', baseRent: '', serviceAdvance: '', source: 'initial', note: '' });
-  const [termsErr, setTermsErr] = useState<string | null>(null);
-
-  const addTerms = useMutation({
-    mutationFn: () => api.post<{ term: ContractTerm }>(`/api/contracts/${id}/terms`, {
-      validFrom: termsForm.validFrom,
-      baseRent: Math.round(parseFloat(termsForm.baseRent) * 100),
-      serviceAdvance: Math.round(parseFloat(termsForm.serviceAdvance) * 100),
-      source: termsForm.source,
-      note: termsForm.note || null,
-    }),
-    onSuccess: () => {
-      setTermsOpen(false);
-      setTermsForm({ validFrom: '', baseRent: '', serviceAdvance: '', source: 'initial', note: '' });
-      qc.invalidateQueries({ queryKey: ['contracts', id, 'terms'] });
-    },
-    onError: (e: unknown) => setTermsErr(e instanceof Error ? e.message : String(e)),
-  });
-
-  // ── Utility dialog state ───────────────────────────────────────────────────
-  const [utilOpen, setUtilOpen] = useState(false);
-  const [utilForm, setUtilForm] = useState({ kind: 'electricity', validFrom: '', monthlyAdvance: '', note: '' });
-  const [utilErr, setUtilErr] = useState<string | null>(null);
-
-  const addUtility = useMutation({
-    mutationFn: () => api.post<{ utility: Utility }>(`/api/contracts/${id}/utilities`, {
-      kind: utilForm.kind,
-      validFrom: utilForm.validFrom,
-      monthlyAdvance: Math.round(parseFloat(utilForm.monthlyAdvance) * 100),
-      note: utilForm.note || null,
-    }),
-    onSuccess: () => {
-      setUtilOpen(false);
-      setUtilForm({ kind: 'electricity', validFrom: '', monthlyAdvance: '', note: '' });
-      qc.invalidateQueries({ queryKey: ['contracts', id, 'utilities'] });
-    },
-    onError: (e: unknown) => setUtilErr(e instanceof Error ? e.message : String(e)),
-  });
+  // ── Podmínky dialog state ──────────────────────────────────────────────────
+  const [podminkyOpen, setPodminkyOpen] = useState(false);
 
   // ── Cost statement dialog state ────────────────────────────────────────────
   const [csOpen, setCsOpen] = useState(false);
@@ -577,77 +839,16 @@ export function ContractDetailPage() {
         )}
       </Card>
 
-      {/* ── Sekce Historie smlouvy (Terms) ─────────────────────────────────── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Historie smlouvy (Terms)</h2>
-          <Button size="sm" onClick={() => { setTermsErr(null); setTermsOpen(true); }}>Přidat podmínky</Button>
-        </div>
-        <Card className="overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Platnost od</TableHead>
-                <TableHead>Nájem (čistý)</TableHead>
-                <TableHead>Záloha na služby</TableHead>
-                <TableHead>Zdroj</TableHead>
-                <TableHead>Poznámka</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {terms.map(t => (
-                <TableRow key={t.id}>
-                  <TableCell>{t.validFrom}</TableCell>
-                  <TableCell>{fmtKc(t.baseRent)}</TableCell>
-                  <TableCell>{fmtKc(t.serviceAdvance)}</TableCell>
-                  <TableCell>{t.source}</TableCell>
-                  <TableCell>{t.note ?? '—'}</TableCell>
-                </TableRow>
-              ))}
-              {terms.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-6">Zatím žádné podmínky.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Card>
-      </div>
-
-      {/* ── Sekce Historie utility ─────────────────────────────────────────── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Historie utility</h2>
-          <Button size="sm" onClick={() => { setUtilErr(null); setUtilOpen(true); }}>Přidat energii</Button>
-        </div>
-        <Card className="overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Druh</TableHead>
-                <TableHead>Platnost od</TableHead>
-                <TableHead>Měsíční záloha</TableHead>
-                <TableHead>Poznámka</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {utilities.map(u => (
-                <TableRow key={u.id}>
-                  <TableCell>{utilKindLabel(u.kind)}</TableCell>
-                  <TableCell>{u.validFrom}</TableCell>
-                  <TableCell>{fmtKc(u.monthlyAdvance)}</TableCell>
-                  <TableCell>{u.note ?? '—'}</TableCell>
-                </TableRow>
-              ))}
-              {utilities.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-6">Zatím žádné energie.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Card>
-      </div>
+      {/* ── Sekce Historie podmínek (unified Terms + Utilities timeline) ──── */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Historie podmínek</CardTitle>
+          <Button onClick={() => setPodminkyOpen(true)}>Přidat podmínky</Button>
+        </CardHeader>
+        <CardContent>
+          <PodminkyTable terms={terms} utilities={utilities} />
+        </CardContent>
+      </Card>
 
       {/* ── Sekce Vyúčtování nákladů ───────────────────────────────────────── */}
       <div className="space-y-3">
@@ -738,96 +939,18 @@ export function ContractDetailPage() {
         </Card>
       </div>
 
-      {/* ── Add terms dialog ───────────────────────────────────────────────── */}
-      {termsOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setTermsOpen(false)}>
-          <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Přidat podmínky</h2>
-            <div>
-              <Label>Platnost od</Label>
-              <Input type="date" value={termsForm.validFrom} onChange={e => setTermsForm({ ...termsForm, validFrom: e.target.value })} />
-            </div>
-            <div>
-              <Label>Nájem (čistý) (Kč)</Label>
-              <Input type="text" placeholder="0.00" value={termsForm.baseRent} onChange={e => setTermsForm({ ...termsForm, baseRent: e.target.value })} />
-            </div>
-            <div>
-              <Label>Záloha na služby (Kč)</Label>
-              <Input type="text" placeholder="0.00" value={termsForm.serviceAdvance} onChange={e => setTermsForm({ ...termsForm, serviceAdvance: e.target.value })} />
-            </div>
-            <div>
-              <Label>Zdroj</Label>
-              <select
-                className={SELECT_CLS}
-                value={termsForm.source}
-                onChange={e => setTermsForm({ ...termsForm, source: e.target.value })}
-              >
-                <option value="initial">Počáteční</option>
-                <option value="addendum">Dodatek</option>
-                <option value="change">Změna</option>
-              </select>
-            </div>
-            <div>
-              <Label>Poznámka (volitelné)</Label>
-              <Input value={termsForm.note} onChange={e => setTermsForm({ ...termsForm, note: e.target.value })} />
-            </div>
-            {termsErr && <p className="text-sm text-destructive">{termsErr}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setTermsOpen(false)}>Zrušit</Button>
-              <Button
-                onClick={() => addTerms.mutate()}
-                disabled={!termsForm.validFrom || !termsForm.baseRent || !termsForm.serviceAdvance || addTerms.isPending}
-              >
-                Přidat
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* ── Add utility dialog ─────────────────────────────────────────────── */}
-      {utilOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setUtilOpen(false)}>
-          <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Přidat energii</h2>
-            <div>
-              <Label>Druh</Label>
-              <select
-                className={SELECT_CLS}
-                value={utilForm.kind}
-                onChange={e => setUtilForm({ ...utilForm, kind: e.target.value })}
-              >
-                <option value="electricity">Elektřina</option>
-                <option value="gas">Plyn</option>
-                <option value="internet">Internet</option>
-                <option value="water">Voda</option>
-                <option value="other">Ostatní</option>
-              </select>
-            </div>
-            <div>
-              <Label>Platnost od</Label>
-              <Input type="date" value={utilForm.validFrom} onChange={e => setUtilForm({ ...utilForm, validFrom: e.target.value })} />
-            </div>
-            <div>
-              <Label>Měsíční záloha (Kč)</Label>
-              <Input type="text" placeholder="0.00" value={utilForm.monthlyAdvance} onChange={e => setUtilForm({ ...utilForm, monthlyAdvance: e.target.value })} />
-            </div>
-            <div>
-              <Label>Poznámka (volitelné)</Label>
-              <Input value={utilForm.note} onChange={e => setUtilForm({ ...utilForm, note: e.target.value })} />
-            </div>
-            {utilErr && <p className="text-sm text-destructive">{utilErr}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setUtilOpen(false)}>Zrušit</Button>
-              <Button
-                onClick={() => addUtility.mutate()}
-                disabled={!utilForm.validFrom || !utilForm.monthlyAdvance || addUtility.isPending}
-              >
-                Přidat
-              </Button>
-            </div>
-          </Card>
-        </div>
+      {/* ── Podmínky dialog ────────────────────────────────────────────────── */}
+      {podminkyOpen && id && (
+        <PodminkyDialog
+          contractId={id}
+          terms={terms}
+          utilities={utilities}
+          onClose={() => setPodminkyOpen(false)}
+          onCreated={() => {
+            qc.invalidateQueries({ queryKey: ['contracts', id, 'terms'] });
+            qc.invalidateQueries({ queryKey: ['contracts', id, 'utilities'] });
+          }}
+        />
       )}
 
       {/* ── CostStatement create dialog ────────────────────────────────────── */}

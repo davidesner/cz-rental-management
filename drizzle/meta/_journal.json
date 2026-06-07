@@ -29,6 +29,13 @@
       "when": 1780674867147,
       "tag": "0003_loose_night_thrasher",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780822088452,
+      "tag": "0004_free_avengers",
+      "breakpoints": true
     }
   ]
 }

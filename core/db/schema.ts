@@ -207,3 +207,15 @@ export const reconciliationItem = pgTable('reconciliation_item', {
   paid: integer('paid_haler').notNull(),
   difference: integer('difference_haler').notNull(),
 });
+
+export const rentReduction = pgTable('rent_reduction', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  contractId: text('contract_id').notNull().references(() => contract.id, { onDelete: 'cascade' }),
+  forMonth: date('for_month', { mode: 'string' }).notNull(), // always 1st of month, e.g. '2024-11-01'
+  amount: integer('amount_haler').notNull(),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  contractMonth: uniqueIndex('rent_reduction_contract_month_idx').on(t.contractId, t.forMonth),
+}));

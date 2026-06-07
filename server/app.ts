@@ -16,6 +16,8 @@ import { propertyTariffRoutes } from './routes/property-tariffs.js';
 import { paymentRoutes } from './routes/payments.js';
 import { costStatementRoutes } from './routes/cost-statements.js';
 import { reconciliationRoutes } from './routes/reconciliations.js';
+import { rentReductionRoutes } from './routes/rent-reductions.js';
+import { paymentBreakdownRoutes } from './routes/payment-breakdown.js';
 import type { DB } from '../core/db/client.js';
 import type { Auth } from '../core/auth/better-auth.js';
 import type { AuthContext } from '../core/auth/context.js';
@@ -71,6 +73,8 @@ export function buildApp(deps: AppDeps): HonoApp {
   app.route('/api', paymentRoutes());
   app.route('/api', costStatementRoutes());
   app.route('/api', reconciliationRoutes());
+  app.route('/api', rentReductionRoutes());
+  app.route('/api', paymentBreakdownRoutes());
 
   return app;
 }

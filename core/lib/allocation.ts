@@ -75,13 +75,23 @@ export function expectedForMonth(
 }
 
 /**
- * Allocate `received` across expected components in utility-first order.
+ * Allocate `received` across expected components in rent-first order.
+ * Rule: first cover baseRent, then serviceAdvance, then utilities in UTILITY_ORDER.
+ * If the tenant pays less than expected, the deficit lands on advances (services + utilities)
+ * — which mirrors how rent is treated as the primary obligation and advances as pass-through.
  */
 export function allocate(received: number, expectation: MonthExpectation): MonthAllocation {
   let remaining = received;
+  const wantRent = expectation.baseRent;
+  const giveRent = Math.min(remaining, wantRent);
+  remaining -= giveRent;
+
+  const wantService = expectation.serviceAdvance;
+  const giveService = Math.min(remaining, wantService);
+  remaining -= giveService;
+
   const utilityPaid: Record<UtilityKind, number> = { electricity: 0, gas: 0, internet: 0, water: 0, other: 0 };
   const utilityDeficit: Record<UtilityKind, number> = { electricity: 0, gas: 0, internet: 0, water: 0, other: 0 };
-
   for (const kind of UTILITY_ORDER) {
     const want = expectation.utilities[kind];
     if (want <= 0) continue;
@@ -90,12 +100,6 @@ export function allocate(received: number, expectation: MonthExpectation): Month
     if (give < want) utilityDeficit[kind] = want - give;
     remaining -= give;
   }
-  const wantService = expectation.serviceAdvance;
-  const giveService = Math.min(remaining, wantService);
-  remaining -= giveService;
-  const wantRent = expectation.baseRent;
-  const giveRent = Math.min(remaining, wantRent);
-  remaining -= giveRent;
 
   return {
     baseRentPaid: giveRent,

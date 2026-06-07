@@ -52,14 +52,22 @@ describe('allocate', () => {
     expect(a.deficit.baseRent).toBe(0);
   });
 
-  it('utility-first: deficit lands on rent', () => {
+  it('rent-first: deficit lands on advances (utilities are last)', () => {
     const a = allocate(3890000, expectation); // 4120000 - 230000 short
-    expect(a.utilityPaid.electricity).toBe(120000);
+    expect(a.baseRentPaid).toBe(3300000);        // rent fully covered first
+    expect(a.servicePaid).toBe(590000);          // service partially covered (700000 - 110000)
+    expect(a.utilityPaid.electricity).toBe(0);   // electricity gets nothing (rent + partial service consumed it all)
+    expect(a.deficit.baseRent).toBe(0);
+    expect(a.deficit.serviceAdvance).toBe(110000);
+    expect(a.deficit.utilities.electricity).toBe(120000);
+  });
+
+  it('rent-first: small deficit lands on last utility', () => {
+    const a = allocate(4119400, expectation); // 4120000 - 600 short
+    expect(a.baseRentPaid).toBe(3300000);
     expect(a.servicePaid).toBe(700000);
-    expect(a.baseRentPaid).toBe(3070000);
-    expect(a.deficit.baseRent).toBe(230000);
-    expect(a.deficit.serviceAdvance).toBe(0);
-    expect(a.deficit.utilities.electricity).toBe(0);
+    expect(a.utilityPaid.electricity).toBe(119400);
+    expect(a.deficit.utilities.electricity).toBe(600);
   });
 
   it('overpayment shows surplus', () => {

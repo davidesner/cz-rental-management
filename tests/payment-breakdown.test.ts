@@ -114,13 +114,13 @@ describe('payment-breakdown endpoint', () => {
     expect(nov.rentReduction).toBe(50000);
     expect(nov.effectiveExpected).toBe(362000); // 412000 - 50000
 
-    // Received 82000 in utility-first model: electricity (12000) + service (70000) = 82000
+    // Received 82000 in rent-first model: rent gets all 82000, advances get 0
     expect(nov.receivedTotal).toBe(82000);
-    expect(nov.allocation.utilityPaid.electricity).toBe(12000);
-    expect(nov.allocation.servicePaid).toBe(70000);
-    // Rent not covered → deficit lands on baseRent
-    expect(nov.allocation.baseRentPaid).toBe(0);
-    expect(nov.allocation.deficitTotal).toBe(330000); // whole rent unpaid
+    expect(nov.allocation.baseRentPaid).toBe(82000);
+    expect(nov.allocation.servicePaid).toBe(0);
+    expect(nov.allocation.utilityPaid.electricity).toBe(0);
+    // Deficits: rent 248000 (330000-82000) + service 70000 + electricity 12000 = 330000
+    expect(nov.allocation.deficitTotal).toBe(330000);
     expect(nov.allocation.surplus).toBe(0);
 
     // rentReductions array included

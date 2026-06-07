@@ -98,6 +98,43 @@ interface Payment {
   note: string | null;
 }
 
+type UtilityKindBE = 'electricity' | 'gas' | 'internet' | 'water' | 'other';
+
+interface RentReductionItem {
+  id: string;
+  forMonth: string;
+  amount: number;
+  reason: string | null;
+}
+
+interface MonthBreakdown {
+  month: string;
+  daysActive: number;
+  daysInMonth: number;
+  expected: {
+    baseRent: number;
+    serviceAdvance: number;
+    utilities: Record<UtilityKindBE, number>;
+    total: number;
+  };
+  rentReduction: number;
+  effectiveExpected: number;
+  receivedTotal: number;
+  allocation: {
+    baseRentPaid: number;
+    servicePaid: number;
+    utilityPaid: Record<UtilityKindBE, number>;
+    surplus: number;
+    deficitTotal: number;
+  };
+  paymentIds: string[];
+}
+
+interface PaymentBreakdownData {
+  months: MonthBreakdown[];
+  rentReductions: RentReductionItem[];
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmtKc(halere: number) {
@@ -778,6 +815,240 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
   );
 }
 
+// ─── RentReduction dialog ─────────────────────────────────────────────────────
+
+interface RentReductionDialogProps {
+  contractId: string;
+  prefillMonth?: string; // YYYY-MM-01
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+function RentReductionDialog({ contractId, prefillMonth, onClose, onCreated }: RentReductionDialogProps) {
+  const [form, setForm] = useState({
+    forMonth: prefillMonth ?? '',
+    amountCzk: '',
+    reason: '',
+  });
+  const [err, setErr] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: () => api.post(`/api/contracts/${contractId}/rent-reductions`, {
+      forMonth: form.forMonth,
+      amount: Math.round(parseFloat(form.amountCzk.replace(',', '.')) * 100),
+      reason: form.reason || null,
+    }),
+    onSuccess: () => { onCreated(); onClose(); },
+    onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        <h2 className="text-xl font-semibold">Přidat srážku nájmu</h2>
+        <div>
+          <Label>Měsíc (1. den měsíce)</Label>
+          <Input type="date" value={form.forMonth} onChange={e => setForm({ ...form, forMonth: e.target.value })} />
+        </div>
+        <div>
+          <Label>Částka srážky (Kč)</Label>
+          <Input type="text" placeholder="0.00" value={form.amountCzk} onChange={e => setForm({ ...form, amountCzk: e.target.value })} />
+        </div>
+        <div>
+          <Label>Důvod (volitelné)</Label>
+          <Input value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Např. nájemník uhradil opravu pronajímatele" />
+        </div>
+        {err && <p className="text-sm text-destructive">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Zrušit</Button>
+          <Button
+            onClick={() => create.mutate()}
+            disabled={!form.forMonth || !form.amountCzk || create.isPending}
+          >
+            Přidat
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Měsíční rozpis ──────────────────────────────────────────────────────────
+
+interface MesicniRozpisProps {
+  contractId: string;
+  contract: Contract;
+}
+
+function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
+  const qc = useQueryClient();
+  const [rrDialogOpen, setRrDialogOpen] = useState(false);
+  const [prefillMonth, setPrefillMonth] = useState<string | undefined>(undefined);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+
+  const today = new Date().toISOString().slice(0, 10);
+  const periodTo = contract.endDate ?? today;
+
+  const breakdown = useQuery({
+    queryKey: ['payment-breakdown', contractId],
+    queryFn: () => api.get<PaymentBreakdownData>(
+      `/api/contracts/${contractId}/payment-breakdown?from=${contract.startDate}&to=${periodTo}`
+    ),
+    enabled: !!contract,
+  });
+
+  const deleteReduction = useMutation({
+    mutationFn: (rid: string) => api.delete(`/api/contracts/${contractId}/rent-reductions/${rid}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payment-breakdown', contractId] }),
+  });
+
+  function toggleExpand(month: string) {
+    setExpandedMonths(prev => {
+      const next = new Set(prev);
+      if (next.has(month)) next.delete(month); else next.add(month);
+      return next;
+    });
+  }
+
+  const UTIL_LABEL: Record<UtilityKindBE, string> = {
+    electricity: 'Elektřina', gas: 'Plyn', internet: 'Internet', water: 'Voda', other: 'Ostatní',
+  };
+  const UTIL_ORDER: UtilityKindBE[] = ['electricity', 'gas', 'internet', 'water', 'other'];
+
+  if (breakdown.isLoading) return <p className="text-sm text-muted-foreground py-4">Načítám rozpis…</p>;
+  if (breakdown.error) return <p className="text-sm text-destructive py-4">Chyba při načítání rozpisu.</p>;
+
+  const months = breakdown.data?.months ?? [];
+  if (months.length === 0) return <p className="text-sm text-muted-foreground py-4">Žádné měsíce v období smlouvy.</p>;
+
+  // Which utility kinds have any non-zero expected across all months
+  const activeKinds = UTIL_ORDER.filter(k => months.some(m => m.expected.utilities[k] > 0));
+
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-8"></TableHead>
+              <TableHead>Měsíc</TableHead>
+              <TableHead className="text-right">Plán</TableHead>
+              <TableHead className="text-right">Srážka</TableHead>
+              <TableHead className="text-right">Předepsáno</TableHead>
+              <TableHead className="text-right">Zaplaceno</TableHead>
+              <TableHead className="text-right">Rozdíl</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {months.map(row => {
+              const diff = row.receivedTotal - row.effectiveExpected;
+              const isExpanded = expandedMonths.has(row.month);
+              const reductionEntry = breakdown.data?.rentReductions.find(r => r.forMonth === `${row.month}-01`);
+
+              return (
+                <>
+                  <TableRow
+                    key={row.month}
+                    className={row.daysActive === 0 ? 'opacity-40' : ''}
+                  >
+                    <TableCell className="p-1">
+                      <button
+                        className="text-xs text-muted-foreground hover:text-foreground px-1"
+                        onClick={() => toggleExpand(row.month)}
+                        title={isExpanded ? 'Skrýt alokaci' : 'Zobrazit alokaci'}
+                      >
+                        {isExpanded ? '▲' : '▼'}
+                      </button>
+                    </TableCell>
+                    <TableCell className="font-medium">{row.month}</TableCell>
+                    <TableCell className="text-right">{fmtKc(row.expected.total)}</TableCell>
+                    <TableCell className="text-right">
+                      {reductionEntry ? (
+                        <span className="flex items-center justify-end gap-1">
+                          <span className="text-amber-600">{fmtKc(reductionEntry.amount)}</span>
+                          <button
+                            className="text-destructive hover:opacity-70 text-xs"
+                            title={reductionEntry.reason ?? 'Smazat srážku'}
+                            onClick={() => deleteReduction.mutate(reductionEntry.id)}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          className="text-xs text-muted-foreground hover:text-primary"
+                          onClick={() => {
+                            setPrefillMonth(`${row.month}-01`);
+                            setRrDialogOpen(true);
+                          }}
+                        >
+                          + Přidat
+                        </button>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">{fmtKc(row.effectiveExpected)}</TableCell>
+                    <TableCell className="text-right">{fmtKc(row.receivedTotal)}</TableCell>
+                    <TableCell className="text-right">{fmtKcSigned(diff)}</TableCell>
+                  </TableRow>
+                  {isExpanded && (
+                    <TableRow key={`${row.month}-detail`} className="bg-muted/30">
+                      <TableCell colSpan={7} className="py-3 px-6">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
+                          <div>
+                            <p className="text-muted-foreground">Nájem uhrazen</p>
+                            <p className="font-medium">{fmtKc(row.allocation.baseRentPaid)} <span className="text-muted-foreground">/ {fmtKc(row.expected.baseRent)}</span></p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Záloha SVJ</p>
+                            <p className="font-medium">{fmtKc(row.allocation.servicePaid)} <span className="text-muted-foreground">/ {fmtKc(row.expected.serviceAdvance)}</span></p>
+                          </div>
+                          {activeKinds.map(k => (
+                            <div key={k}>
+                              <p className="text-muted-foreground">{UTIL_LABEL[k]}</p>
+                              <p className="font-medium">{fmtKc(row.allocation.utilityPaid[k])} <span className="text-muted-foreground">/ {fmtKc(row.expected.utilities[k])}</span></p>
+                            </div>
+                          ))}
+                          {row.allocation.surplus > 0 && (
+                            <div>
+                              <p className="text-muted-foreground">Přeplatek</p>
+                              <p className="font-medium text-green-600">{fmtKc(row.allocation.surplus)}</p>
+                            </div>
+                          )}
+                          {row.allocation.deficitTotal > 0 && (
+                            <div>
+                              <p className="text-muted-foreground">Dluh celkem</p>
+                              <p className="font-medium text-red-600">{fmtKc(row.allocation.deficitTotal)}</p>
+                            </div>
+                          )}
+                          {row.daysActive < row.daysInMonth && (
+                            <div>
+                              <p className="text-muted-foreground">Aktivní dny</p>
+                              <p className="font-medium">{row.daysActive} / {row.daysInMonth}</p>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {rrDialogOpen && (
+        <RentReductionDialog
+          contractId={contractId}
+          prefillMonth={prefillMonth}
+          onClose={() => { setRrDialogOpen(false); setPrefillMonth(undefined); }}
+          onCreated={() => qc.invalidateQueries({ queryKey: ['payment-breakdown', contractId] })}
+        />
+      )}
+    </>
+  );
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export function ContractDetailPage() {
@@ -1005,7 +1276,20 @@ export function ContractDetailPage() {
         </TabsContent>
 
         {/* ── Tab 2: Platby ──────────────────────────────────────────────── */}
-        <TabsContent value="platby">
+        <TabsContent value="platby" className="space-y-4">
+          {/* Měsíční rozpis */}
+          {id && contract && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle>Měsíční rozpis</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <MesicniRozpis contractId={id} contract={contract} />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Platby tabulka */}
           <Card>
             <div className="p-6 space-y-3">
               <div className="flex items-center justify-between">

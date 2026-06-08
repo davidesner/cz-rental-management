@@ -160,15 +160,17 @@ function computeItemsWithBreakdown(
     const match = perMonth[slot.month]!;
     const received = match.receivedTotal;
     const exp = slot.expected;
-    const a = allocate(received, exp);
+    // Apply rentReduction to baseRent for allocation purposes — tenant's effective rent
+    // obligation that month is baseRent − srážka. Rent-first allocation fills this reduced
+    // amount; the rest flows to services/utilities.
+    const rentEffective = Math.max(0, exp.baseRent - slot.rentReduction);
+    const effectiveExp = { ...exp, baseRent: rentEffective };
+    const a = allocate(received, effectiveExp);
 
     paidPerKind.rent += a.baseRentPaid;
     paidPerKind.services += a.servicePaid;
     for (const kind of UTILITY_ORDER) paidPerKind[kind] += a.utilityPaid[kind];
 
-    // Effective rent expected = baseRent − rentReduction (rent reduction is a srážka that
-    // lowers tenant's rent obligation that month)
-    const rentEffective = Math.max(0, exp.baseRent - slot.rentReduction);
     rentExpectedTotal += rentEffective;
 
     const expectedTotal = exp.baseRent + exp.serviceAdvance + UTILITY_ORDER.reduce((s, k) => s + exp.utilities[k], 0);

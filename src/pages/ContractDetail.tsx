@@ -987,11 +987,22 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
                     <TableCell className="text-right">
                       {reductionEntry ? (
                         <span className="flex items-center justify-end gap-1">
-                          <span className="text-amber-600">{fmtKc(reductionEntry.amount)}</span>
+                          <span
+                            className="text-amber-600 cursor-help"
+                            title={reductionEntry.reason ?? 'Bez poznámky'}
+                          >
+                            {fmtKc(reductionEntry.amount)}
+                            {reductionEntry.reason && <sup className="text-[10px] ml-0.5">ℹ</sup>}
+                          </span>
                           <button
                             className="text-destructive hover:opacity-70 text-xs"
-                            title={reductionEntry.reason ?? 'Smazat srážku'}
-                            onClick={() => deleteReduction.mutate(reductionEntry.id)}
+                            title="Smazat srážku"
+                            onClick={() => {
+                              const msg = reductionEntry.reason
+                                ? `Smazat srážku ${fmtKc(reductionEntry.amount)} (${reductionEntry.reason}) za měsíc ${row.month}?`
+                                : `Smazat srážku ${fmtKc(reductionEntry.amount)} za měsíc ${row.month}?`;
+                              if (confirm(msg)) deleteReduction.mutate(reductionEntry.id);
+                            }}
                           >
                             ✕
                           </button>

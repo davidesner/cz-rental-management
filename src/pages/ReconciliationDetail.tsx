@@ -262,9 +262,11 @@ export function ReconciliationDetailPage() {
     if (!item.breakdown) {
       return { item, liveActualCost: item.actualCost, livePaid: item.paid, liveDifference: item.difference, stale: false };
     }
-    const liveActualCost = item.breakdown.costStatements.reduce(
-      (s, cs) => s + cs.totalAmount + cs.adjustmentAmount, 0
-    );
+    // For rent there are no cost statements — actualCost = sum of effective expected rent per month.
+    // For other kinds — actualCost = sum from cost statements (totalAmount + adjustment).
+    const liveActualCost = item.kind === 'rent'
+      ? item.breakdown.months.reduce((s, m) => s + m.expectedThisKind, 0)
+      : item.breakdown.costStatements.reduce((s, cs) => s + cs.totalAmount + cs.adjustmentAmount, 0);
     const livePaid = item.breakdown.months.reduce((s, m) => s + m.paidThisKind, 0);
     const liveDifference = livePaid - liveActualCost;
     const stale = liveActualCost !== item.actualCost || livePaid !== item.paid;

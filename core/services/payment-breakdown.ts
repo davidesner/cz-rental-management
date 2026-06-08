@@ -105,7 +105,12 @@ export async function paymentBreakdown(
   const months: MonthBreakdown[] = slots.map(slot => {
     const match = perMonth[slot.month]!;
     const received = match.receivedTotal;
-    const alloc = allocate(received, slot.expected);
+    // Apply rentReduction (srážka) to baseRent for allocation purposes — tenant's effective
+    // rent obligation that month is baseRent − srážka. Rent-first allocation fills this
+    // reduced amount; the rest flows to services/utilities.
+    const rentEffective = Math.max(0, slot.expected.baseRent - slot.rentReduction);
+    const effectiveExp = { ...slot.expected, baseRent: rentEffective };
+    const alloc = allocate(received, effectiveExp);
     const expectedTotal = slot.expected.baseRent + slot.expected.serviceAdvance + Object.values(slot.expected.utilities).reduce((s, v) => s + v, 0);
     const deficitTotal = alloc.deficit.baseRent + alloc.deficit.serviceAdvance + Object.values(alloc.deficit.utilities).reduce((s, v) => s + v, 0);
     const maxLateDays = match.appliedPayments.reduce((max, ap) => Math.max(max, ap.lateDays), 0);

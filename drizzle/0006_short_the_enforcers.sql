@@ -1,0 +1,1 @@
+ALTER TABLE "property_service_tariff" ADD COLUMN "document_ref" text;

@@ -102,7 +102,13 @@ function ItemBreakdownPanel({ breakdown }: { breakdown: ItemBreakdown | undefine
                     {cs.adjustmentAmount !== 0 ? fmtKcSigned(cs.adjustmentAmount) : '—'}
                   </td>
                   <td className="py-1 pr-3 text-muted-foreground">{cs.adjustmentNote ?? '—'}</td>
-                  <td className="py-1 text-muted-foreground">{cs.documentRef ?? '—'}</td>
+                  <td className="py-1">{
+                    cs.documentRef
+                      ? /^https?:\/\//.test(cs.documentRef)
+                        ? <a href={cs.documentRef} target="_blank" rel="noreferrer" className="text-primary underline">odkaz</a>
+                        : <span className="text-muted-foreground">{cs.documentRef}</span>
+                      : <span className="text-muted-foreground">—</span>
+                  }</td>
                 </tr>
               ))}
             </tbody>

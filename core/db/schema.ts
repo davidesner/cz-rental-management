@@ -150,6 +150,7 @@ export const propertyServiceTariff = pgTable('property_service_tariff', {
   totalSvjAdvance: integer('total_svj_advance_haler').notNull(),
   deductibleAmount: integer('deductible_amount_haler').notNull(),
   deductibleNote: text('deductible_note'),
+  documentRef: text('document_ref'),
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

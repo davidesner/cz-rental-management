@@ -1424,6 +1424,7 @@ export function ContractDetailPage() {
                       <TableHead>Úprava</TableHead>
                       <TableHead>Reconciliable</TableHead>
                       <TableHead>Poznámka k úpravě</TableHead>
+                      <TableHead>Doklad</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1440,12 +1441,19 @@ export function ContractDetailPage() {
                           <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
                             {s.adjustmentNote ?? '—'}
                           </TableCell>
+                          <TableCell>{
+                            s.documentRef
+                              ? /^https?:\/\//.test(s.documentRef)
+                                ? <a href={s.documentRef} target="_blank" rel="noreferrer" className="text-primary underline text-xs">odkaz</a>
+                                : <span className="text-xs text-muted-foreground" title={s.documentRef}>{s.documentRef.slice(0, 20)}{s.documentRef.length > 20 ? '…' : ''}</span>
+                              : <span className="text-muted-foreground">—</span>
+                          }</TableCell>
                         </TableRow>
                       );
                     })}
                     {filteredStatements.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Žádné výkazy nákladů pro toto období.</TableCell>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Žádné výkazy nákladů pro toto období.</TableCell>
                       </TableRow>
                     )}
                   </TableBody>

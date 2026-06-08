@@ -9,6 +9,7 @@ export interface CreateTariffInput {
   totalSvjAdvance: number;
   deductibleAmount: number;
   deductibleNote?: string | null;
+  documentRef?: string | null;
   note?: string | null;
 }
 
@@ -20,6 +21,7 @@ export interface TariffRow {
   totalSvjAdvance: number;
   deductibleAmount: number;
   deductibleNote: string | null;
+  documentRef: string | null;
   note: string | null;
   createdAt: Date;
 }
@@ -45,6 +47,7 @@ export async function addPropertyTariff(db: DB, orgId: string, propertyId: strin
       totalSvjAdvance: input.totalSvjAdvance,
       deductibleAmount: input.deductibleAmount,
       deductibleNote: input.deductibleNote ?? null,
+      documentRef: input.documentRef ?? null,
       note: input.note ?? null,
     }).returning();
     return row!;

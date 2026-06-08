@@ -12,6 +12,7 @@ const CreateTariff = z.object({
   totalSvjAdvance: z.number().int().nonnegative(),
   deductibleAmount: z.number().int().nonnegative(),
   deductibleNote: z.string().nullable().optional(),
+  documentRef: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
 });
 

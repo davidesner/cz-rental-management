@@ -14,6 +14,7 @@ const AddPropertyTariffInput = z.object({
   totalSvjAdvance: z.number().int().nonnegative().describe('Total SVJ monthly advance in haléře (CZK × 100)'),
   deductibleAmount: z.number().int().nonnegative().describe('Deductible portion (e.g. Fond oprav) not charged to tenant, in haléře'),
   deductibleNote: z.string().nullable().optional().describe('Description of what is deducted (e.g. "Fond oprav + správa")'),
+  documentRef: z.string().nullable().optional().describe('Link/path to source evidence list document (e.g. Google Drive URL, file path)'),
   note: z.string().nullable().optional().describe('Internal note'),
 });
 

@@ -16,7 +16,22 @@ interface Tariff {
   id: string; propertyId: string;
   validFrom: string; validTo: string | null;
   totalSvjAdvance: number; deductibleAmount: number;
-  deductibleNote: string | null; note: string | null;
+  deductibleNote: string | null;
+  documentRef: string | null;
+  note: string | null;
+}
+
+function DocRef({ value }: { value: string | null }) {
+  if (!value) return <span className="text-muted-foreground">—</span>;
+  const isUrl = /^https?:\/\//.test(value);
+  if (isUrl) {
+    return (
+      <a href={value} target="_blank" rel="noreferrer" className="text-primary underline truncate inline-block max-w-[200px]" title={value}>
+        {(() => { try { return new URL(value).hostname; } catch { return value; } })()}
+      </a>
+    );
+  }
+  return <span className="text-xs text-muted-foreground" title={value}>{value}</span>;
 }
 
 export function PropertyDetailPage() {
@@ -36,7 +51,7 @@ export function PropertyDetailPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     validFrom: '', totalSvjAdvanceCzk: '', deductibleAmountCzk: '',
-    deductibleNote: '', note: '',
+    deductibleNote: '', documentRef: '', note: '',
   });
   const [err, setErr] = useState<string | null>(null);
 
@@ -46,11 +61,12 @@ export function PropertyDetailPage() {
       totalSvjAdvance: Math.round(parseFloat(form.totalSvjAdvanceCzk.replace(',', '.')) * 100),
       deductibleAmount: Math.round(parseFloat(form.deductibleAmountCzk.replace(',', '.')) * 100),
       deductibleNote: form.deductibleNote || null,
+      documentRef: form.documentRef || null,
       note: form.note || null,
     }),
     onSuccess: () => {
       setOpen(false);
-      setForm({ validFrom: '', totalSvjAdvanceCzk: '', deductibleAmountCzk: '', deductibleNote: '', note: '' });
+      setForm({ validFrom: '', totalSvjAdvanceCzk: '', deductibleAmountCzk: '', deductibleNote: '', documentRef: '', note: '' });
       qc.invalidateQueries({ queryKey: ['property-tariffs', id] });
     },
     onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
@@ -97,6 +113,7 @@ export function PropertyDetailPage() {
                 <TableHead>Odečitatelné (FO)</TableHead>
                 <TableHead>Reconciliable</TableHead>
                 <TableHead>Složení</TableHead>
+                <TableHead>Doklad</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -108,10 +125,11 @@ export function PropertyDetailPage() {
                   <TableCell>{fmt(t.deductibleAmount)}</TableCell>
                   <TableCell className="font-medium">{fmt(t.totalSvjAdvance - t.deductibleAmount)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-md">{t.deductibleNote ?? '—'}</TableCell>
+                  <TableCell><DocRef value={t.documentRef} /></TableCell>
                 </TableRow>
               ))}
               {(tariffs.data?.tariffs ?? []).length === 0 && (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">Zatím žádný evidenční list. Přidej první „Nový záznam".</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">Zatím žádný evidenční list. Přidej první „Nový záznam".</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -137,6 +155,10 @@ export function PropertyDetailPage() {
             <div>
               <Label>Složení (poznámka)</Label>
               <Input placeholder="Fond oprav 1424 + Odměny výbor 110 + ..." value={form.deductibleNote} onChange={e => setForm({ ...form, deductibleNote: e.target.value })} />
+            </div>
+            <div>
+              <Label>Doklad (URL nebo cesta)</Label>
+              <Input placeholder="https://drive.google.com/file/d/... nebo /path/to/EL-2024.pdf" value={form.documentRef} onChange={e => setForm({ ...form, documentRef: e.target.value })} />
             </div>
             {err && <p className="text-sm text-destructive">{err}</p>}
             <div className="flex justify-end gap-2">

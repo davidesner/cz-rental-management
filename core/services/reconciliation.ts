@@ -6,7 +6,7 @@ import { AppError } from '../errors.js';
 import { expectedForMonth, allocate, UTILITY_ORDER, type UtilityKind } from '../lib/allocation.js';
 import { matchPayments, computeDueDate, type MonthSlot } from '../lib/payment-matching.js';
 
-type Kind = 'services' | UtilityKind;
+type Kind = 'rent' | 'services' | UtilityKind;
 
 export interface ItemBreakdown {
   costStatements: Array<{
@@ -144,12 +144,16 @@ function computeItemsWithBreakdown(
   const { perMonth } = matchPayments(slots, paymentRefs);
 
   const paidPerKind: Record<Kind, number> = {
-    services: 0, electricity: 0, gas: 0, internet: 0, water: 0, other: 0,
+    rent: 0, services: 0, electricity: 0, gas: 0, internet: 0, water: 0, other: 0,
   };
+
+  // For rent we also accumulate the expected (since there's no cost statement for rent —
+  // "actualCost" = what tenant was supposed to pay = baseRent − rentReduction summed)
+  let rentExpectedTotal = 0;
 
   // monthsPerKind collects per-month data keyed by kind
   const monthsPerKind: Record<Kind, ItemBreakdown['months']> = {
-    services: [], electricity: [], gas: [], internet: [], water: [], other: [],
+    rent: [], services: [], electricity: [], gas: [], internet: [], water: [], other: [],
   };
 
   for (const slot of slots) {
@@ -158,10 +162,27 @@ function computeItemsWithBreakdown(
     const exp = slot.expected;
     const a = allocate(received, exp);
 
+    paidPerKind.rent += a.baseRentPaid;
     paidPerKind.services += a.servicePaid;
     for (const kind of UTILITY_ORDER) paidPerKind[kind] += a.utilityPaid[kind];
 
+    // Effective rent expected = baseRent − rentReduction (rent reduction is a srážka that
+    // lowers tenant's rent obligation that month)
+    const rentEffective = Math.max(0, exp.baseRent - slot.rentReduction);
+    rentExpectedTotal += rentEffective;
+
     const expectedTotal = exp.baseRent + exp.serviceAdvance + UTILITY_ORDER.reduce((s, k) => s + exp.utilities[k], 0);
+
+    // rent
+    monthsPerKind.rent.push({
+      month: slot.month,
+      daysActive: exp.daysActive,
+      daysInMonth: exp.daysInMonth,
+      expectedThisKind: rentEffective,
+      expectedTotal,
+      receivedTotal: received,
+      paidThisKind: a.baseRentPaid,
+    });
 
     // services
     monthsPerKind.services.push({
@@ -190,9 +211,12 @@ function computeItemsWithBreakdown(
 
   // Group cost statements by kind
   const statementsPerKind: Record<Kind, ItemBreakdown['costStatements']> = {
-    services: [], electricity: [], gas: [], internet: [], water: [], other: [],
+    rent: [], services: [], electricity: [], gas: [], internet: [], water: [], other: [],
   };
   const costPerKind: Record<Kind, number> = {
+    // For rent: "cost" is the effective expected (what tenant was supposed to pay).
+    // No cost statements apply.
+    rent: rentExpectedTotal,
     services: 0, electricity: 0, gas: 0, internet: 0, water: 0, other: 0,
   };
   for (const s of statements) {
@@ -210,8 +234,8 @@ function computeItemsWithBreakdown(
     costPerKind[k] += s.totalAmount + s.adjustmentAmount;
   }
 
-  // Build items for any kind with non-zero paid OR cost
-  const kindsToShow: Kind[] = ['services', ...UTILITY_ORDER];
+  // Build items for any kind with non-zero paid OR cost (rent first)
+  const kindsToShow: Kind[] = ['rent', 'services', ...UTILITY_ORDER];
   const result: Array<{ kind: Kind; actualCost: number; paid: number; difference: number; breakdown: ItemBreakdown }> = [];
   for (const kind of kindsToShow) {
     const actual = costPerKind[kind];

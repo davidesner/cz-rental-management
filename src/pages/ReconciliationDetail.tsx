@@ -221,21 +221,6 @@ function ReconciliationItemRow({
   );
 }
 
-interface PaymentBreakdownMonth {
-  month: string;
-  expected: { baseRent: number; serviceAdvance: number; utilities: Record<string, number>; total: number };
-  rentReduction: number;
-  effectiveExpected: number;
-  receivedTotal: number;
-  allocation: {
-    baseRentPaid: number;
-    servicePaid: number;
-    utilityPaid: Record<string, number>;
-    surplus: number;
-    deficitTotal: number;
-  };
-}
-
 export function ReconciliationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
@@ -247,15 +232,7 @@ export function ReconciliationDetailPage() {
     enabled: !!id,
   });
 
-  // Also fetch payment breakdown so we can show the rent row (rent isn't a reconciliation item)
   const rec = data?.reconciliation;
-  const { data: breakdownData } = useQuery({
-    queryKey: ['payment-breakdown', rec?.contractId, rec?.periodFrom, rec?.periodTo],
-    queryFn: () => api.get<{ months: PaymentBreakdownMonth[] }>(
-      `/api/contracts/${rec!.contractId}/payment-breakdown?from=${rec!.periodFrom}&to=${rec!.periodTo}`
-    ),
-    enabled: !!rec,
-  });
 
   const finalize = useMutation({
     mutationFn: () => api.patch<{ reconciliation: Reconciliation }>(`/api/reconciliations/${id}/finalize`, {}),
@@ -278,17 +255,6 @@ export function ReconciliationDetailPage() {
   const r = rec;
   const items = r?.items ?? [];
   const totalDiff = items.reduce((sum, i) => sum + i.difference, 0);
-
-  // Rent summary derived from payment-breakdown (rent is not a reconciliation item kind).
-  const rentSummary = breakdownData ? (() => {
-    const months = breakdownData.months;
-    const expected = months.reduce((s, m) => s + m.expected.baseRent, 0);
-    const reduction = months.reduce((s, m) => s + m.rentReduction, 0);
-    const effectiveExpected = expected - reduction;
-    const paid = months.reduce((s, m) => s + m.allocation.baseRentPaid, 0);
-    const difference = paid - effectiveExpected;
-    return { expected, reduction, effectiveExpected, paid, difference };
-  })() : null;
 
   // Live values recomputed from current breakdown (cost statements + payments + reductions)
   // Compare to persisted values stored on each item to detect divergence.
@@ -353,26 +319,6 @@ export function ReconciliationDetailPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rentSummary && (
-              <TableRow className="bg-muted/20">
-                <TableCell className="font-medium">
-                  Nájem
-                  <span className="ml-2 text-xs text-muted-foreground">(informativně)</span>
-                </TableCell>
-                <TableCell className="text-right">{fmtKc(rentSummary.paid)}</TableCell>
-                <TableCell className="text-right">
-                  <div>{fmtKc(rentSummary.effectiveExpected)}</div>
-                  {rentSummary.reduction > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      {fmtKc(rentSummary.expected)} − {fmtKc(rentSummary.reduction)} srážka
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell className={`text-right font-medium ${rentSummary.difference < 0 ? 'text-destructive' : 'text-green-600'}`}>
-                  {fmtKc(rentSummary.difference)}
-                </TableCell>
-              </TableRow>
-            )}
             {itemsWithLive.map(({ item, liveActualCost, livePaid, liveDifference, stale }, idx) => (
               <ReconciliationItemRow
                 key={idx}
@@ -380,7 +326,7 @@ export function ReconciliationDetailPage() {
                 live={stale ? { actualCost: liveActualCost, paid: livePaid, difference: liveDifference } : null}
               />
             ))}
-            {items.length === 0 && !rentSummary && (
+            {items.length === 0 && (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-muted-foreground py-6">Žádné položky.</TableCell>
               </TableRow>

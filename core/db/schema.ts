@@ -204,7 +204,7 @@ export const reconciliation = pgTable('reconciliation', {
 export const reconciliationItem = pgTable('reconciliation_item', {
   id: text('id').primaryKey(),
   reconciliationId: text('reconciliation_id').notNull().references(() => reconciliation.id, { onDelete: 'cascade' }),
-  kind: text('kind', { enum: ['services', 'electricity', 'gas', 'internet', 'water', 'other'] }).notNull(),
+  kind: text('kind', { enum: ['rent', 'services', 'electricity', 'gas', 'internet', 'water', 'other'] }).notNull(),
   actualCost: integer('actual_cost_haler').notNull(),
   paid: integer('paid_haler').notNull(),
   difference: integer('difference_haler').notNull(),

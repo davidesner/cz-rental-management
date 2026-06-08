@@ -248,7 +248,11 @@ export function ReconciliationDetailPage() {
     mutationFn: () => api.delete<void>(`/api/reconciliations/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reconciliations'] });
-      navigate(-1);
+      if (rec?.contractId) {
+        navigate(`/contracts/${rec.contractId}?tab=vyuctovani`, { replace: true });
+      } else {
+        navigate('/contracts', { replace: true });
+      }
     },
   });
 
@@ -281,7 +285,16 @@ export function ReconciliationDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link to="/reconciliations" className="text-sm text-muted-foreground hover:underline">← Vyúčtování nájemci</Link>
+        {rec ? (
+          <Link
+            to={`/contracts/${rec.contractId}?tab=vyuctovani`}
+            className="text-sm text-muted-foreground hover:underline"
+          >
+            ← Zpět na pronájem
+          </Link>
+        ) : (
+          <span className="text-sm text-muted-foreground">← Zpět</span>
+        )}
         <h1 className="text-3xl font-bold">Vyúčtování</h1>
       </div>
 

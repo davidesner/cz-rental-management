@@ -11,7 +11,6 @@ import { TenantsPage } from './pages/Tenants';
 import { ContractsPage } from './pages/Contracts';
 import { PaymentsPage } from './pages/Payments';
 import { CostStatementsPage } from './pages/CostStatements';
-import { ReconciliationsPage } from './pages/Reconciliations';
 import { ApiTokensPage } from './pages/ApiTokens';
 import { ContractDetailPage } from './pages/ContractDetail';
 import { ReconciliationDetailPage } from './pages/ReconciliationDetail';
@@ -36,7 +35,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/contracts" element={<ContractsPage />} />
             <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/cost-statements" element={<CostStatementsPage />} />
-            <Route path="/reconciliations" element={<ReconciliationsPage />} />
             <Route path="/settings/api-tokens" element={<ApiTokensPage />} />
             <Route path="/contracts/:id" element={<ContractDetailPage />} />
             <Route path="/reconciliations/:id" element={<ReconciliationDetailPage />} />

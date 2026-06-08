@@ -131,10 +131,10 @@ function ItemBreakdownPanel({ breakdown }: { breakdown: ItemBreakdown | undefine
               <tr className="text-left text-muted-foreground border-b">
                 <th className="pb-1 pr-3 font-medium">Měsíc</th>
                 <th className="pb-1 pr-3 font-medium text-right">Aktivní dny</th>
-                <th className="pb-1 pr-3 font-medium text-right">Celk. předpis</th>
-                <th className="pb-1 pr-3 font-medium text-right">Předpis (druh)</th>
-                <th className="pb-1 pr-3 font-medium text-right">Přijato celkem</th>
-                <th className="pb-1 font-medium text-right">Zaplaceno (druh)</th>
+                <th className="pb-1 pr-3 font-medium text-right text-muted-foreground/70 italic">Celk. předpis</th>
+                <th className="pb-1 pr-3 font-medium text-right text-muted-foreground/70 italic">Přijato celkem</th>
+                <th className="pb-1 pr-3 font-medium text-right text-foreground">Předpis (druh)</th>
+                <th className="pb-1 font-medium text-right text-foreground">Zaplaceno (druh)</th>
               </tr>
             </thead>
             <tbody>
@@ -144,10 +144,10 @@ function ItemBreakdownPanel({ breakdown }: { breakdown: ItemBreakdown | undefine
                   <td className="py-1 pr-3 text-right text-muted-foreground">
                     {m.daysActive}/{m.daysInMonth}
                   </td>
-                  <td className="py-1 pr-3 text-right tabular-nums">{fmtKc(m.expectedTotal)}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums text-muted-foreground/70 italic">{fmtKc(m.expectedTotal)}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums text-muted-foreground/70 italic">{fmtKc(m.receivedTotal)}</td>
                   <td className="py-1 pr-3 text-right tabular-nums">{fmtKc(m.expectedThisKind)}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums">{fmtKc(m.receivedTotal)}</td>
-                  <td className="py-1 text-right tabular-nums font-medium">{fmtKc(m.paidThisKind)}</td>
+                  <td className="py-1 text-right tabular-nums font-semibold">{fmtKc(m.paidThisKind)}</td>
                 </tr>
               ))}
             </tbody>

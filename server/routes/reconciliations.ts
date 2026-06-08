@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { getCtx } from '../middleware/auth.js';
 import { requireOrg } from '../../core/auth/context.js';
-import { computeReconciliation, listReconciliations, getReconciliation, finalizeReconciliation, deleteReconciliation } from '../../core/services/reconciliation.js';
+import { computeReconciliation, listReconciliations, getReconciliation, finalizeReconciliation, deleteReconciliation, recomputeReconciliation } from '../../core/services/reconciliation.js';
 import type { AppEnv } from '../app.js';
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -43,6 +43,12 @@ export function reconciliationRoutes() {
     const db = c.get('db');
     await deleteReconciliation(db, ctx.orgId, c.req.param('id'), ctx.allowedPropertyIds);
     return c.body(null, 204);
+  });
+
+  r.post('/reconciliations/:id/recompute', async (c) => {
+    const ctx = getCtx(c); requireOrg(ctx);
+    const db = c.get('db');
+    return c.json({ reconciliation: await recomputeReconciliation(db, ctx.orgId, c.req.param('id'), ctx.allowedPropertyIds) });
   });
 
   return r;

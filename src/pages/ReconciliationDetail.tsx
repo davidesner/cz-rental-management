@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -202,6 +202,7 @@ function ReconciliationItemRow({ item }: { item: ReconciliationItem }) {
 export function ReconciliationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   const { data, isLoading } = useQuery({
     queryKey: ['reconciliations', id],
@@ -214,11 +215,16 @@ export function ReconciliationDetailPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliations', id] }),
   });
 
+  const recompute = useMutation({
+    mutationFn: () => api.post<{ reconciliation: Reconciliation }>(`/api/reconciliations/${id}/recompute`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliations', id] }),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => api.delete<void>(`/api/reconciliations/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reconciliations'] });
-      window.location.href = '/reconciliations';
+      navigate(-1);
     },
   });
 
@@ -283,6 +289,15 @@ export function ReconciliationDetailPage() {
             disabled={finalize.isPending}
           >
             Finalizovat
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (confirm('Přepočítat toto vyúčtování? Stávající položky budou nahrazeny.')) recompute.mutate();
+            }}
+            disabled={recompute.isPending}
+          >
+            Přepočítat
           </Button>
           <Button
             variant="destructive"

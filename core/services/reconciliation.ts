@@ -387,3 +387,27 @@ export async function deleteReconciliation(db: DB, orgId: string, id: string, al
   if (existing.status === 'finalized') throw new AppError('conflict', 'cannot delete finalized reconciliation');
   await db.delete(reconciliation).where(and(eq(reconciliation.id, id), eq(reconciliation.orgId, orgId)));
 }
+
+export async function recomputeReconciliation(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<ReconciliationRow> {
+  const existing = await getReconciliation(db, orgId, id, allowedPropertyIds);
+  if (existing.status === 'finalized') throw new AppError('conflict', 'cannot recompute finalized reconciliation');
+
+  const c = await assertContract(db, orgId, existing.contractId, allowedPropertyIds);
+  const freshItems = await buildItemsWithBreakdown(db, c, existing.periodFrom, existing.periodTo, id);
+
+  await db.transaction(async (tx) => {
+    await tx.delete(reconciliationItem).where(eq(reconciliationItem.reconciliationId, id));
+    if (freshItems.length > 0) {
+      await tx.insert(reconciliationItem).values(
+        freshItems.map(({ id: itemId, reconciliationId, kind, actualCost, paid, difference }) => ({
+          id: itemId, reconciliationId, kind, actualCost, paid, difference,
+        }))
+      );
+    }
+    await tx.update(reconciliation)
+      .set({ computedAt: new Date() })
+      .where(and(eq(reconciliation.id, id), eq(reconciliation.orgId, orgId)));
+  });
+
+  return { ...existing, computedAt: new Date(), items: freshItems };
+}

@@ -27,6 +27,10 @@ const DeleteReconciliationInput = z.object({
   id: z.string().describe('Reconciliation ID to delete'),
 });
 
+const RecomputeReconciliationInput = z.object({
+  id: z.string().describe('Reconciliation ID to recompute'),
+});
+
 export async function listReconciliations(client: RentalApiClient, args: z.infer<typeof ListReconciliationsInput>) {
   const params = new URLSearchParams();
   if (args.contractId) params.set('contractId', args.contractId);
@@ -54,6 +58,11 @@ export async function finalizeReconciliation(client: RentalApiClient, args: z.in
 export async function deleteReconciliation(client: RentalApiClient, args: z.infer<typeof DeleteReconciliationInput>) {
   await client.delete<void>(`/api/reconciliations/${args.id}`);
   return { deleted: true };
+}
+
+export async function recomputeReconciliation(client: RentalApiClient, args: z.infer<typeof RecomputeReconciliationInput>) {
+  const data = await client.post<{ reconciliation: unknown }>(`/api/reconciliations/${args.id}/recompute`, {});
+  return data.reconciliation;
 }
 
 export function addReconciliationTools(server: FastMCP, client: RentalApiClient) {
@@ -90,5 +99,12 @@ export function addReconciliationTools(server: FastMCP, client: RentalApiClient)
     description: 'Delete a reconciliation permanently.',
     parameters: DeleteReconciliationInput,
     execute: async (args) => JSON.stringify(await deleteReconciliation(client, args), null, 2),
+  });
+
+  server.addTool({
+    name: 'reconciliations_recompute',
+    description: 'Recompute an existing draft reconciliation in place. Useful after payments, srážky, or cost statements have changed. Fails with conflict if the reconciliation is finalized.',
+    parameters: RecomputeReconciliationInput,
+    execute: async (args) => JSON.stringify(await recomputeReconciliation(client, args), null, 2),
   });
 }

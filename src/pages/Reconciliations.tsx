@@ -101,6 +101,16 @@ export function ReconciliationsPage() {
     onError: (e: unknown) => setComputeErr(e instanceof Error ? e.message : String(e)),
   });
 
+  const recomputeMutation = useMutation({
+    mutationFn: (recId: string) => api.post<{ reconciliation: Reconciliation }>(`/api/reconciliations/${recId}/recompute`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliations'] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (recId: string) => api.delete<void>(`/api/reconciliations/${recId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliations'] }),
+  });
+
   const reconciliations = data?.reconciliations ?? [];
 
   return (
@@ -119,6 +129,7 @@ export function ReconciliationsPage() {
               <TableHead>Celkový rozdíl</TableHead>
               <TableHead>Poznámky</TableHead>
               <TableHead></TableHead>
+              <TableHead>Akce</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -134,11 +145,40 @@ export function ReconciliationsPage() {
                 <TableCell>
                   <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
                 </TableCell>
+                <TableCell>
+                  {r.status === 'draft' ? (
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={recomputeMutation.isPending}
+                        onClick={() => {
+                          if (confirm('Přepočítat toto vyúčtování?')) recomputeMutation.mutate(r.id);
+                        }}
+                      >
+                        Přepočítat
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => {
+                          if (confirm('Smazat toto vyúčtování?')) deleteMutation.mutate(r.id);
+                        }}
+                      >
+                        Smazat
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">—</span>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {reconciliations.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Zatím žádná vyúčtování.</TableCell>
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Zatím žádná vyúčtování.</TableCell>
               </TableRow>
             )}
           </TableBody>

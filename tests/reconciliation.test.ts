@@ -145,6 +145,100 @@ describe('reconciliation', () => {
     await client.close();
   });
 
+  it('recompute updates items and computedAt; same id, items array refreshed', async () => {
+    const { client, app, cookie, property, contract } = await setupContract();
+
+    // Create reconciliation without cost statement
+    const comp = await app.request(`/api/contracts/${contract.id}/reconciliations/compute`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ periodFrom: '2024-10-01', periodTo: '2024-12-31' }),
+    });
+    expect(comp.status).toBe(201);
+    const rec = (await comp.json() as any).reconciliation;
+    const recId = rec.id;
+    const originalComputedAt = rec.computedAt;
+
+    // Add a cost statement
+    await app.request('/api/cost-statements', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        propertyId: property.id,
+        kind: 'electricity',
+        periodFrom: '2024-10-01',
+        periodTo: '2024-12-31',
+        totalAmount: 360000,
+        adjustmentAmount: 0,
+        adjustmentNote: null,
+      }),
+    });
+
+    // Add a payment
+    await app.request('/api/payments/batch', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify([
+        { amount: 4120000, paidAt: '2024-10-10', source: 'bank', externalId: 'recompute-test', contractId: contract.id, counterparty: 'TENANT' },
+      ]),
+    });
+
+    // Recompute
+    const recomp = await app.request(`/api/reconciliations/${recId}/recompute`, {
+      method: 'POST', headers: { cookie },
+    });
+    expect(recomp.status).toBe(200);
+    const recomputed = (await recomp.json() as any).reconciliation;
+
+    // Same ID
+    expect(recomputed.id).toBe(recId);
+    // Items should now include electricity
+    const elecItem = recomputed.items.find((i: any) => i.kind === 'electricity');
+    expect(elecItem).toBeDefined();
+    expect(elecItem.actualCost).toBe(360000);
+    // computedAt should be set
+    expect(recomputed.computedAt).toBeDefined();
+
+    await client.close();
+  });
+
+  it('recompute on finalized reconciliation returns 409', async () => {
+    const { client, app, cookie, contract } = await setupContract();
+
+    const comp = await app.request(`/api/contracts/${contract.id}/reconciliations/compute`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ periodFrom: '2024-10-01', periodTo: '2024-12-31' }),
+    });
+    const rec = (await comp.json() as any).reconciliation;
+
+    // Finalize it
+    await app.request(`/api/reconciliations/${rec.id}/finalize`, { method: 'PATCH', headers: { cookie } });
+
+    // Recompute should fail
+    const recomp = await app.request(`/api/reconciliations/${rec.id}/recompute`, {
+      method: 'POST', headers: { cookie },
+    });
+    expect(recomp.status).toBe(409);
+
+    await client.close();
+  });
+
+  it('delete on draft returns 204; subsequent GET returns 404', async () => {
+    const { client, app, cookie, contract } = await setupContract();
+
+    const comp = await app.request(`/api/contracts/${contract.id}/reconciliations/compute`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ periodFrom: '2024-10-01', periodTo: '2024-12-31' }),
+    });
+    const rec = (await comp.json() as any).reconciliation;
+    expect(rec.status).toBe('draft');
+
+    const del = await app.request(`/api/reconciliations/${rec.id}`, { method: 'DELETE', headers: { cookie } });
+    expect(del.status).toBe(204);
+
+    const get = await app.request(`/api/reconciliations/${rec.id}`, { headers: { cookie } });
+    expect(get.status).toBe(404);
+
+    await client.close();
+  });
+
   it('listReconciliations returns costStatementNotes field', async () => {
     const { client, app, cookie, property, contract } = await setupContract();
 

@@ -1146,6 +1146,16 @@ export function ContractDetailPage() {
     enabled: !!id,
   });
 
+  const recomputeReconciliation = useMutation({
+    mutationFn: (recId: string) => api.post<{ reconciliation: Reconciliation }>(`/api/reconciliations/${recId}/recompute`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliations-by-contract', id] }),
+  });
+
+  const deleteReconciliation = useMutation({
+    mutationFn: (recId: string) => api.delete<void>(`/api/reconciliations/${recId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliations-by-contract', id] }),
+  });
+
   // Payments for this contract
   const { data: paymentsData } = useQuery({
     queryKey: ['payments-by-contract', id],
@@ -1452,6 +1462,7 @@ export function ContractDetailPage() {
                       <TableHead>Stav</TableHead>
                       <TableHead>Celkový rozdíl</TableHead>
                       <TableHead></TableHead>
+                      <TableHead>Akce</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1465,12 +1476,41 @@ export function ContractDetailPage() {
                           <TableCell>
                             <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
                           </TableCell>
+                          <TableCell>
+                            {r.status === 'draft' ? (
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={recomputeReconciliation.isPending}
+                                  onClick={() => {
+                                    if (confirm('Přepočítat toto vyúčtování?')) recomputeReconciliation.mutate(r.id);
+                                  }}
+                                >
+                                  Přepočítat
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  disabled={deleteReconciliation.isPending}
+                                  onClick={() => {
+                                    if (confirm('Smazat toto vyúčtování?')) deleteReconciliation.mutate(r.id);
+                                  }}
+                                >
+                                  Smazat
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            )}
+                          </TableCell>
                         </TableRow>
                       );
                     })}
                     {reconciliations.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Žádná vyúčtování pro tento pronájem.</TableCell>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Žádná vyúčtování pro tento pronájem.</TableCell>
                       </TableRow>
                     )}
                   </TableBody>

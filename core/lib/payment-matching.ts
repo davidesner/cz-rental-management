@@ -29,11 +29,16 @@ export interface MonthMatch {
 }
 
 /**
- * FIFO matching: payments sorted by paidAt ASC fill the earliest month with remaining
- * expected first. Splits a payment across months if it exceeds the current month's
- * remaining balance.
+ * Match each payment to ONE month (no splitting across months).
  *
- * Returns per-month allocations + any surplus that didn't fit in the period.
+ * Rule: for each payment (chronological), pick the earliest month with remaining
+ * expected balance and apply the FULL payment amount there. If the payment exceeds
+ * that month's expected, the excess becomes surplus on that month (not redistributed).
+ * If all months in the period are already fully paid, the payment becomes periodSurplus.
+ *
+ * This matches typical landlord intuition: one bank transfer = one rent payment for
+ * one month. Overpayments (e.g. tenant rounds up) stay as month-level surplus, not
+ * a contribution to next month's rent.
  */
 export function matchPayments(
   slots: MonthSlot[],
@@ -51,23 +56,22 @@ export function matchPayments(
 
   let periodSurplus = 0;
   for (const p of sortedPayments) {
-    let toApply = p.amount;
-    for (const slot of sortedSlots) {
-      if (toApply <= 0) break;
-      const rem = remaining[slot.month] ?? 0;
-      if (rem <= 0) continue;
-      const give = Math.min(toApply, rem);
-      const dueMs = new Date(slot.dueDate + 'T00:00:00Z').getTime();
-      const paidMs = new Date(p.paidAt + 'T00:00:00Z').getTime();
-      const lateDays = Math.max(0, Math.round((paidMs - dueMs) / 86400000));
-      perMonth[slot.month]!.appliedPayments.push({
-        paymentId: p.id, paidAt: p.paidAt, amount: give, lateDays,
-      });
-      perMonth[slot.month]!.receivedTotal += give;
-      remaining[slot.month] = rem - give;
-      toApply -= give;
+    // Find earliest month with remaining (unpaid) balance
+    const target = sortedSlots.find((s) => (remaining[s.month] ?? 0) > 0);
+    if (!target) {
+      periodSurplus += p.amount;
+      continue;
     }
-    if (toApply > 0) periodSurplus += toApply;
+    const dueMs = new Date(target.dueDate + 'T00:00:00Z').getTime();
+    const paidMs = new Date(p.paidAt + 'T00:00:00Z').getTime();
+    const lateDays = Math.max(0, Math.round((paidMs - dueMs) / 86400000));
+    perMonth[target.month]!.appliedPayments.push({
+      paymentId: p.id, paidAt: p.paidAt, amount: p.amount, lateDays,
+    });
+    perMonth[target.month]!.receivedTotal += p.amount;
+    // Drive remaining negative if payment exceeds expected; later payments still find
+    // the next month with remaining > 0 because this one's remaining is now <= 0.
+    remaining[target.month] = (remaining[target.month] ?? 0) - p.amount;
   }
 
   // Compute per-month surplus (amount received beyond effectiveExpected)

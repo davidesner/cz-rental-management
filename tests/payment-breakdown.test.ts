@@ -145,14 +145,13 @@ describe('payment-breakdown endpoint', () => {
     await client.close();
   });
 
-  it('FIFO: late payment fills earlier unpaid month first', async () => {
+  it('FIFO: late payment lands entirely on the earliest unpaid month (no split)', async () => {
     const { client, app, cookie, contract } = await bootstrap();
 
-    // Pay nothing in October. Pay double in November (should fill Oct then Nov).
+    // Pay nothing in October. Pay double-the-rent in November — whole amount goes to October.
     await app.request('/api/payments/batch', {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify([
-        // 412000 × 2 = one payment in November, covers both months
         { amount: 824000, paidAt: '2024-11-08', source: 'bank', externalId: 'fifo-double', contractId: contract.id },
       ]),
     });
@@ -166,21 +165,17 @@ describe('payment-breakdown endpoint', () => {
     const oct = data.months.find((m: any) => m.month === '2024-10');
     const nov = data.months.find((m: any) => m.month === '2024-11');
 
-    // FIFO: the single November payment fills October (earliest) first, then November
-    expect(oct.receivedTotal).toBe(412000);
-    expect(nov.receivedTotal).toBe(412000);
+    // Whole 824000 lands on October (earliest unpaid). November stays unpaid.
+    expect(oct.receivedTotal).toBe(824000);
+    expect(oct.allocation.surplus).toBe(412000); // 824000 - 412000 expected
+    expect(nov.receivedTotal).toBe(0);
 
-    // October gets filled by a payment made 2024-11-08; due 2024-10-10 → lateDays > 0
     expect(oct.appliedPayments).toHaveLength(1);
-    expect(oct.appliedPayments[0].paymentId).toBeTruthy();
-    expect(oct.appliedPayments[0].lateDays).toBeGreaterThan(0); // paid in November for October
+    expect(oct.appliedPayments[0].amount).toBe(824000);
+    expect(oct.appliedPayments[0].lateDays).toBeGreaterThan(0);
     expect(oct.isLate).toBe(true);
-    expect(oct.maxLateDays).toBeGreaterThan(0);
 
-    // November is filled by the same payment (spill), paid 2024-11-08, due 2024-11-10 → on time
-    expect(nov.appliedPayments).toHaveLength(1);
-    expect(nov.appliedPayments[0].lateDays).toBe(0); // paid before due date
-    expect(nov.isLate).toBe(false);
+    expect(nov.appliedPayments).toHaveLength(0);
 
     await client.close();
   });

@@ -31,7 +31,7 @@ describe('matchPayments', () => {
     expect(periodSurplus).toBe(0);
   });
 
-  it('single payment exceeds expected → spills to next month', () => {
+  it('single payment exceeds expected → stays as surplus on its target month (no spill)', () => {
     const slots = [
       slot('2024-10', 100000, '2024-10-10'),
       slot('2024-11', 100000, '2024-11-10'),
@@ -39,21 +39,34 @@ describe('matchPayments', () => {
     const payments = [payment('p1', 150000, '2024-10-08')];
     const { perMonth, periodSurplus } = matchPayments(slots, payments);
 
-    expect(perMonth['2024-10']!.receivedTotal).toBe(100000);
-    expect(perMonth['2024-11']!.receivedTotal).toBe(50000);
+    // Whole payment lands on October — overpayment is surplus on Oct, NOT contributing to Nov
+    expect(perMonth['2024-10']!.receivedTotal).toBe(150000);
+    expect(perMonth['2024-10']!.surplus).toBe(50000);
+    expect(perMonth['2024-11']!.receivedTotal).toBe(0);
     expect(periodSurplus).toBe(0);
-
-    // Check the spill applied to November has correct paymentId
-    expect(perMonth['2024-11']!.appliedPayments[0]!.paymentId).toBe('p1');
   });
 
-  it('single payment exceeds all months → periodSurplus captures the overflow', () => {
+  it('single payment exceeds the only month → entire amount lands there, surplus visible', () => {
     const slots = [slot('2024-10', 100000, '2024-10-10')];
     const payments = [payment('p1', 250000, '2024-10-08')];
     const { perMonth, periodSurplus } = matchPayments(slots, payments);
 
+    expect(perMonth['2024-10']!.receivedTotal).toBe(250000);
+    expect(perMonth['2024-10']!.surplus).toBe(150000);
+    // No spill, so periodSurplus is 0 (the amount IS in October's surplus)
+    expect(periodSurplus).toBe(0);
+  });
+
+  it('payment when every month already fully paid → periodSurplus catches it', () => {
+    const slots = [slot('2024-10', 100000, '2024-10-10')];
+    const payments = [
+      payment('p1', 100000, '2024-10-05'), // covers October exactly
+      payment('p2', 50000, '2024-10-20'),  // no remaining month → periodSurplus
+    ];
+    const { perMonth, periodSurplus } = matchPayments(slots, payments);
+
     expect(perMonth['2024-10']!.receivedTotal).toBe(100000);
-    expect(periodSurplus).toBe(150000);
+    expect(periodSurplus).toBe(50000);
   });
 
   it('late payment after due date → lateDays calculated correctly', () => {
@@ -104,19 +117,20 @@ describe('matchPayments', () => {
     expect(periodSurplus).toBe(0);
   });
 
-  it('FIFO: late payment fills the earliest unpaid month, not the current calendar month', () => {
-    // October was not paid; November payment fills October first (FIFO)
+  it('FIFO: late payment lands on the earliest unpaid month (whole amount, no split)', () => {
+    // October was not paid; November payment lands entirely on October (the earliest unpaid)
     const slots = [
       slot('2024-10', 100000, '2024-10-10'),
       slot('2024-11', 100000, '2024-11-10'),
     ];
     const payments = [
-      payment('p1', 200000, '2024-11-08'), // paid in November, fills Oct first, then Nov
+      payment('p1', 200000, '2024-11-08'), // entire 200000 goes to October (earliest unpaid)
     ];
     const { perMonth } = matchPayments(slots, payments);
 
-    expect(perMonth['2024-10']!.receivedTotal).toBe(100000);
-    expect(perMonth['2024-11']!.receivedTotal).toBe(100000);
+    expect(perMonth['2024-10']!.receivedTotal).toBe(200000);
+    expect(perMonth['2024-10']!.surplus).toBe(100000);
+    expect(perMonth['2024-11']!.receivedTotal).toBe(0);
     // October is filled by a payment dated 2024-11-08, which is 29 days late (due 2024-10-10)
     const octAp = perMonth['2024-10']!.appliedPayments[0]!;
     expect(octAp.paymentId).toBe('p1');

@@ -369,8 +369,46 @@ export async function getReconciliation(db: DB, orgId: string, id: string, allow
   if (!row) throw new AppError('not_found', 'reconciliation not found');
   const c = await assertContract(db, orgId, row.contractId, allowedPropertyIds);
 
-  // Re-derive items with fresh breakdown (reflects current cost statement data)
-  const items = await buildItemsWithBreakdown(db, c, row.periodFrom, row.periodTo, id);
+  // Fetch the persisted snapshot (actualCost/paid/difference from time of last compute/recompute)
+  const persistedItems = await db.select().from(reconciliationItem)
+    .where(eq(reconciliationItem.reconciliationId, id));
+
+  // Also recompute LIVE breakdown reflecting current cost statements / payments / reductions
+  const liveItems = await buildItemsWithBreakdown(db, c, row.periodFrom, row.periodTo, id);
+
+  // Merge: items use PERSISTED actualCost/paid/difference (the snapshot) and attach the
+  // current LIVE breakdown so the UI can compare snapshot vs current state for the badge.
+  // If a kind exists in live but not persisted (e.g. new cost statement was added after compute),
+  // include it with persisted values 0 — UI will show divergence.
+  const liveByKind = new Map(liveItems.map((it) => [it.kind, it]));
+  const persistedKinds = new Set(persistedItems.map((p) => p.kind as Kind));
+
+  const items: ReconciliationItemRow[] = persistedItems.map((p) => {
+    const live = liveByKind.get(p.kind as Kind);
+    return {
+      id: p.id,
+      reconciliationId: p.reconciliationId,
+      kind: p.kind as Kind,
+      actualCost: p.actualCost,
+      paid: p.paid,
+      difference: p.difference,
+      breakdown: live?.breakdown ?? { costStatements: [], months: [] },
+    };
+  });
+  // Append any "new" kinds (appeared after compute) as zero-snapshot rows
+  for (const live of liveItems) {
+    if (!persistedKinds.has(live.kind)) {
+      items.push({
+        id: live.id,
+        reconciliationId: id,
+        kind: live.kind,
+        actualCost: 0,
+        paid: 0,
+        difference: 0,
+        breakdown: live.breakdown,
+      });
+    }
+  }
 
   return { ...row, items };
 }

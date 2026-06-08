@@ -89,8 +89,16 @@ export async function paymentBreakdown(
     m++; if (m > 12) { y++; m = 1; }
   }
 
-  // FIFO matching
-  const paymentRefs = payments.map(p => ({ id: p.id, amount: p.amount, paidAt: p.paidAt }));
+  // FIFO matching — precompute naturalMonth per payment based on contract paymentAppliesTo
+  const offset = paymentAppliesTo === 'next' ? 1 : 0;
+  const paymentRefs = payments.map(p => {
+    const [yy, mm] = p.paidAt.split('-').map(Number) as [number, number, number];
+    let nm = mm + offset;
+    let ny = yy;
+    if (nm > 12) { nm = nm - 12; ny += 1; }
+    const naturalMonth = `${ny}-${String(nm).padStart(2, '0')}`;
+    return { id: p.id, amount: p.amount, paidAt: p.paidAt, naturalMonth };
+  });
   const { perMonth } = matchPayments(slots, paymentRefs);
 
   // Build month breakdowns

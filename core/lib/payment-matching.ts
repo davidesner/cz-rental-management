@@ -11,7 +11,8 @@ export interface MonthSlot {
 export interface PaymentRef {
   id: string;
   amount: number;
-  paidAt: string; // YYYY-MM-DD
+  paidAt: string;       // YYYY-MM-DD
+  naturalMonth?: string; // YYYY-MM — month this payment is naturally for, derived from paidAt + contract.paymentAppliesTo. Caller precomputes.
 }
 
 export interface AppliedPayment {
@@ -31,14 +32,20 @@ export interface MonthMatch {
 /**
  * Match each payment to ONE month (no splitting across months).
  *
- * Rule: for each payment (chronological), pick the earliest month with remaining
- * expected balance and apply the FULL payment amount there. If the payment exceeds
- * that month's expected, the excess becomes surplus on that month (not redistributed).
- * If all months in the period are already fully paid, the payment becomes periodSurplus.
+ * Rule per payment (chronological):
+ *   1. If the payment has a `naturalMonth` (calendar month derived from paidAt + contract
+ *      paymentAppliesTo), check whether any EARLIER month is entirely unpaid (zero applied
+ *      payments). If so, the payment is treated as a catch-up and lands on that earliest
+ *      truly-skipped month. Otherwise it lands on its natural month.
+ *   2. Without `naturalMonth`, fall back to "earliest month with remaining" (legacy FIFO).
+ *   3. If no target slot found, the payment becomes periodSurplus.
  *
- * This matches typical landlord intuition: one bank transfer = one rent payment for
- * one month. Overpayments (e.g. tenant rounds up) stay as month-level surplus, not
- * a contribution to next month's rent.
+ * One payment is NEVER split across multiple months. Any overpayment stays as that
+ * month's surplus.
+ *
+ * Small deficits (e.g. tenant paid 2 Kč less) do not pull a later payment in — the
+ * later payment goes to its natural month and the deficit remains on the earlier one.
+ * Only completely skipped months (zero applied payments) catch up via FIFO.
  */
 export function matchPayments(
   slots: MonthSlot[],
@@ -56,12 +63,28 @@ export function matchPayments(
 
   let periodSurplus = 0;
   for (const p of sortedPayments) {
-    // Find earliest month with remaining (unpaid) balance
-    const target = sortedSlots.find((s) => (remaining[s.month] ?? 0) > 0);
+    let target: MonthSlot | undefined;
+
+    if (p.naturalMonth) {
+      // Look for an earlier slot that's entirely untouched (genuine skip)
+      const earlierSkipped = sortedSlots.find((s) =>
+        s.month < p.naturalMonth!
+        && perMonth[s.month]!.appliedPayments.length === 0
+        && (remaining[s.month] ?? 0) > 0,
+      );
+      target = earlierSkipped ?? sortedSlots.find((s) => s.month === p.naturalMonth);
+    }
+
+    // Fallback for payments without naturalMonth, or natural out-of-range
+    if (!target) {
+      target = sortedSlots.find((s) => (remaining[s.month] ?? 0) > 0);
+    }
+
     if (!target) {
       periodSurplus += p.amount;
       continue;
     }
+
     const dueMs = new Date(target.dueDate + 'T00:00:00Z').getTime();
     const paidMs = new Date(p.paidAt + 'T00:00:00Z').getTime();
     const lateDays = Math.max(0, Math.round((paidMs - dueMs) / 86400000));
@@ -69,8 +92,6 @@ export function matchPayments(
       paymentId: p.id, paidAt: p.paidAt, amount: p.amount, lateDays,
     });
     perMonth[target.month]!.receivedTotal += p.amount;
-    // Drive remaining negative if payment exceeds expected; later payments still find
-    // the next month with remaining > 0 because this one's remaining is now <= 0.
     remaining[target.month] = (remaining[target.month] ?? 0) - p.amount;
   }
 

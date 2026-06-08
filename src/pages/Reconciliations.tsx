@@ -146,33 +146,35 @@ export function ReconciliationsPage() {
                   <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
                 </TableCell>
                 <TableCell>
-                  {r.status === 'draft' ? (
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={recomputeMutation.isPending}
-                        onClick={() => {
-                          if (confirm('Přepočítat toto vyúčtování?')) recomputeMutation.mutate(r.id);
-                        }}
-                      >
-                        Přepočítat
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        disabled={deleteMutation.isPending}
-                        onClick={() => {
-                          if (confirm('Smazat toto vyúčtování?')) deleteMutation.mutate(r.id);
-                        }}
-                      >
-                        Smazat
-                      </Button>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">—</span>
-                  )}
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={recomputeMutation.isPending}
+                      onClick={() => {
+                        const msg = r.status === 'finalized'
+                          ? 'Přepočítat FINALIZOVANÉ vyúčtování?'
+                          : 'Přepočítat toto vyúčtování?';
+                        if (confirm(msg)) recomputeMutation.mutate(r.id);
+                      }}
+                    >
+                      Přepočítat
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => {
+                        const msg = r.status === 'finalized'
+                          ? 'Smazat FINALIZOVANÉ vyúčtování?'
+                          : 'Smazat toto vyúčtování?';
+                        if (confirm(msg)) deleteMutation.mutate(r.id);
+                      }}
+                    >
+                      Smazat
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

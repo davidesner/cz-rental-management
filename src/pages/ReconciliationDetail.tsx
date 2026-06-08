@@ -164,7 +164,13 @@ function ItemBreakdownPanel({ breakdown }: { breakdown: ItemBreakdown | undefine
   );
 }
 
-function ReconciliationItemRow({ item }: { item: ReconciliationItem }) {
+function ReconciliationItemRow({
+  item,
+  live,
+}: {
+  item: ReconciliationItem;
+  live: { actualCost: number; paid: number; difference: number } | null;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -180,12 +186,28 @@ function ReconciliationItemRow({ item }: { item: ReconciliationItem }) {
               : <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             }
             {item.kind}
+            {live && (
+              <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                změna
+              </span>
+            )}
           </div>
         </TableCell>
-        <TableCell className="text-right">{fmtKc(item.paid)}</TableCell>
-        <TableCell className="text-right">{fmtKc(item.actualCost)}</TableCell>
+        <TableCell className="text-right">
+          <div>{fmtKc(item.paid)}</div>
+          {live && <div className="text-xs text-blue-700">{fmtKc(live.paid)} (aktuální)</div>}
+        </TableCell>
+        <TableCell className="text-right">
+          <div>{fmtKc(item.actualCost)}</div>
+          {live && <div className="text-xs text-blue-700">{fmtKc(live.actualCost)} (aktuální)</div>}
+        </TableCell>
         <TableCell className={`text-right font-medium ${item.difference < 0 ? 'text-destructive' : 'text-green-600'}`}>
-          {fmtKc(item.difference)}
+          <div>{fmtKc(item.difference)}</div>
+          {live && (
+            <div className={`text-xs ${live.difference < 0 ? 'text-destructive' : 'text-blue-700'}`}>
+              {fmtKc(live.difference)} (aktuální)
+            </div>
+          )}
         </TableCell>
       </TableRow>
       {expanded && (
@@ -232,6 +254,23 @@ export function ReconciliationDetailPage() {
   const items = r?.items ?? [];
   const totalDiff = items.reduce((sum, i) => sum + i.difference, 0);
 
+  // Live values recomputed from current breakdown (cost statements + payments + reductions)
+  // Compare to persisted values stored on each item to detect divergence.
+  const itemsWithLive = items.map((item) => {
+    if (!item.breakdown) {
+      return { item, liveActualCost: item.actualCost, livePaid: item.paid, liveDifference: item.difference, stale: false };
+    }
+    const liveActualCost = item.breakdown.costStatements.reduce(
+      (s, cs) => s + cs.totalAmount + cs.adjustmentAmount, 0
+    );
+    const livePaid = item.breakdown.months.reduce((s, m) => s + m.paidThisKind, 0);
+    const liveDifference = livePaid - liveActualCost;
+    const stale = liveActualCost !== item.actualCost || livePaid !== item.paid;
+    return { item, liveActualCost, livePaid, liveDifference, stale };
+  });
+  const liveTotalDiff = itemsWithLive.reduce((sum, it) => sum + it.liveDifference, 0);
+  const isStale = itemsWithLive.some((it) => it.stale);
+
   if (isLoading) return <div className="p-8 text-muted-foreground">Načítání…</div>;
   if (!r) return <div className="p-8 text-muted-foreground">Nenalezeno.</div>;
 
@@ -249,6 +288,24 @@ export function ReconciliationDetailPage() {
         {r.computedAt && <p><span className="font-medium">Spočítáno dne:</span> {r.computedAt}</p>}
       </Card>
 
+      {isStale && (
+        <div className="rounded-md border border-amber-400 bg-amber-50 p-4 text-sm">
+          <p className="font-semibold text-amber-900">
+            ⚠ Podklady se od posledního výpočtu změnily
+          </p>
+          <p className="text-amber-900 mt-1">
+            Hodnoty zaplacené / skutečných nákladů níže (modře) jsou{' '}
+            <strong>fresh</strong> z aktuálních plateb, srážek a vyúčtování nákladů.{' '}
+            Persistovaný stav (černě, finalizovaný) je z času posledního výpočtu.
+            {r.status === 'draft' ? (
+              <> Klikni „Přepočítat" pro aktualizaci.</>
+            ) : (
+              <> Vyúčtování je <strong>finalized</strong>; pro novou pravdu klikni „Přepočítat" (přepíše snapshot).</>
+            )}
+          </p>
+        </div>
+      )}
+
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
@@ -260,8 +317,12 @@ export function ReconciliationDetailPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item, idx) => (
-              <ReconciliationItemRow key={idx} item={item} />
+            {itemsWithLive.map(({ item, liveActualCost, livePaid, liveDifference, stale }, idx) => (
+              <ReconciliationItemRow
+                key={idx}
+                item={item}
+                live={stale ? { actualCost: liveActualCost, paid: livePaid, difference: liveDifference } : null}
+              />
             ))}
             {items.length === 0 && (
               <TableRow>
@@ -272,44 +333,62 @@ export function ReconciliationDetailPage() {
           {items.length > 0 && (
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={3} className="font-medium">Celkový rozdíl</TableCell>
+                <TableCell colSpan={3} className="font-medium">
+                  Celkový rozdíl {isStale && <span className="text-xs text-muted-foreground">(persistovaný)</span>}
+                </TableCell>
                 <TableCell className={`text-right font-bold ${totalDiff < 0 ? 'text-destructive' : 'text-green-600'}`}>
                   {fmtKc(totalDiff)}
                 </TableCell>
               </TableRow>
+              {isStale && (
+                <TableRow>
+                  <TableCell colSpan={3} className="font-medium text-blue-700">
+                    Celkový rozdíl (aktuální, fresh z podkladů)
+                  </TableCell>
+                  <TableCell className={`text-right font-bold text-blue-700`}>
+                    {fmtKc(liveTotalDiff)}
+                  </TableCell>
+                </TableRow>
+              )}
             </TableFooter>
           )}
         </Table>
       </Card>
 
-      {r.status === 'draft' && (
-        <div className="flex gap-3">
+      <div className="flex gap-3">
+        {r.status === 'draft' && (
           <Button
             onClick={() => finalize.mutate()}
             disabled={finalize.isPending}
           >
             Finalizovat
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (confirm('Přepočítat toto vyúčtování? Stávající položky budou nahrazeny.')) recompute.mutate();
-            }}
-            disabled={recompute.isPending}
-          >
-            Přepočítat
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              if (confirm('Smazat toto vyúčtování?')) deleteMutation.mutate();
-            }}
-            disabled={deleteMutation.isPending}
-          >
-            Smazat
-          </Button>
-        </div>
-      )}
+        )}
+        <Button
+          variant="outline"
+          onClick={() => {
+            const msg = r.status === 'finalized'
+              ? 'Přepočítat FINALIZOVANÉ vyúčtování? Stávající položky budou nahrazeny novým výpočtem.'
+              : 'Přepočítat toto vyúčtování? Stávající položky budou nahrazeny.';
+            if (confirm(msg)) recompute.mutate();
+          }}
+          disabled={recompute.isPending}
+        >
+          Přepočítat
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={() => {
+            const msg = r.status === 'finalized'
+              ? 'Smazat FINALIZOVANÉ vyúčtování? Toto je nevratné.'
+              : 'Smazat toto vyúčtování?';
+            if (confirm(msg)) deleteMutation.mutate();
+          }}
+          disabled={deleteMutation.isPending}
+        >
+          Smazat
+        </Button>
+      </div>
     </div>
   );
 }

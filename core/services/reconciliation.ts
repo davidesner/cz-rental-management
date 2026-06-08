@@ -383,14 +383,12 @@ export async function finalizeReconciliation(db: DB, orgId: string, id: string, 
 }
 
 export async function deleteReconciliation(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<void> {
-  const existing = await getReconciliation(db, orgId, id, allowedPropertyIds);
-  if (existing.status === 'finalized') throw new AppError('conflict', 'cannot delete finalized reconciliation');
+  await getReconciliation(db, orgId, id, allowedPropertyIds);
   await db.delete(reconciliation).where(and(eq(reconciliation.id, id), eq(reconciliation.orgId, orgId)));
 }
 
 export async function recomputeReconciliation(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<ReconciliationRow> {
   const existing = await getReconciliation(db, orgId, id, allowedPropertyIds);
-  if (existing.status === 'finalized') throw new AppError('conflict', 'cannot recompute finalized reconciliation');
 
   const c = await assertContract(db, orgId, existing.contractId, allowedPropertyIds);
   const freshItems = await buildItemsWithBreakdown(db, c, existing.periodFrom, existing.periodTo, id);

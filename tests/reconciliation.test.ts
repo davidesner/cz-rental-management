@@ -23,7 +23,7 @@ async function setupContract() {
 }
 
 describe('reconciliation', () => {
-  it('compute -> finalize -> list -> cannot delete finalized', async () => {
+  it('compute -> finalize -> delete is allowed even when finalized', async () => {
     const { client, app, cookie, contract } = await setupContract();
     const comp = await app.request(`/api/contracts/${contract.id}/reconciliations/compute`, {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
@@ -32,14 +32,18 @@ describe('reconciliation', () => {
     expect(comp.status).toBe(201);
     const rec = (await comp.json() as any).reconciliation;
     expect(rec.status).toBe('draft');
-    // No payments, no statements → items may be empty (all zero)
 
     const fin = await app.request(`/api/reconciliations/${rec.id}/finalize`, { method: 'PATCH', headers: { cookie } });
     const finalized = (await fin.json() as any).reconciliation;
     expect(finalized.status).toBe('finalized');
 
+    // Finalized reconciliations CAN be deleted (user-allowed)
     const del = await app.request(`/api/reconciliations/${rec.id}`, { method: 'DELETE', headers: { cookie } });
-    expect(del.status).toBe(409);
+    expect(del.status).toBe(204);
+
+    // It should be gone
+    const after = await app.request(`/api/reconciliations/${rec.id}`, { headers: { cookie } });
+    expect(after.status).toBe(404);
     await client.close();
   });
 
@@ -199,7 +203,7 @@ describe('reconciliation', () => {
     await client.close();
   });
 
-  it('recompute on finalized reconciliation returns 409', async () => {
+  it('recompute on finalized reconciliation is allowed (user-controlled override)', async () => {
     const { client, app, cookie, contract } = await setupContract();
 
     const comp = await app.request(`/api/contracts/${contract.id}/reconciliations/compute`, {
@@ -211,11 +215,15 @@ describe('reconciliation', () => {
     // Finalize it
     await app.request(`/api/reconciliations/${rec.id}/finalize`, { method: 'PATCH', headers: { cookie } });
 
-    // Recompute should fail
+    // Recompute should succeed (we now allow it for finalized as well)
     const recomp = await app.request(`/api/reconciliations/${rec.id}/recompute`, {
       method: 'POST', headers: { cookie },
     });
-    expect(recomp.status).toBe(409);
+    expect(recomp.status).toBe(200);
+    const recomputed = (await recomp.json() as any).reconciliation;
+    expect(recomputed.id).toBe(rec.id);
+    // Status preserved
+    expect(recomputed.status).toBe('finalized');
 
     await client.close();
   });

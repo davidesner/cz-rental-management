@@ -537,10 +537,12 @@ describe('reconciliation edge cases – cost statements', () => {
     await client.close();
   }, 30_000);
 
-  it('CostStatement crossing the period boundary → IS included', async () => {
+  it('CostStatement whose periodFrom starts BEFORE reconciliation periodFrom → NOT included (new rule)', async () => {
     const { client, app, cookie, property, contract } = await bootstrap('costcross@b.cz', '2024-01-01');
 
-    // Statement spans 2023-10 to 2024-03 — crosses into our period from below
+    // Statement spans 2023-10 to 2024-03 — periodFrom is BEFORE our 2024-01-01 period
+    // Under the new per-kind matchPeriod rule: periodFrom (2023-10-01) < reconPeriodFrom (2024-01-01)
+    // → statement does NOT qualify as a candidate → NOT included in cost aggregation
     await app.request('/api/cost-statements', {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
@@ -558,9 +560,9 @@ describe('reconciliation edge cases – cost statements', () => {
     const rec = (await res.json() as any).reconciliation;
 
     const elecItem = rec.items.find((i: any) => i.kind === 'electricity');
-    expect(elecItem).toBeDefined();
-    expect(elecItem.actualCost).toBe(360000); // totalAmount + 0 adjustment
-    expect(elecItem.breakdown.costStatements).toHaveLength(1);
+    // Statement's periodFrom (2023-10-01) is before recon period (2024-01-01)
+    // → not included → elecItem should be absent (no payments either)
+    expect(elecItem).toBeUndefined();
 
     await client.close();
   }, 30_000);

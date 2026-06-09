@@ -28,6 +28,9 @@ export interface ItemBreakdown {
     receivedTotal: number;     // haléře (sum of payment amounts in this month)
     paidThisKind: number;      // haléře (after allocation rule)
   }>;
+  matchPeriod: { from: string; to: string };
+  matchPeriodSource: 'default' | 'from-cost-statements';
+  matchPeriodIsDifferentFromDefault: boolean;
 }
 
 export interface ReconciliationItemRow {
@@ -80,6 +83,34 @@ function eachMonthInPeriod(periodFrom: string, periodTo: string): Array<{ year: 
 }
 
 /**
+ * Derive matchPeriod for a given kind.
+ *
+ * Candidates: cost statements of this kind whose periodFrom STARTS within
+ * [reconPeriodFrom, reconPeriodTo] (inclusive on both ends).
+ *
+ * If candidates found: matchPeriod = (min(cs.periodFrom), max(cs.periodTo))
+ * Otherwise: matchPeriod = (reconPeriodFrom, reconPeriodTo)  [default]
+ */
+function deriveMatchPeriod(
+  kind: string,
+  reconPeriodFrom: string,
+  reconPeriodTo: string,
+  statements: Array<{ kind: string; periodFrom: string; periodTo: string }>,
+): { from: string; to: string; source: 'default' | 'from-cost-statements' } {
+  const candidates = statements.filter(
+    s => s.kind === kind
+      && s.periodFrom >= reconPeriodFrom
+      && s.periodFrom <= reconPeriodTo
+  );
+  if (candidates.length === 0) {
+    return { from: reconPeriodFrom, to: reconPeriodTo, source: 'default' };
+  }
+  const from = candidates.reduce((min, s) => s.periodFrom < min ? s.periodFrom : min, candidates[0]!.periodFrom);
+  const to = candidates.reduce((max, s) => s.periodTo > max ? s.periodTo : max, candidates[0]!.periodTo);
+  return { from, to, source: 'from-cost-statements' };
+}
+
+/**
  * Core computation: given a contract + its temporal/payment/cost-statement data,
  * compute items with full breakdown. Does not touch the DB.
  */
@@ -107,7 +138,7 @@ function computeItemsWithBreakdown(
   const paymentDueDay = contractRow.paymentDueDay;
   const paymentAppliesTo = contractRow.paymentAppliesTo as 'current' | 'next';
 
-  // Build month slots for FIFO matching
+  // Build month slots for FIFO matching — always over full recon period
   const slots: MonthSlot[] = [];
   for (const { year, month } of eachMonthInPeriod(periodFrom, periodTo)) {
     const monthStr = `${year}-${String(month).padStart(2, '0')}`;
@@ -131,7 +162,7 @@ function computeItemsWithBreakdown(
     });
   }
 
-  // FIFO match — precompute naturalMonth per payment based on contract paymentAppliesTo
+  // FIFO match over full recon period slots
   const offsetMonths = paymentAppliesTo === 'next' ? 1 : 0;
   const paymentRefs = payments.map(p => {
     const [yy, mm] = p.paidAt.split('-').map(Number) as [number, number, number];
@@ -143,106 +174,93 @@ function computeItemsWithBreakdown(
   });
   const { perMonth } = matchPayments(slots, paymentRefs);
 
-  const paidPerKind: Record<Kind, number> = {
-    rent: 0, services: 0, electricity: 0, gas: 0, internet: 0, water: 0, other: 0,
-  };
-
-  // For rent we also accumulate the expected (since there's no cost statement for rent —
-  // "actualCost" = what tenant was supposed to pay = baseRent − rentReduction summed)
-  let rentExpectedTotal = 0;
-
-  // monthsPerKind collects per-month data keyed by kind
+  // monthsPerKind collects per-month data keyed by kind — always over full recon period
   const monthsPerKind: Record<Kind, ItemBreakdown['months']> = {
     rent: [], services: [], electricity: [], gas: [], internet: [], water: [], other: [],
   };
+
+  let rentExpectedTotal = 0;
 
   for (const slot of slots) {
     const match = perMonth[slot.month]!;
     const received = match.receivedTotal;
     const exp = slot.expected;
-    // Apply rentReduction to baseRent for allocation purposes — tenant's effective rent
-    // obligation that month is baseRent − srážka. Rent-first allocation fills this reduced
-    // amount; the rest flows to services/utilities.
     const rentEffective = Math.max(0, exp.baseRent - slot.rentReduction);
     const effectiveExp = { ...exp, baseRent: rentEffective };
     const a = allocate(received, effectiveExp);
-
-    paidPerKind.rent += a.baseRentPaid;
-    paidPerKind.services += a.servicePaid;
-    for (const kind of UTILITY_ORDER) paidPerKind[kind] += a.utilityPaid[kind];
 
     rentExpectedTotal += rentEffective;
 
     const expectedTotal = exp.baseRent + exp.serviceAdvance + UTILITY_ORDER.reduce((s, k) => s + exp.utilities[k], 0);
 
-    // rent
     monthsPerKind.rent.push({
-      month: slot.month,
-      daysActive: exp.daysActive,
-      daysInMonth: exp.daysInMonth,
-      expectedThisKind: rentEffective,
-      expectedTotal,
-      receivedTotal: received,
-      paidThisKind: a.baseRentPaid,
+      month: slot.month, daysActive: exp.daysActive, daysInMonth: exp.daysInMonth,
+      expectedThisKind: rentEffective, expectedTotal, receivedTotal: received, paidThisKind: a.baseRentPaid,
     });
-
-    // services
     monthsPerKind.services.push({
-      month: slot.month,
-      daysActive: exp.daysActive,
-      daysInMonth: exp.daysInMonth,
-      expectedThisKind: exp.serviceAdvance,
-      expectedTotal,
-      receivedTotal: received,
-      paidThisKind: a.servicePaid,
+      month: slot.month, daysActive: exp.daysActive, daysInMonth: exp.daysInMonth,
+      expectedThisKind: exp.serviceAdvance, expectedTotal, receivedTotal: received, paidThisKind: a.servicePaid,
     });
-
-    // utilities
     for (const kind of UTILITY_ORDER) {
       monthsPerKind[kind].push({
-        month: slot.month,
-        daysActive: exp.daysActive,
-        daysInMonth: exp.daysInMonth,
-        expectedThisKind: exp.utilities[kind],
-        expectedTotal,
-        receivedTotal: received,
-        paidThisKind: a.utilityPaid[kind],
+        month: slot.month, daysActive: exp.daysActive, daysInMonth: exp.daysInMonth,
+        expectedThisKind: exp.utilities[kind], expectedTotal, receivedTotal: received, paidThisKind: a.utilityPaid[kind],
       });
     }
   }
 
-  // Group cost statements by kind
+  // Group cost statements by kind — only include statements whose periodFrom starts within recon period
   const statementsPerKind: Record<Kind, ItemBreakdown['costStatements']> = {
     rent: [], services: [], electricity: [], gas: [], internet: [], water: [], other: [],
   };
   const costPerKind: Record<Kind, number> = {
-    // For rent: "cost" is the effective expected (what tenant was supposed to pay).
-    // No cost statements apply.
     rent: rentExpectedTotal,
     services: 0, electricity: 0, gas: 0, internet: 0, water: 0, other: 0,
   };
+
+  // Determine matchPeriod per kind (using all statements for derivation)
+  const kindsToShow: Kind[] = ['rent', 'services', ...UTILITY_ORDER];
+
+  // For cost aggregation: use statements that "qualify" for each kind
+  // (cs.periodFrom within recon period — same filter used by deriveMatchPeriod)
   for (const s of statements) {
     const k = s.kind as Kind;
-    statementsPerKind[k].push({
-      id: s.id,
-      periodFrom: s.periodFrom,
-      periodTo: s.periodTo,
-      totalAmount: s.totalAmount,
-      adjustmentAmount: s.adjustmentAmount,
-      adjustmentNote: s.adjustmentNote,
-      note: s.note,
-      documentRef: s.documentRef,
-    });
-    costPerKind[k] += s.totalAmount + s.adjustmentAmount;
+    // A statement is included if its periodFrom starts within the recon period
+    if (s.periodFrom >= periodFrom && s.periodFrom <= periodTo) {
+      statementsPerKind[k].push({
+        id: s.id, periodFrom: s.periodFrom, periodTo: s.periodTo,
+        totalAmount: s.totalAmount, adjustmentAmount: s.adjustmentAmount,
+        adjustmentNote: s.adjustmentNote, note: s.note, documentRef: s.documentRef,
+      });
+      costPerKind[k] += s.totalAmount + s.adjustmentAmount;
+    }
   }
 
-  // Build items for any kind with non-zero paid OR cost (rent first)
-  const kindsToShow: Kind[] = ['rent', 'services', ...UTILITY_ORDER];
+  // Build result items
   const result: Array<{ kind: Kind; actualCost: number; paid: number; difference: number; breakdown: ItemBreakdown }> = [];
   for (const kind of kindsToShow) {
+    // Derive matchPeriod for this kind
+    const mp = deriveMatchPeriod(kind, periodFrom, periodTo, statements);
+    const matchPeriodIsDifferentFromDefault = mp.source === 'from-cost-statements'
+      && (mp.from !== periodFrom || mp.to !== periodTo);
+
+    // For paid: sum paidThisKind only for months within matchPeriod
+    const months = monthsPerKind[kind];
+    const matchedMonths = months.filter(m => {
+      // Month YYYY-MM is within matchPeriod if the month (YYYY-MM) is within matchPeriod boundaries.
+      // Compare month string (YYYY-MM) to the YYYY-MM portion of matchPeriod boundaries.
+      const mpFromMonth = mp.from.slice(0, 7);  // YYYY-MM
+      const mpToMonth = mp.to.slice(0, 7);       // YYYY-MM
+      return m.month >= mpFromMonth && m.month <= mpToMonth;
+    });
+
+    const paid = kind === 'rent'
+      ? months.reduce((s, m) => s + m.paidThisKind, 0)  // rent always uses full recon period
+      : matchedMonths.reduce((s, m) => s + m.paidThisKind, 0);
+
     const actual = costPerKind[kind];
-    const paid = paidPerKind[kind];
     if (actual === 0 && paid === 0) continue;
+
     result.push({
       kind,
       actualCost: actual,
@@ -250,7 +268,10 @@ function computeItemsWithBreakdown(
       difference: paid - actual,
       breakdown: {
         costStatements: statementsPerKind[kind],
-        months: monthsPerKind[kind],
+        months,
+        matchPeriod: { from: mp.from, to: mp.to },
+        matchPeriodSource: mp.source,
+        matchPeriodIsDifferentFromDefault,
       },
     });
   }
@@ -383,7 +404,7 @@ export async function listReconciliations(
     // Items in list don't include breakdown — add empty breakdown placeholder
     const itemsWithBreakdown: ReconciliationItemRow[] = (items as Array<Omit<ReconciliationItemRow, 'breakdown'>>).map(item => ({
       ...item,
-      breakdown: { costStatements: [], months: [] },
+      breakdown: { costStatements: [], months: [], matchPeriod: { from: r.periodFrom, to: r.periodTo }, matchPeriodSource: 'default' as const, matchPeriodIsDifferentFromDefault: false },
     }));
 
     return { ...r, items: itemsWithBreakdown, costStatementNotes };
@@ -418,7 +439,7 @@ export async function getReconciliation(db: DB, orgId: string, id: string, allow
       actualCost: p.actualCost,
       paid: p.paid,
       difference: p.difference,
-      breakdown: live?.breakdown ?? { costStatements: [], months: [] },
+      breakdown: live?.breakdown ?? { costStatements: [], months: [], matchPeriod: { from: row.periodFrom, to: row.periodTo }, matchPeriodSource: 'default' as const, matchPeriodIsDifferentFromDefault: false },
     };
   });
   // Append any "new" kinds (appeared after compute) as zero-snapshot rows

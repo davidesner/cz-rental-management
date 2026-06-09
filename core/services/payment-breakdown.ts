@@ -52,15 +52,25 @@ export async function paymentBreakdown(
 
   const terms = await db.select().from(contractTerms).where(eq(contractTerms.contractId, contractId)).orderBy(asc(contractTerms.validFrom));
   const utilities = await db.select().from(contractUtility).where(eq(contractUtility.contractId, contractId)).orderBy(asc(contractUtility.validFrom));
-  const payments = await db.select().from(payment).where(and(
-    eq(payment.contractId, contractId),
-    gte(payment.paidAt, periodFrom),
-    lte(payment.paidAt, periodTo),
-  ));
-  const reductions = await db.select().from(rentReduction).where(eq(rentReduction.contractId, contractId));
 
   const paymentDueDay = c.paymentDueDay;
   const paymentAppliesTo = c.paymentAppliesTo as 'current' | 'next';
+
+  // For paymentAppliesTo='next' shift the lower bound back by 1 month so Dec payment
+  // (whose naturalMonth = next Jan) is loaded for Jan slot matching.
+  const offsetMonths = paymentAppliesTo === 'next' ? 1 : 0;
+  const [pfY, pfM, pfD] = periodFrom.split('-').map(Number) as [number, number, number];
+  let qfY = pfY;
+  let qfM = pfM - offsetMonths;
+  while (qfM < 1) { qfY -= 1; qfM += 12; }
+  const paymentQueryFrom = `${qfY}-${String(qfM).padStart(2, '0')}-${String(pfD).padStart(2, '0')}`;
+
+  const payments = await db.select().from(payment).where(and(
+    eq(payment.contractId, contractId),
+    gte(payment.paidAt, paymentQueryFrom),
+    lte(payment.paidAt, periodTo),
+  ));
+  const reductions = await db.select().from(rentReduction).where(eq(rentReduction.contractId, contractId));
 
   // Build month slots
   const slots: MonthSlot[] = [];

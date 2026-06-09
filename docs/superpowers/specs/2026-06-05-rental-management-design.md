@@ -187,25 +187,52 @@ allocate(contract, month):
 
 ### 5.3 Reálné náklady (per kind v období)
 ```
-actualCost(property, kind, periodFrom, periodTo):
-  -- Skill při vkládání CostStatement zapíše:
-  --   * totalAmount už proporcionální na relevantní období
-  --   * adjustmentAmount signed (solar credit, FO odečet ze SVJ, …)
-  -- Backend jen sčítá:
-  return Σ (CostStatement.totalAmount + CostStatement.adjustmentAmount)
-         where property=p, kind=k, period in [periodFrom, periodTo]
+actualCost(property, kind, reconFrom, reconTo):
+  -- Najdi cost statementy, jejichž periodFrom startuje v [reconFrom, reconTo]
+  -- (= matchPeriod candidates pro tento kind)
+  candidates = CostStatement where property=p, kind=k,
+               periodFrom >= reconFrom AND periodFrom <= reconTo
+  return Σ (cs.totalAmount + cs.adjustmentAmount) over candidates
 ```
+
+Cost statementy, jejichž periodFrom leží PŘED reconFrom, se nezapočítají
+(přísluší předchozímu recon období). Pokud periodFrom leží uvnitř recon
+ale periodTo přesahuje za reconTo (např. Feb 2024 – Feb 2025 v Jan-Dec recon),
+celá jejich hodnota se započítá do tohoto reconciliation.
+
+#### 5.3.1 Per-kind matchPeriod derivation
+```
+deriveMatchPeriod(kind, reconFrom, reconTo, allStatements):
+  candidates = statementy kde kind=kind AND periodFrom in [reconFrom, reconTo]
+  if candidates is empty:
+    return (reconFrom, reconTo)  -- default
+  else:
+    return (min(cs.periodFrom), max(cs.periodTo))  -- union z candidates
+```
+
+`matchPeriod` se používá pro:
+1. **Payment matching** — pro daný kind se sčítá paidThisKind jen z měsíců
+   v matchPeriod okně (ne z celého recon období)
+2. **Transparency** — matchPeriod, matchPeriodSource, matchPeriodIsDifferentFromDefault
+   jsou součástí `ItemBreakdown` v API response
 
 ### 5.4 Vyúčtování (compute)
 ```
-compute(contract, periodFrom, periodTo):
+compute(contract, reconFrom, reconTo):
+  slots = eachMonthInPeriod(reconFrom, reconTo)
+  FIFO-match all payments to slots (over full recon period)
   for each kind in distinct(contract utilities ∪ "services"):
-    paid = Σ allocate(contract, month).{servicePaid|utilityPaid[kind]} over months
-    actual = actualCost(property, kind, periodFrom, periodTo)
+    mp = deriveMatchPeriod(kind, reconFrom, reconTo, costStatements)
+    paid = Σ allocate(contract, month).{servicePaid|utilityPaid[kind]}
+           over months in mp window
+    actual = actualCost(property, kind, reconFrom, reconTo)  -- §5.3
     diff = paid - actual
-    append ReconciliationItem(kind, actual, paid, diff)
+    append ReconciliationItem(kind, actual, paid, diff,
+           breakdown.matchPeriod=mp, breakdown.matchPeriodSource=...)
   return Reconciliation with items
 ```
+
+Rent vždy používá celé recon období pro paid (žádný cost statement pro rent kind).
 
 ## 6. API (REST + MCP parita)
 

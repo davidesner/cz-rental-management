@@ -247,6 +247,68 @@ describe('payment-breakdown endpoint', () => {
     await client.close();
   });
 
+  it('next mode: payment paid in Dec (before periodFrom) matches Jan slot via naturalMonth', async () => {
+    // Bug: payment query loaded only [periodFrom, periodTo], so Dec 25 platba
+    // (which has naturalMonth = Jan due to 'next' offset) was missing → Jan slot
+    // fell back to Jan 18 platba (naturalMonth = Feb), incorrectly marked "late".
+    const { client, app, cookie } = await bootstrap();
+
+    const pRes = await app.request('/api/properties', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ name: 'Adv Prop' }),
+    });
+    const tRes = await app.request('/api/tenants', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ name: 'Adv Tenant' }),
+    });
+    const p = (await pRes.json() as any).property;
+    const t = (await tRes.json() as any).tenant;
+    const ctRes = await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        propertyId: p.id, tenantId: t.id, startDate: '2024-01-01',
+        paymentDueDay: 25, paymentAppliesTo: 'next',
+      }),
+    });
+    const ct = (await ctRes.json() as any).contract;
+    await app.request(`/api/contracts/${ct.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000, source: 'initial' }),
+    });
+
+    // Two payments: Dec 25, 2023 (for Jan slot) + Jan 25, 2024 (for Feb slot)
+    await app.request('/api/payments/batch', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify([
+        { amount: 3500000, paidAt: '2023-12-25', source: 'bank', externalId: 'dec-prev', contractId: ct.id, counterparty: 'X' },
+        { amount: 3500000, paidAt: '2024-01-25', source: 'bank', externalId: 'jan', contractId: ct.id, counterparty: 'X' },
+      ]),
+    });
+
+    const res = await app.request(
+      `/api/contracts/${ct.id}/payment-breakdown?from=2024-01-01&to=2024-02-29`,
+      { headers: { cookie } },
+    );
+    const data = await res.json() as any;
+    const jan = data.months.find((m: any) => m.month === '2024-01');
+    const feb = data.months.find((m: any) => m.month === '2024-02');
+
+    // Jan slot: dueDate Dec 25, 2023; payment paid exactly Dec 25 → not late
+    expect(jan.dueDate).toBe('2023-12-25');
+    expect(jan.isLate).toBe(false);
+    expect(jan.appliedPayments).toHaveLength(1);
+    expect(jan.appliedPayments[0].paidAt).toBe('2023-12-25');
+    expect(jan.appliedPayments[0].lateDays).toBe(0);
+
+    // Feb slot: dueDate Jan 25, 2024; payment Jan 25 → not late
+    expect(feb.dueDate).toBe('2024-01-25');
+    expect(feb.isLate).toBe(false);
+    expect(feb.appliedPayments).toHaveLength(1);
+    expect(feb.appliedPayments[0].paidAt).toBe('2024-01-25');
+
+    await client.close();
+  });
+
   it('late detection: payment after due date → isLate=true, maxLateDays correct', async () => {
     const { client, app, cookie, contract } = await bootstrap();
 

@@ -4,7 +4,8 @@ Plugin pro správu pronájmu — pomáhá s ročním vyúčtováním nájemcům 
 
 ## Co plugin obsahuje
 
-- **`init` skill** (`skills/init/`) — bootstrapuje lokální workflow skill z přibalené šablony
+- **`/rental-management:init` command** (`commands/init.md`) — bootstrapuje lokální workflow skill z přibalené šablony
+- **`/rental-management:update` command** (`commands/update.md`) — synchronizuje lokální skill s aktuální template verzí (zachovává `properties/` a `fixtures/`)
 - **Šablona workflow skillu** (`templates/skill/`) — kostra pro user-owned skill, kterou si nainstaluješ a budeš rozvíjet lokálně
 
 ## Filozofie
@@ -22,10 +23,20 @@ claude --plugin-dir /Users/esner/Projects/rental_management/claude-plugin
 V Claude Code session pak invokuj setup:
 
 ```
-Spusť init pro rental-management
+/rental-management:init
 ```
 
 Plugin se zeptá kam nainstalovat tvůj lokální skill, případně pomůže s `.mcp.json` konfigem.
+
+## Update lokálního skillu
+
+Po `git pull` pluginu (nebo po update přes marketplace) spusť:
+
+```
+/rental-management:update
+```
+
+Sync detekuje co se v template změnilo, ukáže per-soubor diff, nabídne overwrite / manual merge / skip. `properties/` a `fixtures/` jsou user-owned — nikdy se jich nedotkne.
 
 ### Marketplace (až bude publikovaný)
 

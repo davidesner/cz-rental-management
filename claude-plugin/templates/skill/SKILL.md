@@ -8,6 +8,17 @@ Workflow pro roční vyúčtování pronájmu. Předpokládá MCP server `rental
 
 ## Když začínáš
 
+**0. Check template updates** (rychlá kontrola, ~2s):
+
+Tento skill je lokální kopie šablony z `rental-management` pluginu. Než začneš workflow, ověř že parent plugin nemá novější verzi šablony:
+
+- Pokud existuje `.template-version` v této skill složce, porovnej s `<plugin>/.claude-plugin/plugin.json#version`
+- Pokud plugin novější → upozorni user: "Plugin má novější template verzi (X → Y). Spusť `/rental-management:update` před pokračováním?" — počkej na user rozhodnutí
+- Pokud `.template-version` neexistuje (skill nikdy nesynchronizován) → upozorni jednou stejně
+- Pokud verze shodují / plugin path nedetekovatelný → pokračuj bez upozornění
+
+Tato kontrola se dělá **jednou na začátku konverzace**, ne před každou MCP operací.
+
 1. **Identifikuj property**:
    - Z user promptu (jméno nemovitosti)
    - Nebo přes MCP `properties_list` a zeptej se user

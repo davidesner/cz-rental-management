@@ -1,5 +1,5 @@
 ---
-description: Setup local rental-management workflow skill. Copies the workflow template to a user-chosen path. Run once after installing the rental-management plugin. Use when user asks to "setup rental skill", "install rental workflow", or "init rental management".
+description: Setup lokálního rental-management workflow skillu — zkopíruje template z pluginu do user-zvolené cesty. Spustit jednou po instalaci pluginu.
 ---
 
 # Init: Setup local rental-management workflow skill

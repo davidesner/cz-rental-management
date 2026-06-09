@@ -352,6 +352,9 @@ export function CostStatementsPage() {
                   </div>
                 </div>
               )}
+              <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                <strong>Tip:</strong> <code>periodFrom</code>/<code>periodTo</code> určují co náklad pokrývá. Při reconciliaci se tento period použije i pro <strong>matching plateb</strong> tohoto druhu — pokud <code>periodFrom</code> startuje uvnitř reconciliation období. Pro proporcionální rozdělení přes year boundary vytvoř dva statementy, každý ve svém kalendářním roce.
+              </p>
             </div>
             <div>
               <Label>Celková částka (Kč)</Label>

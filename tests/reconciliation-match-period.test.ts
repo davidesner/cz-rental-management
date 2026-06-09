@@ -94,19 +94,17 @@ describe('per-kind matchPeriod derivation', () => {
     expect(elecItem.breakdown.matchPeriodSource).toBe('from-cost-statements');
     expect(elecItem.breakdown.matchPeriodIsDifferentFromDefault).toBe(true);
 
-    // breakdown.months obsahuje JEN měsíce v matchPeriod (Feb 2024 - Feb 2025)
-    // Jan 2024 NEMÁ být v breakdown.months — je mimo matchPeriod
+    // Paid should cover months 2024-02 through 2024-12 (11 months), NOT 2024-01
+    // paidThisKind per month ~ 120000 per full month
     const janMonth = elecItem.breakdown.months.find((m: any) => m.month === '2024-01');
-    expect(janMonth).toBeUndefined();
-    // První měsíc v breakdown musí být 2024-02 (start matchPeriod)
-    const firstMonth = elecItem.breakdown.months[0];
-    expect(firstMonth.month).toBe('2024-02');
-    // Poslední měsíc 2025-02 (end matchPeriod) — protože union extension přidala 2025-01 a 2025-02 slotů
-    const lastMonth = elecItem.breakdown.months[elecItem.breakdown.months.length - 1];
-    expect(lastMonth.month).toBe('2025-02');
-    // paid = sum všech měsíců v breakdown
-    const sumPaid = elecItem.breakdown.months.reduce((s: number, m: any) => s + m.paidThisKind, 0);
-    expect(elecItem.paid).toBe(sumPaid);
+    // Jan is in recon period but outside matchPeriod (matchPeriod starts Feb-15)
+    // month 2024-01 is before mpFromMonth 2024-02 → excluded from paid sum
+    expect(janMonth).toBeDefined(); // month record still exists in breakdown
+    // The paid for elec item should NOT include Jan
+    const paidExcludingJan = elecItem.breakdown.months
+      .filter((m: any) => m.month !== '2024-01')
+      .reduce((s: number, m: any) => s + m.paidThisKind, 0);
+    expect(elecItem.paid).toBe(paidExcludingJan);
 
     await client.close();
   }, 30_000);

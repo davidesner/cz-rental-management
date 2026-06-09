@@ -150,6 +150,28 @@ interface PaymentBreakdownData {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+type Kind = 'rent' | 'services' | 'electricity' | 'gas' | 'internet' | 'water' | 'other';
+const KINDS_TO_SHOW: Kind[] = ['rent', 'services', 'electricity', 'gas', 'internet', 'water', 'other'];
+
+function deriveMatchPeriodClient(
+  kind: Kind,
+  reconFrom: string,
+  reconTo: string,
+  statements: CostStatement[],
+): { from: string; to: string; source: 'default' | 'from-cost-statements'; count: number } {
+  const candidates = statements.filter(
+    s => s.kind === kind
+      && s.periodFrom >= reconFrom
+      && s.periodFrom <= reconTo
+  );
+  if (candidates.length === 0) {
+    return { from: reconFrom, to: reconTo, source: 'default', count: 0 };
+  }
+  const from = candidates.reduce((min, s) => s.periodFrom < min ? s.periodFrom : min, candidates[0]!.periodFrom);
+  const to = candidates.reduce((max, s) => s.periodTo > max ? s.periodTo : max, candidates[0]!.periodTo);
+  return { from, to, source: 'from-cost-statements', count: candidates.length };
+}
+
 function fmtKc(halere: number) {
   return (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 }
@@ -457,6 +479,9 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
               </div>
             </div>
           )}
+          <p className="text-xs text-muted-foreground mt-1 leading-snug">
+            <strong>Tip:</strong> <code>periodFrom</code>/<code>periodTo</code> určují co náklad pokrývá. Při reconciliaci se tento period použije i pro <strong>matching plateb</strong> tohoto druhu — pokud <code>periodFrom</code> startuje uvnitř reconciliation období. Pro proporcionální rozdělení přes year boundary vytvoř dva statementy, každý ve svém kalendářním roce.
+          </p>
         </div>
         <div>
           <Label>Celková částka (Kč)</Label>
@@ -599,6 +624,33 @@ function ComputeDialog({ contractId, onClose, onCreated }: ComputeDialogProps) {
   const [form, setForm] = useState({ periodFrom: '', periodTo: '' });
   const [err, setErr] = useState<string | null>(null);
 
+  // Fetch cost statements for this contract's property to compute preview
+  const contractQuery = useQuery({
+    queryKey: ['contracts', contractId],
+    queryFn: () => api.get<{ contract: Contract }>(`/api/contracts/${contractId}`),
+  });
+  const propertyId = contractQuery.data?.contract?.propertyId;
+
+  const statementsQuery = useQuery({
+    queryKey: ['cost-statements-for-preview', propertyId],
+    queryFn: () => api.get<{ statements: CostStatement[] }>(`/api/cost-statements?propertyId=${propertyId}`),
+    enabled: !!propertyId,
+  });
+  const allStatements = statementsQuery.data?.statements ?? [];
+
+  // Compute per-kind preview when both period fields are filled
+  const preview: Array<{ kind: Kind; from: string; to: string; source: 'default' | 'from-cost-statements'; count: number; differs: boolean }> | null =
+    form.periodFrom && form.periodTo
+      ? KINDS_TO_SHOW
+          .map(kind => {
+            const mp = deriveMatchPeriodClient(kind, form.periodFrom, form.periodTo, allStatements);
+            const differs = mp.source === 'from-cost-statements'
+              && (mp.from !== form.periodFrom || mp.to !== form.periodTo);
+            return { kind, ...mp, differs };
+          })
+          .filter(p => p.source === 'from-cost-statements' || p.kind === 'rent' || allStatements.some(s => s.kind === p.kind))
+      : null;
+
   const computeMutation = useMutation({
     mutationFn: () =>
       api.post<{ reconciliation: Reconciliation }>(
@@ -611,7 +663,7 @@ function ComputeDialog({ contractId, onClose, onCreated }: ComputeDialogProps) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
+      <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-xl font-semibold">Spočítat vyúčtování nájemníkovi</h2>
         <div>
           <Label>Období od</Label>
@@ -621,6 +673,34 @@ function ComputeDialog({ contractId, onClose, onCreated }: ComputeDialogProps) {
           <Label>Období do</Label>
           <Input type="date" value={form.periodTo} onChange={e => setForm({ ...form, periodTo: e.target.value })} />
         </div>
+
+        {preview && preview.length > 0 && (
+          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+            <p className="text-sm font-semibold">Per-kind period preview</p>
+            <p className="text-xs text-muted-foreground">
+              Reconciliace {form.periodFrom} → {form.periodTo}
+            </p>
+            <div className="space-y-1">
+              {preview.map(p => (
+                <div key={p.kind} className="flex items-center gap-2 text-xs">
+                  <span className="w-20 font-medium text-muted-foreground">{p.kind}</span>
+                  <span className={`font-mono ${p.differs ? 'text-amber-700 font-semibold' : 'text-foreground'}`}>
+                    {p.from} → {p.to}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {p.source === 'from-cost-statements'
+                      ? `(z ${p.count} statement${p.count === 1 ? 'u' : 'ů'})`
+                      : '(default, žádný cost statement)'}
+                  </span>
+                  {p.differs && (
+                    <span className="text-amber-600 font-semibold">⚠ liší se od defaultu</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {err && <p className="text-sm text-destructive">{err}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Zrušit</Button>

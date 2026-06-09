@@ -31,6 +31,9 @@ interface MonthEntry {
 interface ItemBreakdown {
   costStatements: CostStatementEntry[];
   months: MonthEntry[];
+  matchPeriod?: { from: string; to: string };
+  matchPeriodSource?: 'default' | 'from-cost-statements';
+  matchPeriodIsDifferentFromDefault?: boolean;
 }
 
 interface ReconciliationItem {
@@ -178,6 +181,23 @@ function ReconciliationItemRow({
   live: { actualCost: number; paid: number; difference: number } | null;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+
+  const mp = item.breakdown?.matchPeriod;
+  const mpSource = item.breakdown?.matchPeriodSource;
+  const mpDiffers = item.breakdown?.matchPeriodIsDifferentFromDefault ?? false;
+
+  const periodLabel = mp
+    ? `${mp.from} – ${mp.to}`
+    : '—';
+
+  const sourceLabel = mpSource === 'from-cost-statements'
+    ? '(ze statementu)'
+    : '(default)';
+
+  const tooltipText = mpDiffers && mp
+    ? `Matching období je odvozeno z cost statementu (${mp.from} až ${mp.to}). Pokud existuje cost statement daného druhu jehož periodFrom startuje uvnitř reconciliation období, jeho period (sjednocený přes víc statementů) určuje matching okno pro platby. Jinak default = reconciliation období.`
+    : '';
 
   return (
     <>
@@ -196,6 +216,32 @@ function ReconciliationItemRow({
               <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
                 změna
               </span>
+            )}
+          </div>
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-1 text-sm">
+            <span className={mpDiffers ? 'text-amber-700 font-medium' : 'text-muted-foreground'}>
+              {periodLabel}
+            </span>
+            <span className="text-xs text-muted-foreground">{sourceLabel}</span>
+            {mpDiffers && tooltipText && (
+              <div className="relative inline-block">
+                <button
+                  className="text-blue-500 hover:text-blue-700 text-xs leading-none"
+                  onMouseEnter={() => setTooltipVisible(true)}
+                  onMouseLeave={() => setTooltipVisible(false)}
+                  onClick={e => e.stopPropagation()}
+                  aria-label="Informace o matching období"
+                >
+                  ⓘ
+                </button>
+                {tooltipVisible && (
+                  <div className="absolute z-50 left-0 top-5 w-72 rounded-md border bg-popover p-3 text-xs text-popover-foreground shadow-md">
+                    {tooltipText}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </TableCell>
@@ -218,7 +264,7 @@ function ReconciliationItemRow({
       </TableRow>
       {expanded && (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={4} className="p-0">
+          <TableCell colSpan={5} className="p-0">
             <ItemBreakdownPanel breakdown={item.breakdown} />
           </TableCell>
         </TableRow>
@@ -277,7 +323,13 @@ export function ReconciliationDetailPage() {
     const liveActualCost = item.kind === 'rent'
       ? item.breakdown.months.reduce((s, m) => s + m.expectedThisKind, 0)
       : item.breakdown.costStatements.reduce((s, cs) => s + cs.totalAmount + cs.adjustmentAmount, 0);
-    const livePaid = item.breakdown.months.reduce((s, m) => s + m.paidThisKind, 0);
+    // livePaid respects matchPeriod filtering (same as backend) for non-rent kinds
+    const mp = item.breakdown.matchPeriod;
+    const livePaid = item.kind === 'rent' || !mp
+      ? item.breakdown.months.reduce((s, m) => s + m.paidThisKind, 0)
+      : item.breakdown.months
+          .filter(m => m.month >= mp.from.slice(0, 7) && m.month <= mp.to.slice(0, 7))
+          .reduce((s, m) => s + m.paidThisKind, 0);
     const liveDifference = livePaid - liveActualCost;
     const stale = liveActualCost !== item.actualCost || livePaid !== item.paid;
     return { item, liveActualCost, livePaid, liveDifference, stale };
@@ -334,6 +386,7 @@ export function ReconciliationDetailPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Druh</TableHead>
+              <TableHead>Období</TableHead>
               <TableHead className="text-right">Zaplaceno</TableHead>
               <TableHead className="text-right">Předepsáno / Náklady</TableHead>
               <TableHead className="text-right">Rozdíl</TableHead>
@@ -349,14 +402,14 @@ export function ReconciliationDetailPage() {
             ))}
             {items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-6">Žádné položky.</TableCell>
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-6">Žádné položky.</TableCell>
               </TableRow>
             )}
           </TableBody>
           {items.length > 0 && (
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={3} className="font-medium">
+                <TableCell colSpan={4} className="font-medium">
                   Celkový rozdíl {isStale && <span className="text-xs text-muted-foreground">(persistovaný)</span>}
                 </TableCell>
                 <TableCell className={`text-right font-bold ${totalDiff < 0 ? 'text-destructive' : 'text-green-600'}`}>
@@ -365,7 +418,7 @@ export function ReconciliationDetailPage() {
               </TableRow>
               {isStale && (
                 <TableRow>
-                  <TableCell colSpan={3} className="font-medium text-blue-700">
+                  <TableCell colSpan={4} className="font-medium text-blue-700">
                     Celkový rozdíl (aktuální, fresh z podkladů)
                   </TableCell>
                   <TableCell className={`text-right font-bold text-blue-700`}>

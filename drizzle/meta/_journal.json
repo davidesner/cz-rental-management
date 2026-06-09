@@ -50,6 +50,13 @@
       "when": 1780930339389,
       "tag": "0006_short_the_enforcers",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781036650187,
+      "tag": "0007_glossy_hellfire_club",
+      "breakpoints": true
     }
   ]
 }

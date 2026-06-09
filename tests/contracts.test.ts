@@ -37,9 +37,6 @@ describe('contracts REST', () => {
     expect(create.status).toBe(201);
     const ctr = (await create.json() as any).contract;
     expect(ctr.startDate).toBe('2024-09-20');
-    // default payment timing
-    expect(ctr.paymentDueDay).toBe(10);
-    expect(ctr.paymentAppliesTo).toBe('current');
 
     const list = await app.request('/api/contracts', { headers: { cookie } });
     expect((await list.json() as any).contracts).toHaveLength(1);
@@ -50,33 +47,70 @@ describe('contracts REST', () => {
     });
     expect((await patch.json() as any).contract.note).toBe('extended via dodatek 1');
 
-    // patch payment timing fields
-    const patchTiming = await app.request(`/api/contracts/${ctr.id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ paymentDueDay: 5, paymentAppliesTo: 'next' }),
+    // Payment timing now lives on contractTerms (temporal); set via /terms POST
+    const termsRes = await app.request(`/api/contracts/${ctr.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        validFrom: '2024-09-20', baseRent: 3000000, serviceAdvance: 500000,
+        paymentDueDay: 5, paymentAppliesTo: 'next', source: 'initial',
+      }),
     });
-    const patched = (await patchTiming.json() as any).contract;
-    expect(patched.paymentDueDay).toBe(5);
-    expect(patched.paymentAppliesTo).toBe('next');
+    const created = (await termsRes.json() as any).terms;
+    expect(created.paymentDueDay).toBe(5);
+    expect(created.paymentAppliesTo).toBe('next');
 
     await client.close();
   });
 
-  it('create with explicit paymentDueDay + paymentAppliesTo', async () => {
+  it('contract_terms_add: explicit paymentDueDay + paymentAppliesTo', async () => {
     const { client, app, cookie, property, tenant } = await setup();
     const res = await app.request('/api/contracts', {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
-        propertyId: property.id, tenantId: tenant.id,
-        startDate: '2024-01-01',
-        paymentDueDay: 15,
-        paymentAppliesTo: 'next',
+        propertyId: property.id, tenantId: tenant.id, startDate: '2024-01-01',
       }),
     });
     expect(res.status).toBe(201);
     const ctr = (await res.json() as any).contract;
-    expect(ctr.paymentDueDay).toBe(15);
-    expect(ctr.paymentAppliesTo).toBe('next');
+    const termsRes = await app.request(`/api/contracts/${ctr.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000,
+        paymentDueDay: 15, paymentAppliesTo: 'next', source: 'initial',
+      }),
+    });
+    const terms = (await termsRes.json() as any).terms;
+    expect(terms.paymentDueDay).toBe(15);
+    expect(terms.paymentAppliesTo).toBe('next');
+    await client.close();
+  });
+
+  it('contract_terms_add: payment* inherits from prior open terms when omitted', async () => {
+    const { client, app, cookie, property, tenant } = await setup();
+    const res = await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ propertyId: property.id, tenantId: tenant.id, startDate: '2024-01-01' }),
+    });
+    const ctr = (await res.json() as any).contract;
+    // First terms: set payment timing
+    await app.request(`/api/contracts/${ctr.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000,
+        paymentDueDay: 25, paymentAppliesTo: 'next', source: 'initial',
+      }),
+    });
+    // Second terms: omit payment*, expect inheritance from prior
+    const t2Res = await app.request(`/api/contracts/${ctr.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        validFrom: '2024-07-01', baseRent: 3200000, serviceAdvance: 500000,
+        source: 'addendum',
+      }),
+    });
+    const t2 = (await t2Res.json() as any).terms;
+    expect(t2.paymentDueDay).toBe(25);
+    expect(t2.paymentAppliesTo).toBe('next');
     await client.close();
   });
 

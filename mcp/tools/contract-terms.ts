@@ -13,6 +13,8 @@ const AddContractTermsInput = z.object({
   validFrom: DateStr.describe('Date from which these terms apply (YYYY-MM-DD)'),
   baseRent: z.number().int().nonnegative().describe('Monthly base rent in haléře (CZK × 100)'),
   serviceAdvance: z.number().int().nonnegative().describe('Monthly service advance in haléře'),
+  paymentDueDay: z.number().int().min(1).max(31).optional().describe('Day of month rent is due (1-31, default inherited from prior terms or 10)'),
+  paymentAppliesTo: z.enum(['current', 'next']).optional().describe('"current" = due in same month as rent period; "next" = paid in advance (prior month). Default inherited.'),
   source: z.enum(['initial', 'addendum', 'change']).describe('Source of the terms change'),
   note: z.string().nullable().optional().describe('Internal note'),
 });

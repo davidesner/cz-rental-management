@@ -114,8 +114,6 @@ export const contract = pgTable('contract', {
   endDate: date('end_date', { mode: 'string' }),
   securityDeposit: integer('security_deposit_haler'),
   note: text('note'),
-  paymentDueDay: integer('payment_due_day').notNull().default(10),
-  paymentAppliesTo: text('payment_applies_to', { enum: ['current', 'next'] }).notNull().default('current'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -126,6 +124,8 @@ export const contractTerms = pgTable('contract_terms', {
   validTo: date('valid_to', { mode: 'string' }),
   baseRent: integer('base_rent_haler').notNull(),
   serviceAdvance: integer('service_advance_haler').notNull(),
+  paymentDueDay: integer('payment_due_day').notNull().default(10),
+  paymentAppliesTo: text('payment_applies_to', { enum: ['current', 'next'] }).notNull().default('current'),
   source: text('source', { enum: ['initial', 'addendum', 'change'] }).notNull(),
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

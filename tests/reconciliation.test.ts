@@ -291,11 +291,11 @@ describe('reconciliation', () => {
     const t = (await (await app.request('/api/tenants', { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ name: 'VZ' }) })).json() as any).tenant;
     const ct = (await (await app.request('/api/contracts', {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ propertyId: p.id, tenantId: t.id, startDate: '2024-01-01', paymentDueDay: 25, paymentAppliesTo: 'next' }),
+      body: JSON.stringify({ propertyId: p.id, tenantId: t.id, startDate: '2024-01-01' }),
     })).json() as any).contract;
     await app.request(`/api/contracts/${ct.id}/terms`, {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000, source: 'initial' }),
+      body: JSON.stringify({ validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000, paymentDueDay: 25, paymentAppliesTo: 'next', source: 'initial' }),
     });
 
     // Platba 2023-12-25 (před recon period) → s offset +1 má natural month Jan 2024

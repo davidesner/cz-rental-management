@@ -4,6 +4,7 @@ import { contract, contractTerms, contractUtility, payment, rentReduction } from
 import { AppError } from '../errors.js';
 import { expectedForMonth, allocate, UTILITY_ORDER, type UtilityKind } from '../lib/allocation.js';
 import { matchPayments, computeDueDate, type MonthSlot } from '../lib/payment-matching.js';
+import { validAt } from '../lib/temporal.js';
 
 export interface AppliedPaymentBreakdown {
   paymentId: string;
@@ -53,12 +54,14 @@ export async function paymentBreakdown(
   const terms = await db.select().from(contractTerms).where(eq(contractTerms.contractId, contractId)).orderBy(asc(contractTerms.validFrom));
   const utilities = await db.select().from(contractUtility).where(eq(contractUtility.contractId, contractId)).orderBy(asc(contractUtility.validFrom));
 
-  const paymentDueDay = c.paymentDueDay;
-  const paymentAppliesTo = c.paymentAppliesTo as 'current' | 'next';
+  const termsAt = (refDate: string) => validAt(terms, refDate);
 
-  // For paymentAppliesTo='next' shift the lower bound back by 1 month so Dec payment
-  // (whose naturalMonth = next Jan) is loaded for Jan slot matching.
-  const offsetMonths = paymentAppliesTo === 'next' ? 1 : 0;
+  // If ANY terms within [periodFrom, periodTo] use 'next', shift payment query lower
+  // bound back by 1 month (so Dec payment with naturalMonth=Jan is loaded for Jan slot).
+  const anyNextInSpan = terms.some(t => t.paymentAppliesTo === 'next'
+    && (t.validTo === null || t.validTo >= periodFrom)
+    && t.validFrom <= periodTo);
+  const offsetMonths = anyNextInSpan ? 1 : 0;
   const [pfY, pfM, pfD] = periodFrom.split('-').map(Number) as [number, number, number];
   let qfY = pfY;
   let qfM = pfM - offsetMonths;
@@ -88,7 +91,11 @@ export async function paymentBreakdown(
     const reduction = reductions.find(r => r.forMonth === monthFirst);
     const expectedTotal = exp.baseRent + exp.serviceAdvance + Object.values(exp.utilities).reduce((s, v) => s + v, 0);
     const rentReductionAmt = reduction?.amount ?? 0;
-    const dueDate = computeDueDate(monthStr, paymentDueDay, paymentAppliesTo);
+    // Per-month due date from terms valid at this month's first day
+    const t = termsAt(monthFirst);
+    const slotPaymentDueDay = t?.paymentDueDay ?? 10;
+    const slotPaymentAppliesTo = (t?.paymentAppliesTo as 'current' | 'next' | undefined) ?? 'current';
+    const dueDate = computeDueDate(monthStr, slotPaymentDueDay, slotPaymentAppliesTo);
     slots.push({
       month: monthStr,
       expected: exp,
@@ -99,9 +106,10 @@ export async function paymentBreakdown(
     m++; if (m > 12) { y++; m = 1; }
   }
 
-  // FIFO matching — precompute naturalMonth per payment based on contract paymentAppliesTo
-  const offset = paymentAppliesTo === 'next' ? 1 : 0;
+  // FIFO matching — per-payment naturalMonth uses terms valid at paidAt
   const paymentRefs = payments.map(p => {
+    const t = termsAt(p.paidAt);
+    const offset = ((t?.paymentAppliesTo as 'current' | 'next' | undefined) ?? 'current') === 'next' ? 1 : 0;
     const [yy, mm] = p.paidAt.split('-').map(Number) as [number, number, number];
     let nm = mm + offset;
     let ny = yy;

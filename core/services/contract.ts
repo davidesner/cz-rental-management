@@ -11,8 +11,6 @@ export interface ContractInput {
   endDate?: string | null;
   securityDeposit?: number | null; // haléře
   note?: string | null;
-  paymentDueDay?: number | null;
-  paymentAppliesTo?: 'current' | 'next' | null;
 }
 
 export interface ContractRow {
@@ -24,8 +22,6 @@ export interface ContractRow {
   endDate: string | null;
   securityDeposit: number | null;
   note: string | null;
-  paymentDueDay: number;
-  paymentAppliesTo: 'current' | 'next';
   createdAt: Date;
 }
 
@@ -47,8 +43,6 @@ export async function createContract(db: DB, orgId: string, input: ContractInput
     endDate: input.endDate ?? null,
     securityDeposit: input.securityDeposit ?? null,
     note: input.note ?? null,
-    paymentDueDay: input.paymentDueDay ?? 10,
-    paymentAppliesTo: input.paymentAppliesTo ?? 'current',
   }).returning();
   return row!;
 }
@@ -71,7 +65,7 @@ export async function getContract(db: DB, orgId: string, id: string, allowedProp
 export async function updateContract(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, input: Partial<Omit<ContractInput, 'propertyId' | 'tenantId'>>): Promise<ContractRow> {
   await getContract(db, orgId, id, allowedPropertyIds);
   const patch: Record<string, unknown> = {};
-  for (const key of ['startDate', 'endDate', 'securityDeposit', 'note', 'paymentDueDay', 'paymentAppliesTo'] as const) {
+  for (const key of ['startDate', 'endDate', 'securityDeposit', 'note'] as const) {
     if (input[key] !== undefined) patch[key] = input[key];
   }
   if (Object.keys(patch).length === 0) return getContract(db, orgId, id, allowedPropertyIds);

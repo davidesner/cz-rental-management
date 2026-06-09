@@ -35,10 +35,18 @@ async function bootstrap() {
 }
 
 /** Add standard terms: 3300 Kč rent + 700 Kč service (all in haléře) */
-async function addTerms(app: ReturnType<typeof makeApp>, cookie: string, contractId: string) {
+async function addTerms(
+  app: ReturnType<typeof makeApp>, cookie: string, contractId: string,
+  overrides: { paymentDueDay?: number; paymentAppliesTo?: 'current' | 'next'; validFrom?: string } = {},
+) {
   await app.request(`/api/contracts/${contractId}/terms`, {
     method: 'POST', headers: { 'content-type': 'application/json', cookie },
-    body: JSON.stringify({ validFrom: '2024-10-01', baseRent: 330000, serviceAdvance: 70000, source: 'initial' }),
+    body: JSON.stringify({
+      validFrom: overrides.validFrom ?? '2024-10-01',
+      baseRent: 330000, serviceAdvance: 70000, source: 'initial',
+      ...(overrides.paymentDueDay !== undefined ? { paymentDueDay: overrides.paymentDueDay } : {}),
+      ...(overrides.paymentAppliesTo !== undefined ? { paymentAppliesTo: overrides.paymentAppliesTo } : {}),
+    }),
   });
 }
 
@@ -76,14 +84,7 @@ describe('due date / lateness edge cases', () => {
 
   it('paymentDueDay 31 → dueDate for February clamped to last day (28 or 29)', async () => {
     const { client, app, cookie, contract } = await bootstrap();
-    await addTerms(app, cookie, contract.id);
-
-    // Update contract to dueDay 31 to test clamping in short months
-    const patchRes = await app.request(`/api/contracts/${contract.id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ paymentDueDay: 31 }),
-    });
-    expect(patchRes.status).toBe(200);
+    await addTerms(app, cookie, contract.id, { paymentDueDay: 31 });
 
     const res = await app.request(
       `/api/contracts/${contract.id}/payment-breakdown?from=2025-02-01&to=2025-02-28`,
@@ -100,12 +101,7 @@ describe('due date / lateness edge cases', () => {
 
   it('paymentAppliesTo next → dueDate for 2024-11 = 2024-10-{dueDay}', async () => {
     const { client, app, cookie, contract } = await bootstrap();
-    await addTerms(app, cookie, contract.id);
-
-    await app.request(`/api/contracts/${contract.id}`, {
-      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ paymentDueDay: 5, paymentAppliesTo: 'next' }),
-    });
+    await addTerms(app, cookie, contract.id, { paymentDueDay: 5, paymentAppliesTo: 'next' });
 
     const res = await app.request(
       `/api/contracts/${contract.id}/payment-breakdown?from=2024-11-01&to=2024-11-30`,

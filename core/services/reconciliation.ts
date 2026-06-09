@@ -5,6 +5,7 @@ import { reconciliation, reconciliationItem, contract, contractTerms, contractUt
 import { AppError } from '../errors.js';
 import { expectedForMonth, allocate, UTILITY_ORDER, type UtilityKind } from '../lib/allocation.js';
 import { matchPayments, computeDueDate, type MonthSlot } from '../lib/payment-matching.js';
+import { validAt } from '../lib/temporal.js';
 
 type Kind = 'rent' | 'services' | UtilityKind;
 
@@ -115,10 +116,10 @@ function deriveMatchPeriod(
  * compute items with full breakdown. Does not touch the DB.
  */
 function computeItemsWithBreakdown(
-  contractRow: { id: string; startDate: string; endDate: string | null; paymentDueDay: number; paymentAppliesTo: string },
+  contractRow: { id: string; startDate: string; endDate: string | null },
   periodFrom: string,
   periodTo: string,
-  terms: Array<{ validFrom: string; validTo: string | null; baseRent: number; serviceAdvance: number }>,
+  terms: Array<{ validFrom: string; validTo: string | null; baseRent: number; serviceAdvance: number; paymentDueDay: number; paymentAppliesTo: string }>,
   utilities: Array<{ kind: string; validFrom: string; validTo: string | null; monthlyAdvance: number }>,
   payments: Array<{ id: string; amount: number; paidAt: string }>,
   reductions: Array<{ forMonth: string; amount: number }>,
@@ -135,8 +136,9 @@ function computeItemsWithBreakdown(
   }>,
 ): Array<{ kind: Kind; actualCost: number; paid: number; difference: number; breakdown: ItemBreakdown }> {
 
-  const paymentDueDay = contractRow.paymentDueDay;
-  const paymentAppliesTo = contractRow.paymentAppliesTo as 'current' | 'next';
+  // Pick the terms valid on `refDate` (YYYY-MM-DD). Used both for slot dueDate
+  // (refDate = month's 1st) and payment offset (refDate = paidAt).
+  const termsAt = (refDate: string) => validAt(terms, refDate);
 
   // Pre-compute matchPeriod per kind so we know the UNION span. Slots & breakdown.months
   // must cover the union — otherwise kinds with matchPeriod extending past recon period
@@ -165,7 +167,11 @@ function computeItemsWithBreakdown(
     const reduction = reductions.find(r => r.forMonth === monthFirst);
     const expectedTotal = exp.baseRent + exp.serviceAdvance + UTILITY_ORDER.reduce((s, k) => s + exp.utilities[k], 0);
     const rentReductionAmt = reduction?.amount ?? 0;
-    const dueDate = computeDueDate(monthStr, paymentDueDay, paymentAppliesTo);
+    // Read payment terms valid for this month (start-of-month)
+    const t = termsAt(monthFirst);
+    const slotPaymentDueDay = t?.paymentDueDay ?? 10;
+    const slotPaymentAppliesTo = (t?.paymentAppliesTo as 'current' | 'next' | undefined) ?? 'current';
+    const dueDate = computeDueDate(monthStr, slotPaymentDueDay, slotPaymentAppliesTo);
     slots.push({
       month: monthStr,
       expected: exp,
@@ -175,11 +181,12 @@ function computeItemsWithBreakdown(
     });
   }
 
-  // FIFO match over full recon period slots
-  const offsetMonths = paymentAppliesTo === 'next' ? 1 : 0;
+  // FIFO match — per-payment naturalMonth uses the terms valid at paidAt
   const paymentRefs = payments.map(p => {
+    const t = termsAt(p.paidAt);
+    const offset = ((t?.paymentAppliesTo as 'current' | 'next' | undefined) ?? 'current') === 'next' ? 1 : 0;
     const [yy, mm] = p.paidAt.split('-').map(Number) as [number, number, number];
-    let nm = mm + offsetMonths;
+    let nm = mm + offset;
     let ny = yy;
     if (nm > 12) { nm = nm - 12; ny += 1; }
     const naturalMonth = `${ny}-${String(nm).padStart(2, '0')}`;
@@ -289,7 +296,7 @@ function computeItemsWithBreakdown(
  */
 async function buildItemsWithBreakdown(
   db: DB,
-  contractRow: { id: string; orgId: string; propertyId: string; startDate: string; endDate: string | null; paymentDueDay: number; paymentAppliesTo: string },
+  contractRow: { id: string; orgId: string; propertyId: string; startDate: string; endDate: string | null },
   periodFrom: string,
   periodTo: string,
   placeholderRecId: string,
@@ -328,9 +335,14 @@ async function buildItemsWithBreakdown(
     ? qualifyingStatements.reduce((max, s) => s.periodTo > max ? s.periodTo : max, periodTo)
     : periodTo;
 
-  // For paymentAppliesTo='next' shift the lower bound back by 1 month so Dec payment
-  // (whose naturalMonth = next Jan) is loaded for Jan slot matching.
-  const offsetMonths = contractRow.paymentAppliesTo === 'next' ? 1 : 0;
+  // For terms with paymentAppliesTo='next' shift the lower bound back by 1 month so
+  // a Dec payment (naturalMonth = next Jan) is loaded for Jan slot matching.
+  // Because terms are temporal, check if ANY terms valid within the union span uses 'next';
+  // if so, shift. (Worst case adds 1 month — acceptable.)
+  const anyNextInSpan = terms.some(t => t.paymentAppliesTo === 'next'
+    && (t.validTo === null || t.validTo >= unionFrom)
+    && t.validFrom <= unionTo);
+  const offsetMonths = anyNextInSpan ? 1 : 0;
   const [pfY, pfM, pfD] = unionFrom.split('-').map(Number) as [number, number, number];
   let qfY = pfY;
   let qfM = pfM - offsetMonths;

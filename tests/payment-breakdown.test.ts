@@ -218,17 +218,17 @@ describe('payment-breakdown endpoint', () => {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
         propertyId: p.id, tenantId: t.id, startDate: '2024-10-01',
-        paymentDueDay: 5, paymentAppliesTo: 'next',
       }),
     });
     expect(ctRes.status).toBe(201);
     const ct = (await ctRes.json() as any).contract;
-    expect(ct.paymentDueDay).toBe(5);
-    expect(ct.paymentAppliesTo).toBe('next');
 
     await app.request(`/api/contracts/${ct.id}/terms`, {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ validFrom: '2024-10-01', baseRent: 300000, serviceAdvance: 50000, source: 'initial' }),
+      body: JSON.stringify({
+        validFrom: '2024-10-01', baseRent: 300000, serviceAdvance: 50000,
+        paymentDueDay: 5, paymentAppliesTo: 'next', source: 'initial',
+      }),
     });
 
     const res = await app.request(
@@ -267,13 +267,15 @@ describe('payment-breakdown endpoint', () => {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
         propertyId: p.id, tenantId: t.id, startDate: '2024-01-01',
-        paymentDueDay: 25, paymentAppliesTo: 'next',
       }),
     });
     const ct = (await ctRes.json() as any).contract;
     await app.request(`/api/contracts/${ct.id}/terms`, {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000, source: 'initial' }),
+      body: JSON.stringify({
+        validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000,
+        paymentDueDay: 25, paymentAppliesTo: 'next', source: 'initial',
+      }),
     });
 
     // Two payments: Dec 25, 2023 (for Jan slot) + Jan 25, 2024 (for Feb slot)
@@ -305,6 +307,91 @@ describe('payment-breakdown endpoint', () => {
     expect(feb.isLate).toBe(false);
     expect(feb.appliedPayments).toHaveLength(1);
     expect(feb.appliedPayments[0].paidAt).toBe('2024-01-25');
+
+    await client.close();
+  });
+
+  it('temporal payment terms: amendment changes paymentAppliesTo mid-contract', async () => {
+    // Setup: contract starts 2024 with paymentAppliesTo='next' (rent for Jan paid 25.Dec),
+    // amendment from 2025-01-01 switches to paymentAppliesTo='current' (rent for Jan paid 1.Jan).
+    // Dec 25 2024 platba → naturalMonth Jan 2025 (still 'next' for paidAt) → ...
+    // But Jan 2025 slot's dueDate is governed by NEW terms = 'current', dueDay 1 → 2025-01-01.
+    // Wait — Dec 25 2024 payment is paid under OLD terms ('next'), so naturalMonth = Jan 2025.
+    // Jan 2025 slot exists & gets matched. lateness depends on NEW dueDate 2025-01-01 vs paid 2024-12-25 → 7 days early, not late.
+    const { client, app, cookie } = await bootstrap();
+    const p = (await (await app.request('/api/properties', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ name: 'Mid' }),
+    })).json() as any).property;
+    const t = (await (await app.request('/api/tenants', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ name: 'Mid' }),
+    })).json() as any).tenant;
+    const ct = (await (await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ propertyId: p.id, tenantId: t.id, startDate: '2024-01-01' }),
+    })).json() as any).contract;
+
+    // Initial terms 2024-01-01: dueDay 25, applies 'next'
+    await app.request(`/api/contracts/${ct.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000,
+        paymentDueDay: 25, paymentAppliesTo: 'next', source: 'initial',
+      }),
+    });
+    // Amendment 2025-01-01: dueDay 1, applies 'current'
+    await app.request(`/api/contracts/${ct.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        validFrom: '2025-01-01', baseRent: 3000000, serviceAdvance: 500000,
+        paymentDueDay: 1, paymentAppliesTo: 'current', source: 'addendum',
+      }),
+    });
+
+    // Payments — one per slot to avoid FIFO overflow ambiguity:
+    //  - Nov 25 2024 (paid under OLD 'next' valid 2024-11-25 → naturalMonth Dec 2024)
+    //  - Dec 25 2024 (paid under OLD 'next' → naturalMonth Jan 2025)
+    //  - Feb 1  2025 (paid under NEW 'current' → naturalMonth Feb 2025)
+    // Slots:
+    //  - Dec 2024 dueDate 2024-11-25 (OLD); Nov 25 platba matchne → lateness 0
+    //  - Jan 2025 dueDate 2025-01-01 (NEW); Dec 25 platba matchne → 7 days early, not late
+    //  - Feb 2025 dueDate 2025-02-01 (NEW); Feb 1 platba matchne → 0 days, not late
+    await app.request('/api/payments/batch', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify([
+        { amount: 3500000, paidAt: '2024-11-25', source: 'bank', externalId: 'nov-pay', contractId: ct.id, counterparty: 'X' },
+        { amount: 3500000, paidAt: '2024-12-25', source: 'bank', externalId: 'dec-pay', contractId: ct.id, counterparty: 'X' },
+        { amount: 3500000, paidAt: '2025-02-01', source: 'bank', externalId: 'feb-pay', contractId: ct.id, counterparty: 'X' },
+      ]),
+    });
+
+    const res = await app.request(
+      `/api/contracts/${ct.id}/payment-breakdown?from=2024-12-01&to=2025-02-28`,
+      { headers: { cookie } },
+    );
+    const data = await res.json() as any;
+    const dec24 = data.months.find((m: any) => m.month === '2024-12');
+    const jan25 = data.months.find((m: any) => m.month === '2025-01');
+    const feb25 = data.months.find((m: any) => m.month === '2025-02');
+
+    // Dec 2024 slot uses OLD terms (dueDay 25 'next' → due 2024-11-25)
+    expect(dec24.dueDate).toBe('2024-11-25');
+    expect(dec24.appliedPayments.length).toBe(1);
+    expect(dec24.appliedPayments[0].paidAt).toBe('2024-11-25');
+    expect(dec24.isLate).toBe(false);
+
+    // Jan 2025 slot uses NEW terms (dueDay 1 'current' → due 2025-01-01)
+    expect(jan25.dueDate).toBe('2025-01-01');
+    expect(jan25.appliedPayments.length).toBe(1);
+    expect(jan25.appliedPayments[0].paidAt).toBe('2024-12-25');
+    expect(jan25.isLate).toBe(false);
+
+    // Feb 2025 uses NEW
+    expect(feb25.dueDate).toBe('2025-02-01');
+    expect(feb25.appliedPayments.length).toBe(1);
+    expect(feb25.appliedPayments[0].paidAt).toBe('2025-02-01');
+    expect(feb25.isLate).toBe(false);
 
     await client.close();
   });

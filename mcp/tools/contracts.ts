@@ -17,8 +17,6 @@ const CreateContractInput = z.object({
   endDate: DateStr.nullable().optional().describe('Contract end date (YYYY-MM-DD), null if open-ended'),
   securityDeposit: z.number().int().nonnegative().nullable().optional().describe('Security deposit in haléře (CZK × 100)'),
   note: z.string().nullable().optional().describe('Internal note'),
-  paymentDueDay: z.number().int().min(1).max(31).optional().describe('Day of month rent is due (1-31, default 10)'),
-  paymentAppliesTo: z.enum(['current', 'next']).optional().describe('"current" = due in same month as rent period; "next" = paid in advance (prior month)'),
 });
 
 const UpdateContractInput = z.object({
@@ -27,8 +25,6 @@ const UpdateContractInput = z.object({
   endDate: DateStr.nullable().optional().describe('Contract end date (YYYY-MM-DD)'),
   securityDeposit: z.number().int().nonnegative().nullable().optional().describe('Security deposit in haléře'),
   note: z.string().nullable().optional().describe('Internal note'),
-  paymentDueDay: z.number().int().min(1).max(31).optional().describe('Day of month rent is due (1-31)'),
-  paymentAppliesTo: z.enum(['current', 'next']).optional().describe('"current" = due in same month; "next" = paid in advance'),
 });
 
 export async function listContracts(client: RentalApiClient, _args: z.infer<typeof ListContractsInput>) {

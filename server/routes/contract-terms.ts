@@ -11,6 +11,8 @@ const CreateTerms = z.object({
   validFrom: DateStr,
   baseRent: z.number().int().nonnegative(),
   serviceAdvance: z.number().int().nonnegative(),
+  paymentDueDay: z.number().int().min(1).max(31).optional(),
+  paymentAppliesTo: z.enum(['current', 'next']).optional(),
   source: z.enum(['initial', 'addendum', 'change']),
   note: z.string().nullable().optional(),
 });

@@ -20,8 +20,6 @@ interface Contract {
   endDate: string | null;
   securityDeposit: number | null;
   note?: string | null;
-  paymentDueDay: number;
-  paymentAppliesTo: 'current' | 'next';
 }
 
 interface ContractTerm {
@@ -30,6 +28,8 @@ interface ContractTerm {
   validTo?: string | null;
   baseRent: number;
   serviceAdvance: number;
+  paymentDueDay: number;
+  paymentAppliesTo: 'current' | 'next';
   source: string;
   note: string | null;
 }
@@ -264,6 +264,7 @@ function PodminkyTable({ terms, utilities }: PodminkyTableProps) {
             <TableHead>Záloha SVJ</TableHead>
             {presentKinds.map(k => <TableHead key={k}>{UTILITY_LABEL[k]}</TableHead>)}
             <TableHead>Σ Měsíčně</TableHead>
+            <TableHead>Splatnost</TableHead>
             <TableHead>Zdroj</TableHead>
             <TableHead>Poznámka</TableHead>
           </TableRow>
@@ -302,6 +303,9 @@ function PodminkyTable({ terms, utilities }: PodminkyTableProps) {
                   <TableCell key={k}>{utilByKind[k] !== undefined ? fmt(utilByKind[k]!) : '—'}</TableCell>
                 ))}
                 <TableCell className="font-semibold">{fmt(total)}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">
+                  {activeTerm ? `do ${activeTerm.paymentDueDay}. ${activeTerm.paymentAppliesTo === 'next' ? 'předch.' : 'akt.'} m.` : '—'}
+                </TableCell>
                 <TableCell className="text-xs">{activeTerm?.source ?? '—'}</TableCell>
                 <TableCell className="text-xs text-muted-foreground max-w-md truncate" title={noteParts.join(' · ')}>
                   {noteParts.join(' · ') || '—'}
@@ -742,6 +746,8 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
     validFrom: '',
     baseRentCzk: activeTerm ? (activeTerm.baseRent / 100).toFixed(2) : '',
     serviceAdvanceCzk: activeTerm ? (activeTerm.serviceAdvance / 100).toFixed(2) : '',
+    paymentDueDay: activeTerm ? String(activeTerm.paymentDueDay) : '10',
+    paymentAppliesTo: (activeTerm?.paymentAppliesTo ?? 'current') as 'current' | 'next',
     source: (hasExisting ? 'addendum' : 'initial') as 'initial' | 'addendum' | 'change',
     note: '',
     utilities: initialUtilities as Partial<Record<UtilityKind, string>>,
@@ -766,6 +772,8 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
         validFrom: form.validFrom,
         baseRent: Math.round(parseFloat(form.baseRentCzk.replace(',', '.')) * 100),
         serviceAdvance: Math.round(parseFloat(form.serviceAdvanceCzk.replace(',', '.')) * 100),
+        paymentDueDay: parseInt(form.paymentDueDay, 10) || 10,
+        paymentAppliesTo: form.paymentAppliesTo,
         source: form.source,
         note: form.note || null,
       });
@@ -834,6 +842,23 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
         <div>
           <Label>Záloha SVJ (Kč)</Label>
           <Input type="text" placeholder="0.00" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Splatnost ke dni</Label>
+            <Input type="number" min={1} max={31} value={form.paymentDueDay} onChange={e => setForm({ ...form, paymentDueDay: e.target.value })} />
+          </div>
+          <div>
+            <Label>Platba za</Label>
+            <select
+              className={SELECT_CLS}
+              value={form.paymentAppliesTo}
+              onChange={e => setForm({ ...form, paymentAppliesTo: e.target.value as 'current' | 'next' })}
+            >
+              <option value="current">Aktuální měsíc</option>
+              <option value="next">Následující měsíc (předem)</option>
+            </select>
+          </div>
         </div>
         <div>
           <Label>Zdroj</Label>
@@ -1345,12 +1370,17 @@ export function ContractDetailPage() {
                   <span className="text-muted-foreground">Kauce</span>
                   <p className="font-medium">{contract.securityDeposit != null ? fmtKc(contract.securityDeposit) : '—'}</p>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Splatnost</span>
-                  <p className="font-medium">
-                    do {contract.paymentDueDay ?? 10}. dne {contract.paymentAppliesTo === 'next' ? 'předchozího' : 'aktuálního'} měsíce
-                  </p>
-                </div>
+                {(() => {
+                  const openTerms = (termsData?.terms ?? []).find(t => t.validTo === null || t.validTo === undefined);
+                  return openTerms ? (
+                    <div>
+                      <span className="text-muted-foreground">Splatnost (aktuální)</span>
+                      <p className="font-medium">
+                        do {openTerms.paymentDueDay}. dne {openTerms.paymentAppliesTo === 'next' ? 'předchozího' : 'aktuálního'} měsíce
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
                 {contract.note && (
                   <div className="col-span-2">
                     <span className="text-muted-foreground">Poznámka</span>

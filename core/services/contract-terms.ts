@@ -8,6 +8,8 @@ export interface CreateTermsInput {
   validFrom: string;
   baseRent: number;
   serviceAdvance: number;
+  paymentDueDay?: number;
+  paymentAppliesTo?: 'current' | 'next';
   source: 'initial' | 'addendum' | 'change';
   note?: string | null;
 }
@@ -19,6 +21,8 @@ export interface TermsRow {
   validTo: string | null;
   baseRent: number;
   serviceAdvance: number;
+  paymentDueDay: number;
+  paymentAppliesTo: 'current' | 'next';
   source: 'initial' | 'addendum' | 'change';
   note: string | null;
   createdAt: Date;
@@ -35,6 +39,15 @@ async function assertContractInOrg(db: DB, orgId: string, contractId: string, al
 export async function addContractTerms(db: DB, orgId: string, contractId: string, allowedPropertyIds: string[] | null, input: CreateTermsInput): Promise<TermsRow> {
   await assertContractInOrg(db, orgId, contractId, allowedPropertyIds);
   return db.transaction(async (tx) => {
+    // Find current open row to inherit payment* from if not explicitly set
+    const [openTerms] = await tx.select().from(contractTerms)
+      .where(and(eq(contractTerms.contractId, contractId), isNull(contractTerms.validTo)));
+
+    const paymentDueDay = input.paymentDueDay ?? openTerms?.paymentDueDay ?? 10;
+    const paymentAppliesTo = input.paymentAppliesTo
+      ?? (openTerms?.paymentAppliesTo as 'current' | 'next' | undefined)
+      ?? 'current';
+
     // Close any open row
     await tx.update(contractTerms)
       .set({ validTo: input.validFrom })
@@ -46,6 +59,8 @@ export async function addContractTerms(db: DB, orgId: string, contractId: string
       validTo: null,
       baseRent: input.baseRent,
       serviceAdvance: input.serviceAdvance,
+      paymentDueDay,
+      paymentAppliesTo,
       source: input.source,
       note: input.note ?? null,
     }).returning();

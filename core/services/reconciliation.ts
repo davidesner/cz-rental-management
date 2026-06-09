@@ -138,9 +138,22 @@ function computeItemsWithBreakdown(
   const paymentDueDay = contractRow.paymentDueDay;
   const paymentAppliesTo = contractRow.paymentAppliesTo as 'current' | 'next';
 
-  // Build month slots for FIFO matching — always over full recon period
+  // 1) Pre-compute matchPeriod per kind so we know the UNION span — slots/payments must
+  //    cover the union (not just recon period). Otherwise kinds with matchPeriod extending
+  //    past recon (e.g. electricity Feb-Feb in Jan-Dec recon) miss months at the boundary.
+  const kindsToShow: Kind[] = ['rent', 'services', ...UTILITY_ORDER];
+  const matchPeriodsPerKind = new Map<Kind, ReturnType<typeof deriveMatchPeriod>>();
+  for (const kind of kindsToShow) {
+    matchPeriodsPerKind.set(kind, deriveMatchPeriod(kind, periodFrom, periodTo, statements));
+  }
+  const unionFrom = [periodFrom, ...Array.from(matchPeriodsPerKind.values()).map(m => m.from)]
+    .reduce((min, d) => d < min ? d : min);
+  const unionTo = [periodTo, ...Array.from(matchPeriodsPerKind.values()).map(m => m.to)]
+    .reduce((max, d) => d > max ? d : max);
+
+  // 2) Build month slots over the UNION span (not just recon period)
   const slots: MonthSlot[] = [];
-  for (const { year, month } of eachMonthInPeriod(periodFrom, periodTo)) {
+  for (const { year, month } of eachMonthInPeriod(unionFrom, unionTo)) {
     const monthStr = `${year}-${String(month).padStart(2, '0')}`;
     const monthFirst = `${monthStr}-01`;
     const exp = expectedForMonth(
@@ -179,8 +192,6 @@ function computeItemsWithBreakdown(
     rent: [], services: [], electricity: [], gas: [], internet: [], water: [], other: [],
   };
 
-  let rentExpectedTotal = 0;
-
   for (const slot of slots) {
     const match = perMonth[slot.month]!;
     const received = match.receivedTotal;
@@ -188,8 +199,6 @@ function computeItemsWithBreakdown(
     const rentEffective = Math.max(0, exp.baseRent - slot.rentReduction);
     const effectiveExp = { ...exp, baseRent: rentEffective };
     const a = allocate(received, effectiveExp);
-
-    rentExpectedTotal += rentEffective;
 
     const expectedTotal = exp.baseRent + exp.serviceAdvance + UTILITY_ORDER.reduce((s, k) => s + exp.utilities[k], 0);
 
@@ -213,13 +222,14 @@ function computeItemsWithBreakdown(
   const statementsPerKind: Record<Kind, ItemBreakdown['costStatements']> = {
     rent: [], services: [], electricity: [], gas: [], internet: [], water: [], other: [],
   };
+  // rent has no cost statement — actualCost = sum of effective rent across rent's matchPeriod months
+  // (filled at result-build time below). Other kinds default to 0 and accumulate from statements.
   const costPerKind: Record<Kind, number> = {
-    rent: rentExpectedTotal,
+    rent: 0,
     services: 0, electricity: 0, gas: 0, internet: 0, water: 0, other: 0,
   };
 
-  // Determine matchPeriod per kind (using all statements for derivation)
-  const kindsToShow: Kind[] = ['rent', 'services', ...UTILITY_ORDER];
+  // (kindsToShow + matchPeriodsPerKind already computed above)
 
   // For cost aggregation: use statements that "qualify" for each kind
   // (cs.periodFrom within recon period — same filter used by deriveMatchPeriod)
@@ -239,26 +249,21 @@ function computeItemsWithBreakdown(
   // Build result items
   const result: Array<{ kind: Kind; actualCost: number; paid: number; difference: number; breakdown: ItemBreakdown }> = [];
   for (const kind of kindsToShow) {
-    // Derive matchPeriod for this kind
-    const mp = deriveMatchPeriod(kind, periodFrom, periodTo, statements);
+    const mp = matchPeriodsPerKind.get(kind)!;
     const matchPeriodIsDifferentFromDefault = mp.source === 'from-cost-statements'
       && (mp.from !== periodFrom || mp.to !== periodTo);
 
-    // For paid: sum paidThisKind only for months within matchPeriod
-    const months = monthsPerKind[kind];
-    const matchedMonths = months.filter(m => {
-      // Month YYYY-MM is within matchPeriod if the month (YYYY-MM) is within matchPeriod boundaries.
-      // Compare month string (YYYY-MM) to the YYYY-MM portion of matchPeriod boundaries.
-      const mpFromMonth = mp.from.slice(0, 7);  // YYYY-MM
-      const mpToMonth = mp.to.slice(0, 7);       // YYYY-MM
-      return m.month >= mpFromMonth && m.month <= mpToMonth;
-    });
+    // Filter the full union months to those within this kind's matchPeriod
+    const allMonths = monthsPerKind[kind];
+    const mpFromMonth = mp.from.slice(0, 7);  // YYYY-MM
+    const mpToMonth = mp.to.slice(0, 7);       // YYYY-MM
+    const matchedMonths = allMonths.filter(m => m.month >= mpFromMonth && m.month <= mpToMonth);
 
-    const paid = kind === 'rent'
-      ? months.reduce((s, m) => s + m.paidThisKind, 0)  // rent always uses full recon period
-      : matchedMonths.reduce((s, m) => s + m.paidThisKind, 0);
-
-    const actual = costPerKind[kind];
+    const paid = matchedMonths.reduce((s, m) => s + m.paidThisKind, 0);
+    // For rent: actualCost = sum of effective expected rent across matched months (no cost statement)
+    const actual = kind === 'rent'
+      ? matchedMonths.reduce((s, m) => s + m.expectedThisKind, 0)
+      : costPerKind[kind];
     if (actual === 0 && paid === 0) continue;
 
     result.push({
@@ -268,7 +273,7 @@ function computeItemsWithBreakdown(
       difference: paid - actual,
       breakdown: {
         costStatements: statementsPerKind[kind],
-        months,
+        months: matchedMonths,  // breakdown panel zobrazí jen měsíce v matchPeriod
         matchPeriod: { from: mp.from, to: mp.to },
         matchPeriodSource: mp.source,
         matchPeriodIsDifferentFromDefault,
@@ -297,10 +302,6 @@ async function buildItemsWithBreakdown(
     .where(eq(contractUtility.contractId, contractRow.id))
     .orderBy(asc(contractUtility.validFrom));
 
-  const payments = await db.select().from(payment).where(
-    and(eq(payment.contractId, contractRow.id), gte(payment.paidAt, periodFrom), lte(payment.paidAt, periodTo))
-  );
-
   const reductions = await db.select().from(rentReduction).where(
     eq(rentReduction.contractId, contractRow.id)
   );
@@ -312,6 +313,22 @@ async function buildItemsWithBreakdown(
       lte(costStatement.periodFrom, periodTo),
       gte(costStatement.periodTo, periodFrom),
     ),
+  );
+
+  // Compute union span across all matchPeriods so we load payments wide enough.
+  // Mirror the deriveMatchPeriod logic — a statement qualifies if periodFrom is within recon period.
+  const qualifyingStatements = statements.filter(
+    s => s.periodFrom >= periodFrom && s.periodFrom <= periodTo
+  );
+  const unionFrom = qualifyingStatements.length > 0
+    ? qualifyingStatements.reduce((min, s) => s.periodFrom < min ? s.periodFrom : min, periodFrom)
+    : periodFrom;
+  const unionTo = qualifyingStatements.length > 0
+    ? qualifyingStatements.reduce((max, s) => s.periodTo > max ? s.periodTo : max, periodTo)
+    : periodTo;
+
+  const payments = await db.select().from(payment).where(
+    and(eq(payment.contractId, contractRow.id), gte(payment.paidAt, unionFrom), lte(payment.paidAt, unionTo))
   );
 
   const computed = computeItemsWithBreakdown(contractRow, periodFrom, periodTo, terms, utilities, payments, reductions, statements);

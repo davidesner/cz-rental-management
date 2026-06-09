@@ -286,6 +286,26 @@ export function ReconciliationDetailPage() {
 
   const rec = data?.reconciliation;
 
+  // Fetch contract + related tenant/property to display readable name (not the cuid)
+  const { data: contractData } = useQuery({
+    queryKey: ['contract', rec?.contractId],
+    queryFn: () => api.get<{ contract: { id: string; propertyId: string; tenantId: string } }>(
+      `/api/contracts/${rec!.contractId}`
+    ),
+    enabled: !!rec?.contractId,
+  });
+  const contract = contractData?.contract;
+  const { data: tenantsData } = useQuery({
+    queryKey: ['tenants'],
+    queryFn: () => api.get<{ tenants: Array<{ id: string; name: string }> }>('/api/tenants'),
+  });
+  const { data: propertiesData } = useQuery({
+    queryKey: ['properties'],
+    queryFn: () => api.get<{ properties: Array<{ id: string; name: string }> }>('/api/properties'),
+  });
+  const tenantName = contract && tenantsData?.tenants.find(t => t.id === contract.tenantId)?.name;
+  const propertyName = contract && propertiesData?.properties.find(p => p.id === contract.propertyId)?.name;
+
   const finalize = useMutation({
     mutationFn: () => api.patch<{ reconciliation: Reconciliation }>(`/api/reconciliations/${id}/finalize`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliations', id] }),
@@ -357,7 +377,16 @@ export function ReconciliationDetailPage() {
       </div>
 
       <Card className="p-6 space-y-2">
-        <p><span className="font-medium">Smlouva:</span> {r.contractId}</p>
+        <p>
+          <span className="font-medium">Pronájem:</span>{' '}
+          {tenantName && propertyName ? (
+            <Link to={`/contracts/${r.contractId}?tab=vyuctovani`} className="text-primary hover:underline">
+              {tenantName} · {propertyName}
+            </Link>
+          ) : (
+            <span className="text-muted-foreground">{r.contractId}</span>
+          )}
+        </p>
         <p><span className="font-medium">Období:</span> {r.periodFrom} – {r.periodTo}</p>
         <p><span className="font-medium">Stav:</span> {r.status}</p>
         {r.computedAt && <p><span className="font-medium">Spočítáno dne:</span> {r.computedAt}</p>}

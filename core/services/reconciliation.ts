@@ -297,8 +297,17 @@ async function buildItemsWithBreakdown(
     .where(eq(contractUtility.contractId, contractRow.id))
     .orderBy(asc(contractUtility.validFrom));
 
+  // For contracts with paymentAppliesTo='next' (rent paid in previous month for next month),
+  // we must load payments going back `offset` months so slot Jan can match payment paid in Dec.
+  const offsetMonths = contractRow.paymentAppliesTo === 'next' ? 1 : 0;
+  const [pfY, pfM, pfD] = periodFrom.split('-').map(Number) as [number, number, number];
+  let qfY = pfY;
+  let qfM = pfM - offsetMonths;
+  while (qfM < 1) { qfY -= 1; qfM += 12; }
+  const paymentQueryFrom = `${qfY}-${String(qfM).padStart(2, '0')}-${String(pfD).padStart(2, '0')}`;
+
   const payments = await db.select().from(payment).where(
-    and(eq(payment.contractId, contractRow.id), gte(payment.paidAt, periodFrom), lte(payment.paidAt, periodTo))
+    and(eq(payment.contractId, contractRow.id), gte(payment.paidAt, paymentQueryFrom), lte(payment.paidAt, periodTo))
   );
 
   const reductions = await db.select().from(rentReduction).where(

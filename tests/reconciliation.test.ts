@@ -282,4 +282,42 @@ describe('reconciliation', () => {
 
     await client.close();
   });
+
+  it('paymentAppliesTo=next: Dec payment naturally matches Jan slot (payment query rozšířený o offset)', async () => {
+    const { db, client } = await freshDb();
+    const app = makeApp(db);
+    const { cookie } = await registerUser(app, 'next@b.cz', 'password123', 'A');
+    const p = (await (await app.request('/api/properties', { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ name: 'CP' }) })).json() as any).property;
+    const t = (await (await app.request('/api/tenants', { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ name: 'VZ' }) })).json() as any).tenant;
+    const ct = (await (await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ propertyId: p.id, tenantId: t.id, startDate: '2024-01-01', paymentDueDay: 25, paymentAppliesTo: 'next' }),
+    })).json() as any).contract;
+    await app.request(`/api/contracts/${ct.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000, source: 'initial' }),
+    });
+
+    // Platba 2023-12-25 (před recon period) → s offset +1 má natural month Jan 2024
+    await app.request('/api/payments/batch', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify([
+        { amount: 3500000, paidAt: '2023-12-25', source: 'bank', externalId: 'dec-prev', contractId: ct.id, counterparty: 'VZ' },
+      ]),
+    });
+
+    const comp = await app.request(`/api/contracts/${ct.id}/reconciliations/compute`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ periodFrom: '2024-01-01', periodTo: '2024-12-31' }),
+    });
+    expect(comp.status).toBe(201);
+    const rec = (await comp.json() as any).reconciliation;
+    const rentItem = rec.items.find((i: any) => i.kind === 'rent');
+    const janMonth = rentItem.breakdown.months.find((m: any) => m.month === '2024-01');
+    expect(janMonth).toBeDefined();
+    // Dec 25 platba (3M Kč rent + 500k advance = 3500k) by měla obsadit Jan slot
+    expect(janMonth.paidThisKind).toBe(3000000);
+
+    await client.close();
+  }, 30_000);
 });

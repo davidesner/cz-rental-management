@@ -31,7 +31,21 @@ interface ContractTerm {
   paymentDueDay: number;
   paymentAppliesTo: 'current' | 'next';
   source: string;
+  documentRef: string | null;
   note: string | null;
+}
+
+function DocRefLink({ value }: { value: string | null }) {
+  if (!value) return <span className="text-muted-foreground">—</span>;
+  const isUrl = /^https?:\/\//.test(value);
+  if (isUrl) {
+    return (
+      <a href={value} target="_blank" rel="noreferrer" className="text-primary underline" title={value}>
+        {(() => { try { return new URL(value).hostname; } catch { return 'odkaz'; } })()}
+      </a>
+    );
+  }
+  return <span className="text-xs text-muted-foreground" title={value}>{value.length > 24 ? value.slice(0, 22) + '…' : value}</span>;
 }
 
 interface Utility {
@@ -267,6 +281,7 @@ function PodminkyTable({ terms, utilities, onEditTerm }: PodminkyTableProps) {
             <TableHead>Σ Měsíčně</TableHead>
             <TableHead>Splatnost</TableHead>
             <TableHead>Zdroj</TableHead>
+            <TableHead>Doklad</TableHead>
             <TableHead>Poznámka</TableHead>
             {onEditTerm && <TableHead className="w-12"></TableHead>}
           </TableRow>
@@ -309,6 +324,9 @@ function PodminkyTable({ terms, utilities, onEditTerm }: PodminkyTableProps) {
                   {activeTerm ? `do ${activeTerm.paymentDueDay}. ${activeTerm.paymentAppliesTo === 'next' ? 'předch.' : 'akt.'} m.` : '—'}
                 </TableCell>
                 <TableCell className="text-xs">{activeTerm?.source ?? '—'}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">
+                  {activeTerm?.validFrom === d ? <DocRefLink value={activeTerm?.documentRef ?? null} /> : <span className="text-muted-foreground">—</span>}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground max-w-md truncate" title={noteParts.join(' · ')}>
                   {noteParts.join(' · ') || '—'}
                 </TableCell>
@@ -762,6 +780,7 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
     paymentDueDay: activeTerm ? String(activeTerm.paymentDueDay) : '10',
     paymentAppliesTo: (activeTerm?.paymentAppliesTo ?? 'current') as 'current' | 'next',
     source: (hasExisting ? 'addendum' : 'initial') as 'initial' | 'addendum' | 'change',
+    documentRef: '',
     note: '',
     utilities: initialUtilities as Partial<Record<UtilityKind, string>>,
   });
@@ -788,6 +807,7 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
         paymentDueDay: parseInt(form.paymentDueDay, 10) || 10,
         paymentAppliesTo: form.paymentAppliesTo,
         source: form.source,
+        documentRef: form.documentRef || null,
         note: form.note || null,
       });
 
@@ -886,6 +906,14 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
           </select>
         </div>
         <div>
+          <Label>Doklad (URL nebo cesta) — volitelné</Label>
+          <Input
+            placeholder="https://drive.google.com/file/d/... nebo /path/to/dodatek-5.pdf"
+            value={form.documentRef}
+            onChange={e => setForm({ ...form, documentRef: e.target.value })}
+          />
+        </div>
+        <div>
           <Label>Poznámka (volitelné)</Label>
           <Input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
         </div>
@@ -962,6 +990,7 @@ function EditPodminkyDialog({ contractId, term, onClose, onUpdated }: EditPodmin
     paymentDueDay: String(term.paymentDueDay),
     paymentAppliesTo: term.paymentAppliesTo as 'current' | 'next',
     source: term.source as 'initial' | 'addendum' | 'change',
+    documentRef: term.documentRef ?? '',
     note: term.note ?? '',
   });
   const [err, setErr] = useState<string | null>(null);
@@ -977,6 +1006,7 @@ function EditPodminkyDialog({ contractId, term, onClose, onUpdated }: EditPodmin
         paymentDueDay: parseInt(form.paymentDueDay, 10) || 10,
         paymentAppliesTo: form.paymentAppliesTo,
         source: form.source,
+        documentRef: form.documentRef || null,
         note: form.note || null,
       });
       onUpdated();
@@ -1031,6 +1061,14 @@ function EditPodminkyDialog({ contractId, term, onClose, onUpdated }: EditPodmin
             <option value="addendum">Dodatek</option>
             <option value="change">Změna</option>
           </select>
+        </div>
+        <div>
+          <Label>Doklad (URL nebo cesta) — volitelné</Label>
+          <Input
+            placeholder="https://drive.google.com/file/d/... nebo /path/to/dodatek-5.pdf"
+            value={form.documentRef}
+            onChange={e => setForm({ ...form, documentRef: e.target.value })}
+          />
         </div>
         <div>
           <Label>Poznámka (volitelné)</Label>

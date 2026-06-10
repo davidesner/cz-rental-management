@@ -122,6 +122,53 @@ describe('contracts REST', () => {
     await client.close();
   });
 
+  it('contract_terms: documentRef nastavitelný v POST a PATCH', async () => {
+    const { client, app, cookie, property, tenant } = await setup();
+    const ctr = (await (await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ propertyId: property.id, tenantId: tenant.id, startDate: '2024-01-01' }),
+    })).json() as any).contract;
+
+    // POST initial s documentRef
+    const initialRes = await app.request(`/api/contracts/${ctr.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000,
+        source: 'initial', documentRef: 'https://drive.google.com/file/d/abc123',
+      }),
+    });
+    const initial = (await initialRes.json() as any).terms;
+    expect(initial.documentRef).toBe('https://drive.google.com/file/d/abc123');
+
+    // POST addendum bez documentRef → null
+    const addendumRes = await app.request(`/api/contracts/${ctr.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        validFrom: '2025-01-01', baseRent: 3200000, serviceAdvance: 500000,
+        source: 'addendum',
+      }),
+    });
+    const addendum = (await addendumRes.json() as any).terms;
+    expect(addendum.documentRef).toBeNull();
+
+    // PATCH addendum doplnit documentRef
+    const patchRes = await app.request(`/api/contracts/${ctr.id}/terms/${addendum.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ documentRef: '/Users/esner/Documents/dodatek-1.pdf' }),
+    });
+    const patched = (await patchRes.json() as any).terms;
+    expect(patched.documentRef).toBe('/Users/esner/Documents/dodatek-1.pdf');
+
+    // PATCH null → vymaže
+    const clearRes = await app.request(`/api/contracts/${ctr.id}/terms/${addendum.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ documentRef: null }),
+    });
+    expect((await clearRes.json() as any).terms.documentRef).toBeNull();
+
+    await client.close();
+  });
+
   it('contract_terms PATCH: rejects unknown termsId', async () => {
     const { client, app, cookie, property, tenant } = await setup();
     const ctr = (await (await app.request('/api/contracts', {

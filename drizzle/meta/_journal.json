@@ -57,6 +57,13 @@
       "when": 1781036650187,
       "tag": "0007_glossy_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781104310728,
+      "tag": "0008_remarkable_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

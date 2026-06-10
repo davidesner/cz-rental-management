@@ -14,6 +14,7 @@ const CreateTerms = z.object({
   paymentDueDay: z.number().int().min(1).max(31).optional(),
   paymentAppliesTo: z.enum(['current', 'next']).optional(),
   source: z.enum(['initial', 'addendum', 'change']),
+  documentRef: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
 });
 
@@ -23,6 +24,7 @@ const UpdateTerms = z.object({
   paymentDueDay: z.number().int().min(1).max(31).optional(),
   paymentAppliesTo: z.enum(['current', 'next']).optional(),
   source: z.enum(['initial', 'addendum', 'change']).optional(),
+  documentRef: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
 });
 

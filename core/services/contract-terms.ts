@@ -11,6 +11,7 @@ export interface CreateTermsInput {
   paymentDueDay?: number;
   paymentAppliesTo?: 'current' | 'next';
   source: 'initial' | 'addendum' | 'change';
+  documentRef?: string | null;
   note?: string | null;
 }
 
@@ -24,6 +25,7 @@ export interface TermsRow {
   paymentDueDay: number;
   paymentAppliesTo: 'current' | 'next';
   source: 'initial' | 'addendum' | 'change';
+  documentRef: string | null;
   note: string | null;
   createdAt: Date;
 }
@@ -62,6 +64,7 @@ export async function addContractTerms(db: DB, orgId: string, contractId: string
       paymentDueDay,
       paymentAppliesTo,
       source: input.source,
+      documentRef: input.documentRef ?? null,
       note: input.note ?? null,
     }).returning();
     return row!;
@@ -79,6 +82,7 @@ export interface UpdateTermsInput {
   paymentDueDay?: number;
   paymentAppliesTo?: 'current' | 'next';
   source?: 'initial' | 'addendum' | 'change';
+  documentRef?: string | null;
   note?: string | null;
 }
 
@@ -97,7 +101,7 @@ export async function updateContractTerms(
   if (!existing) throw new AppError('not_found', 'terms not in contract');
 
   const patch: Record<string, unknown> = {};
-  for (const key of ['baseRent', 'serviceAdvance', 'paymentDueDay', 'paymentAppliesTo', 'source', 'note'] as const) {
+  for (const key of ['baseRent', 'serviceAdvance', 'paymentDueDay', 'paymentAppliesTo', 'source', 'documentRef', 'note'] as const) {
     if (input[key] !== undefined) patch[key] = input[key];
   }
   if (Object.keys(patch).length === 0) return existing as TermsRow;

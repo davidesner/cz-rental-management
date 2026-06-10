@@ -127,6 +127,7 @@ export const contractTerms = pgTable('contract_terms', {
   paymentDueDay: integer('payment_due_day').notNull().default(10),
   paymentAppliesTo: text('payment_applies_to', { enum: ['current', 'next'] }).notNull().default('current'),
   source: text('source', { enum: ['initial', 'addendum', 'change'] }).notNull(),
+  documentRef: text('document_ref'),
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

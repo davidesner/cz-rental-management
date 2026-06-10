@@ -16,6 +16,7 @@ const AddContractTermsInput = z.object({
   paymentDueDay: z.number().int().min(1).max(31).optional().describe('Day of month rent is due (1-31, default inherited from prior terms or 10)'),
   paymentAppliesTo: z.enum(['current', 'next']).optional().describe('"current" = due in same month as rent period; "next" = paid in advance (prior month). Default inherited.'),
   source: z.enum(['initial', 'addendum', 'change']).describe('Source of the terms change'),
+  documentRef: z.string().nullable().optional().describe('Link/path k zdrojovému dokumentu (URL na Drive/cesta na disk) — pro initial = původní smlouva, pro addendum/change = dodatek PDF'),
   note: z.string().nullable().optional().describe('Internal note'),
 });
 
@@ -27,6 +28,7 @@ const UpdateContractTermsInput = z.object({
   paymentDueDay: z.number().int().min(1).max(31).optional().describe('Day of month rent is due (1-31)'),
   paymentAppliesTo: z.enum(['current', 'next']).optional().describe('"current" = due in same month; "next" = paid in advance (prior month)'),
   source: z.enum(['initial', 'addendum', 'change']).optional().describe('Source of the terms change'),
+  documentRef: z.string().nullable().optional().describe('Link/path k dokumentu — null odstraní, string nastaví'),
   note: z.string().nullable().optional().describe('Internal note'),
 });
 

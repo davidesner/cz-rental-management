@@ -1,0 +1,1 @@
+ALTER TABLE "contract_terms" ADD COLUMN "document_ref" text;

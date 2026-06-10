@@ -5,6 +5,14 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 0.3.0 — 2026-06-10
+
+### Added
+- **Shared script `scripts/generate_reconciliation_pdf.py`** — reusable 5-stránkový PDF template pro roční vyúčtování pro nájemce (header + souhrn + per-kind sheets + payment instruction). Property scripts importují `build_pdf()` a předají `RECONCILIATION` dict; schema dokumentován v hlavičce souboru. Stack: `reportlab`.
+
+### Changed
+- Skill SKILL.md: konvence sekce rozšířena o popis `scripts/generate_reconciliation_pdf.py` + per-property pattern `properties/<slug>/generate_pdf_<year>.py`. Workflow ročního vyúčtování má krok 10 — "Generuj PDF pro nájemce".
+
 ## 0.2.0 — 2026-06-10
 
 ### Added

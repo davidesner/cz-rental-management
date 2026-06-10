@@ -1,6 +1,6 @@
 {
   "name": "rental-management",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Roční vyúčtování pronájmu — workflow pro správu nájemních smluv, vyúčtování služeb a srážek z nájmu přes MCP backend.",
   "author": {
     "name": "David Esner",

@@ -1,22 +1,39 @@
 # rental-management
 
-A small SaaS replacing a manual Google Sheet workflow for annual rental reconciliation between a landlord and their tenant(s). Tracks contracts, payments, cost statements, and produces the year-end refund/owe number per kind (rent, services, electricity, gas, …).
+**AI-agent-first rental management platform.** Minimal UI, rich MCP + Skills. Agents do the work — what used to take a day takes minutes.
 
-The project is a **monorepo** with three distinct runtime concerns:
+## Philosophy
 
-| Component | Where it runs | Purpose |
-|---|---|---|
-| **Web app** (frontend + REST API) | Vercel | Day-to-day UI for browsing/editing data, computing reconciliations |
-| **MCP server** | Locally at the user (stdio) | Lets Claude Code / other LLM clients perform reconciliation workflows against the hosted API |
-| **Claude Code plugin** | User-installable | Workflow skill + commands that automate the annual reconciliation process |
+Annual property reconciliation traditionally takes hours, sometimes a whole day per property: pull invoices from email, find the right `evidenční list`, reconcile electricity bills against monthly advances, compute solar credits and FO odečet, draft an amendment for the new rent, send a summary to the tenant. Repetitive, error-prone, manual.
+
+This project is built on a simple premise: **in a world of capable AI agents, no one wants to click through a UI to fill values into a proprietary form**. So we don't ask them to. The web app is intentionally minimal — it holds only the business logic and the data structure, plus a thin UI for review and correction. The real value lives elsewhere:
+
+- A **clean REST API + MCP server** that exposes every entity (properties, contracts, payments, cost statements, reconciliations, tenants, …) with strong types and idempotent writes — designed for agents first, humans second.
+- A **Claude Code plugin** with skills that teach an agent *how* to perform the annual reconciliation: read whatever source documents the user happens to have (PDF, DOCX, image, CSV, bank export, email body) → parse → compute domain-specific adjustments → write the result to the platform → produce a polished PDF for the tenant.
+- A **per-property learning loop**: the first time the agent processes documents for a property, it writes its own parsers and computers and saves regression fixtures. Subsequent runs reuse them. The skill compounds in value with every use.
+
+What the user does: point the agent at their source documents — bank statement, SVJ evidenční list, contract, electricity bill — and confirm the result before it persists. Done in minutes instead of hours.
+
+### Where this leads
+
+The architecture is a stepping stone toward **fully automated workflows**. Same building blocks (MCP + skills + small reliable backend), more autonomy:
+
+- New `evidenční list` PDF arrives by email → an agent watching the inbox parses it, registers a new cost statement in the platform → the next reconciliation picks it up automatically.
+- Monthly bank export drops into a folder → payments reconciled against contracts → tenant-late alerts surface in the UI.
+- Rent change for next year? → agent generates a polished Typst-rendered contract amendment from the new terms and the prior amendment template, ready for signature.
+- Year-end reconciliation auto-runs → a tenant-ready PDF report is generated and (with consent) emailed.
+
+The app itself stays small and boring on purpose. The intelligence is where it should be: in the agent that uses the data.
 
 ---
 
-## Why three things
+## Monorepo
 
-- The **web app** is the source of truth — owns the database, auth, REST endpoints, and UI.
-- The **MCP server** is a thin client that wraps the same REST API. It lets an LLM agent automate document parsing, computation, and data entry against the same backend a human uses.
-- The **plugin** is a packaged workflow that teaches Claude Code *how to use* the MCP server for a specific real-world task (annual reconciliation). It accumulates per-property knowledge over time (parsers, rules, fixtures).
+| Component | Where it runs | Purpose |
+|---|---|---|
+| **Web app** (frontend + REST API) | Vercel | Source of truth — owns DB, auth, REST endpoints. UI is for review and edge-case correction, not bulk data entry. |
+| **MCP server** | Locally at the user (stdio) | Thin client wrapping the REST API — exposes one tool per resource so any LLM client (Claude Code, Cursor, etc.) can read and write data. |
+| **Claude Code plugin** | User-installable | Packaged workflow that teaches the agent the annual reconciliation process. Self-extends with per-property knowledge. |
 
 ---
 

@@ -32,6 +32,8 @@ export interface ItemBreakdown {
   matchPeriod: { from: string; to: string };
   matchPeriodSource: 'default' | 'from-cost-statements';
   matchPeriodIsDifferentFromDefault: boolean;
+  /** When auto-shift was applied (prior statement claimed boundary month), original (unshifted) start date. */
+  matchPeriodNaturalFrom?: string;
 }
 
 export interface ReconciliationItemRow {
@@ -91,24 +93,44 @@ function eachMonthInPeriod(periodFrom: string, periodTo: string): Array<{ year: 
  *
  * If candidates found: matchPeriod = (min(cs.periodFrom), max(cs.periodTo))
  * Otherwise: matchPeriod = (reconPeriodFrom, reconPeriodTo)  [default]
+ *
+ * AUTO-SHIFT for cross-year cycles: If a PRIOR statement of the same kind ends
+ * in the same calendar month as our matchPeriod starts (e.g., prior ends 2025-02-14,
+ * we start 2025-02-15), shift our matchPeriod start to the next month (2025-03-01)
+ * to avoid double-counting that boundary month across two reconciliations.
+ * `shiftedFromNatural` is populated when this happens, for UI tooltip use.
  */
 function deriveMatchPeriod(
   kind: string,
   reconPeriodFrom: string,
   reconPeriodTo: string,
   statements: Array<{ kind: string; periodFrom: string; periodTo: string }>,
-): { from: string; to: string; source: 'default' | 'from-cost-statements' } {
-  const candidates = statements.filter(
-    s => s.kind === kind
-      && s.periodFrom >= reconPeriodFrom
-      && s.periodFrom <= reconPeriodTo
+): { from: string; to: string; source: 'default' | 'from-cost-statements'; shiftedFromNatural?: string } {
+  const sameKind = statements.filter(s => s.kind === kind);
+  const candidates = sameKind.filter(
+    s => s.periodFrom >= reconPeriodFrom && s.periodFrom <= reconPeriodTo
   );
   if (candidates.length === 0) {
     return { from: reconPeriodFrom, to: reconPeriodTo, source: 'default' };
   }
-  const from = candidates.reduce((min, s) => s.periodFrom < min ? s.periodFrom : min, candidates[0]!.periodFrom);
+  const naturalFrom = candidates.reduce((min, s) => s.periodFrom < min ? s.periodFrom : min, candidates[0]!.periodFrom);
   const to = candidates.reduce((max, s) => s.periodTo > max ? s.periodTo : max, candidates[0]!.periodTo);
-  return { from, to, source: 'from-cost-statements' };
+
+  // Detect overlap with a prior statement of the same kind that ends in our start month.
+  const naturalFromMonth = naturalFrom.slice(0, 7);
+  const priorOverlap = sameKind.find(
+    s => s.periodFrom < naturalFrom && s.periodTo.slice(0, 7) === naturalFromMonth
+  );
+  if (priorOverlap) {
+    // Shift to first day of NEXT month — that month belongs to the prior statement.
+    const [y, m] = naturalFromMonth.split('-').map(Number) as [number, number];
+    const ny = m === 12 ? y + 1 : y;
+    const nm = m === 12 ? 1 : m + 1;
+    const shifted = `${ny}-${String(nm).padStart(2, '0')}-01`;
+    return { from: shifted, to, source: 'from-cost-statements', shiftedFromNatural: naturalFrom };
+  }
+
+  return { from: naturalFrom, to, source: 'from-cost-statements' };
 }
 
 /**
@@ -284,6 +306,7 @@ function computeItemsWithBreakdown(
         matchPeriod: { from: mp.from, to: mp.to },
         matchPeriodSource: mp.source,
         matchPeriodIsDifferentFromDefault,
+        ...(mp.shiftedFromNatural ? { matchPeriodNaturalFrom: mp.shiftedFromNatural } : {}),
       },
     });
   }

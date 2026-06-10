@@ -34,6 +34,8 @@ interface ItemBreakdown {
   matchPeriod?: { from: string; to: string };
   matchPeriodSource?: 'default' | 'from-cost-statements';
   matchPeriodIsDifferentFromDefault?: boolean;
+  /** When auto-shift applied (prior statement claimed boundary month), original natural start date. */
+  matchPeriodNaturalFrom?: string;
 }
 
 interface ReconciliationItem {
@@ -186,18 +188,25 @@ function ReconciliationItemRow({
   const mp = item.breakdown?.matchPeriod;
   const mpSource = item.breakdown?.matchPeriodSource;
   const mpDiffers = item.breakdown?.matchPeriodIsDifferentFromDefault ?? false;
+  const naturalFrom = item.breakdown?.matchPeriodNaturalFrom;
+  const isShifted = Boolean(naturalFrom);
 
   const periodLabel = mp
     ? `${mp.from} – ${mp.to}`
     : '—';
 
-  const sourceLabel = mpSource === 'from-cost-statements'
-    ? '(ze statementu)'
-    : '(default)';
+  const sourceLabel = isShifted
+    ? '(ze statementu, posunuto)'
+    : mpSource === 'from-cost-statements'
+      ? '(ze statementu)'
+      : '(default)';
 
-  const tooltipText = mpDiffers && mp
-    ? `Matching období je odvozeno z cost statementu (${mp.from} až ${mp.to}). Pokud existuje cost statement daného druhu jehož periodFrom startuje uvnitř reconciliation období, jeho period (sjednocený přes víc statementů) určuje matching okno pro platby. Jinak default = reconciliation období.`
-    : '';
+  // Show tooltip when matchPeriod differs from default OR when auto-shift was applied
+  const tooltipText = isShifted && mp && naturalFrom
+    ? `Matching období bylo posunuto z ${naturalFrom} na ${mp.from}, protože měsíc ${naturalFrom.slice(0, 7)} už pokrývá předchozí vyúčtování stejného druhu (cost statement co končí v tom měsíci). Tím se brání double-count platby na boundary mezi dvěma cykly.`
+    : mpDiffers && mp
+      ? `Matching období je odvozeno z cost statementu (${mp.from} až ${mp.to}). Pokud existuje cost statement daného druhu jehož periodFrom startuje uvnitř reconciliation období, jeho period (sjednocený přes víc statementů) určuje matching okno pro platby. Jinak default = reconciliation období.`
+      : '';
 
   return (
     <>
@@ -225,10 +234,10 @@ function ReconciliationItemRow({
               {periodLabel}
             </span>
             <span className="text-xs text-muted-foreground">{sourceLabel}</span>
-            {mpDiffers && tooltipText && (
+            {(mpDiffers || isShifted) && tooltipText && (
               <div className="relative inline-block">
                 <button
-                  className="text-blue-500 hover:text-blue-700 text-xs leading-none"
+                  className={`${isShifted ? 'text-amber-600 hover:text-amber-700' : 'text-blue-500 hover:text-blue-700'} text-xs leading-none`}
                   onMouseEnter={() => setTooltipVisible(true)}
                   onMouseLeave={() => setTooltipVisible(false)}
                   onClick={e => e.stopPropagation()}

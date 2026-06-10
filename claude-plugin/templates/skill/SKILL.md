@@ -101,20 +101,31 @@ Reconciliation matchuje platby a náklady per kind podle pravidla:
 
 Tato logika umožňuje různé cykly per kind (např. SVJ kalendářní rok + elektřina Feb-Feb).
 
-### Prevence problémů
+### Auto-shift při overlap mezi po sobě jdoucími cycle statementy
 
-**Pokud cost statement crossuje year boundary** (např. PRE Feb 2024 - Feb 2025), můžeš zvolit:
+Když máš více statementů stejného druhu (např. roční PRE pro elektřinu několik let za sebou), boundary měsíc mezi dvěma cycle statementy by se jinak počítal dvakrát (jednou v každém reconciliation). Calc to řeší automaticky:
 
-- (a) **Nechat tak** — statement startuje v jednom roce (2024), automaticky patří k tomu recon (2024). MatchPeriod pro elektřinu = Feb-Feb. Platby matchovány v té periodě. Druhý rok (2025) recon nedostane žádný statement co tam nepatří, použije default.
+**Pravidlo**: pokud PŘEDCHOZÍ statement stejného druhu/property končí ve stejném kalendářním měsíci jako start aktuálního statementu, aktuální matchPeriod se posune o měsíc dopředu (boundary měsíc "vlastní" předchozí statement).
 
-- (b) **Proporcionální split na 2 statementy** — pokud chceš strict kalendářní rok matching, rozděl jeden cycle statement na dva:
+**Příklad** (<property-name-b> PRE):
+- Statement A: `2024-02-15 → 2025-02-14` → 2024 recon, matchPeriod **Feb 2024 - Feb 2025** (13 měsíců, no prior)
+- Statement B: `2025-02-15 → 2026-02-14` → 2025 recon, matchPeriod **Mar 2025 - Feb 2026** (12 měsíců, prior A končí v Feb 2025 → shift)
+- Feb 2025 je zahrnut JEN v 2024 recon (A), ne v 2025 recon (B) → **žádný double-count**
+
+**V UI**: posunutý matchPeriod má amber ⓘ tooltip s vysvětlením "měsíc už pokrývá předchozí vyúčtování".
+
+**Co dělat user-side**: zachovat původní periodu z faktury (Feb 15 - Feb 14) — calc shift udělá za tebe. Žádná manuální úprava cost statementu.
+
+**Gaps fungují**: pokud mezi statementy je mezera (např. A končí Dec 2024, C startuje Feb 2026), shift se neaplikuje (boundary měsíce se nedotýkají).
+
+### Alternativy (pokud nechceš spoléhat na shift)
+
+- **Month-aligned period**: zaokrouhli na celé měsíce (např. Mar 1 → Feb 28 místo Feb 15 → Feb 14). Cost upravit pokud chceš proporcionálně, nebo nechat jak je faktura (drobná nepřesnost ~1 den).
+- **Proporcionální split na 2 statementy** (jeden per kalendářní rok):
   - Statement A: 2024-02-15 → 2024-12-31 (cost = `total × (321/366)`)
   - Statement B: 2025-01-01 → 2025-02-14 (cost = `total × (45/366)`)
   - Adjustmenty rozděl analogicky
-  - Každý belongs k svému kalendářnímu roku reconciliace
-  - **Pro klientskou stranu lepší pokud chceš predictable calendar-year matching**
-
-Volba mezi (a) a (b) je per-property metodika — doporuč user vybrat jednu a držet se jí.
+  - Vhodné když potřebuješ strict per-rok matching i pro nákladovou hodnotu (ne jen měsíce platby)
 
 ### Ukaž user period preview
 

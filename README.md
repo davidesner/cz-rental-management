@@ -1,5 +1,7 @@
 # rental-management
 
+*Česká verze: [`README_CZ.md`](./README_CZ.md)*
+
 **AI-agent-first rental management platform.** Minimal UI, rich MCP + Skills. Agents do the work — what used to take a day takes minutes.
 
 ## Philosophy

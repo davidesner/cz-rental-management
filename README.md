@@ -1,4 +1,4 @@
-# rental-management
+# AI-First Czech Property Rental Management
 
 *Česká verze: [`README_CZ.md`](./README_CZ.md)*
 

@@ -1,4 +1,4 @@
-# rental-management
+# AI-first správa nájemních nemovitostí
 
 *English version: [`README.md`](./README.md)*
 

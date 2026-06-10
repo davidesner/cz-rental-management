@@ -89,11 +89,14 @@ If yes:
 ## Step 7: Report
 
 Tell user:
-- Local skill installed at `<target>`
+- Local skill installed at `<target>` — obsahuje:
+  - Hlavní reconciliation skill (`SKILL.md`)
+  - Sub-skill `contracts/` pro generování smluv a dodatků (Typst-based, viz `contracts/SKILL.md`)
 - (If applicable) symlink created
 - (If applicable) `.mcp.json` updated
 - "Restart Claude Code to pick up changes"
-- "Then invoke me via 'compute reconciliation' / 'process rental bills' — the workflow skill will guide you"
+- "Then invoke me via 'compute reconciliation' / 'process rental bills' (reconciliation) nebo 'vyrob dodatek' / 'udělej smlouvu' (contracts) — workflow skills tě provedou"
+- Doporučit `brew install typst pandoc poppler` pro contracts skill pokud nejsou (typst pro kompilaci, pandoc pro DOCX→MD, poppler pro PDF preview)
 
 ## Safety
 

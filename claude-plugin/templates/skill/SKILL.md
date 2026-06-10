@@ -19,6 +19,8 @@ Tento skill je lokální kopie šablony z `rental-management` pluginu. Než zač
 
 Tato kontrola se dělá **jednou na začátku konverzace**, ne před každou MCP operací.
 
+**Sister skill — Contract documents**: pokud user požaduje vyrobit/reformat smlouvu nebo dodatek, použij sub-skill v `contracts/SKILL.md` (workflow A — learn template z existujícího PDF/DOCX, workflow B — render z uložené šablony + dat z MCP). Reconciliation a contracts mohou koexistovat ve stejné konverzaci.
+
 1. **Identifikuj property**:
    - Z user promptu (jméno nemovitosti)
    - Nebo přes MCP `properties_list` a zeptej se user

@@ -1,0 +1,238 @@
+# rental-management
+
+A small SaaS replacing a manual Google Sheet workflow for annual rental reconciliation between a landlord and their tenant(s). Tracks contracts, payments, cost statements, and produces the year-end refund/owe number per kind (rent, services, electricity, gas, …).
+
+The project is a **monorepo** with three distinct runtime concerns:
+
+| Component | Where it runs | Purpose |
+|---|---|---|
+| **Web app** (frontend + REST API) | Vercel | Day-to-day UI for browsing/editing data, computing reconciliations |
+| **MCP server** | Locally at the user (stdio) | Lets Claude Code / other LLM clients perform reconciliation workflows against the hosted API |
+| **Claude Code plugin** | User-installable | Workflow skill + commands that automate the annual reconciliation process |
+
+---
+
+## Why three things
+
+- The **web app** is the source of truth — owns the database, auth, REST endpoints, and UI.
+- The **MCP server** is a thin client that wraps the same REST API. It lets an LLM agent automate document parsing, computation, and data entry against the same backend a human uses.
+- The **plugin** is a packaged workflow that teaches Claude Code *how to use* the MCP server for a specific real-world task (annual reconciliation). It accumulates per-property knowledge over time (parsers, rules, fixtures).
+
+---
+
+## Tech stack
+
+**Backend:** TypeScript · Hono · Drizzle ORM (postgres-js) · better-auth · Zod · PostgreSQL (local Docker / Neon prod)
+**Frontend:** React 19 · Vite · TailwindCSS · shadcn/ui · TanStack Query
+**Testing:** Vitest · Playwright
+**MCP:** fastmcp (stdio)
+**Documents (in plugin):** Typst (Latex-modern alternative) · pandoc · reportlab (Python, PDF)
+
+---
+
+## Quick start
+
+```bash
+# 1. Local Postgres
+docker run -d --name rental-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
+docker exec rental-pg createdb -U postgres rental_dev
+
+# 2. Install + env + migrate
+pnpm install
+cp .env.example .env   # adjust DATABASE_URL if needed
+pnpm db:migrate
+
+# 3. Run dev
+pnpm dev               # API on :3000, Vite on :5173
+```
+
+Deployment to Vercel + Neon: see [`DEPLOY.md`](./DEPLOY.md).
+Repo orientation for contributors / AI agents: see [`CLAUDE.md`](./CLAUDE.md).
+
+---
+
+## Architecture
+
+### High level
+
+```
+                    ┌──────────────────────────┐
+                    │   User (browser / CLI)   │
+                    └────┬──────────────┬──────┘
+                         │              │
+                  browser│              │stdio
+                         │              │
+                    ┌────▼──────┐  ┌────▼─────────┐
+                    │  Vite SPA │  │  MCP server  │
+                    │  (React)  │  │  (fastmcp)   │
+                    └────┬──────┘  └────┬─────────┘
+                         │              │
+                         │ /api         │ HTTPS + token
+                         │              │
+                    ┌────▼──────────────▼─────────┐
+                    │  Hono REST API (Vercel fn)  │
+                    │  • auth (better-auth)       │
+                    │  • routes → core/services/  │
+                    └────┬────────────────────────┘
+                         │
+                    ┌────▼────────┐
+                    │  PostgreSQL │
+                    │  (Neon)     │
+                    └─────────────┘
+```
+
+### Code structure
+
+```
+api/                  → Vercel serverless entry (Hono adapter, production)
+server/               → Local Node.js entry (long-running, dev only)
+  app.ts              → buildApp(deps) — composes routes + middleware
+  routes/             → REST endpoints (one file per resource)
+  middleware/         → Auth context (session + API token)
+core/                 → Pure domain logic, framework-free
+  db/                 → Drizzle schema, client, migration runner
+  services/           → Business logic per resource
+  lib/                → Pure helpers (allocation, payment-matching, temporal)
+  auth/               → better-auth setup
+src/                  → React frontend (Vite)
+mcp/                  → Standalone MCP server (separate concern)
+  tools/              → One file per resource exposing MCP tools
+tests/                → Vitest integration + service tests (fresh-DB per test)
+tests-e2e/            → Playwright browser tests
+drizzle/              → Generated SQL migrations
+claude-plugin/        → Claude Code plugin (workflow skill)
+```
+
+`core/` is the heart — every route handler and MCP tool is a thin shell calling into `core/services/*.ts`. The same business logic backs HTTP and MCP. UI (`src/`) talks only to `/api`.
+
+### Domain rules (summarized)
+
+- **Money in haléře** (integer CZK × 100), never float.
+- **Multi-tenant via `orgId`** on every row; services enforce filtering.
+- **SCD2 temporal pattern** for terms / utilities / tariffs (`validFrom`, `validTo`).
+- **Rent-first allocation** for payments (rent → services → utilities).
+- **FIFO payment matching with `naturalMonth`** — one payment never splits across months.
+- **Per-kind `matchPeriod`** for reconciliation, with **auto-shift** to prevent double-counting boundary months across years.
+
+Detailed explanations in [`CLAUDE.md`](./CLAUDE.md) and `core/services/reconciliation.ts`.
+
+---
+
+## Claude Code plugin: skill architecture
+
+The plugin's most distinctive design choice: **the user owns the workflow skill**. The plugin ships a *template* that the user copies into their local skill directory once. The local copy then grows over time as Claude Code learns each property's documents and parsing rules — without that knowledge ever flowing back to the plugin.
+
+```mermaid
+flowchart TB
+    M[Plugin marketplace<br/>or local --plugin-dir] -->|claude install rental-management| P
+
+    subgraph P[claude-plugin/]
+        direction LR
+        CMD[commands/<br/>• init.md<br/>• update.md]
+        TPL[templates/skill/<br/>• SKILL.md<br/>• contracts/<br/>• scripts/]
+        VER[(plugin.json<br/>#version)]
+    end
+
+    P -->|"/rental-management:init"<br/>one-time bootstrap| US
+
+    subgraph US[~/.claude/skills/rental-management/]
+        direction LR
+        SK[SKILL.md<br/>contracts/<br/>scripts/<br/>.template-version]
+        UD[properties/&lt;slug&gt;/<br/>fixtures/<br/>━━━━━━━━━━━━━<br/>USER-OWNED<br/>grows as Claude learns]
+    end
+
+    US -->|Claude Code session<br/>auto-discovers skill| AGENT[Agent invokes workflow]
+    AGENT -->|learn mode: new property| UD
+    AGENT -->|render mode: existing| UD
+
+    P -.->|"plugin.json bumps<br/>→ /rental-management:update"| MERGE{Per-file<br/>3-way diff}
+    MERGE -->|template-owned files| SK
+    MERGE -.->|properties/ + fixtures/<br/>NEVER touched| UD
+```
+
+### What the two flows do
+
+**`/rental-management:init`** (run once after installing the plugin):
+1. Asks the user where to install (default `~/.claude/skills/rental-management/`).
+2. Copies the plugin's `templates/skill/` tree to that location.
+3. Optionally helps set up `.mcp.json` so Claude Code can find the MCP server.
+4. Writes `.template-version` marker (tracks which plugin version was synced).
+
+**`/rental-management:update`** (run after the plugin updates):
+1. Compares `.template-version` in the local skill with current plugin version.
+2. If newer: per-file diff for template-owned files (`SKILL.md`, `scripts/*`, `contracts/*`).
+3. User chooses per file: **overwrite** / **manual merge** (`*.template-new` written alongside) / **skip**.
+4. **`properties/` and `fixtures/` are explicitly never touched** — user-owned data.
+5. Bumps `.template-version` marker.
+
+### How the skill "self-updates as it learns"
+
+The plugin template seeds the skeleton. The local skill then accumulates per-property knowledge inside `properties/<slug>/`:
+
+```
+~/.claude/skills/rental-management/
+├── SKILL.md                       ← from template (updated via /update)
+├── contracts/                     ← from template
+├── scripts/                       ← from template
+├── .template-version              ← sync marker
+└── properties/                    ← USER-OWNED (never overwritten)
+    ├── <property-a>/
+    │   ├── README.md              ← per-property methodology
+    │   ├── electricity_parser.py  ← if PDF parsing needed
+    │   ├── compute_solar.py       ← if domain math needed
+    │   └── fixtures/              ← regression test data
+    └── <property-b>/
+        └── ...
+```
+
+The first time the user processes documents for a new property, Claude enters **learning mode**: it asks about document structure, writes parsers/computers as Python scripts, and saves regression fixtures. Subsequent reconciliations for the same property reuse those parsers automatically.
+
+This separation means:
+- Plugin updates (new SKILL.md sections, new shared scripts) can flow safely.
+- Per-property data (which is personal and sometimes sensitive) stays out of the plugin and out of git history.
+- A user can fork the local skill freely without losing template-updateability.
+
+### Sub-skills
+
+- **Root skill** (`SKILL.md`) — annual rental reconciliation workflow (read documents → parse → compute → reconcile via MCP → produce PDF for tenant).
+- **`contracts/SKILL.md`** — Typst-based contract and amendment document generation. Two modes: *learn template* from existing DOCX/PDF, *render document* from saved template + MCP data.
+
+---
+
+## MCP server (separate package — eventually)
+
+`mcp/` runs as a stdio process at the user's machine. It exposes one tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) and authenticates against the hosted API via a per-user token.
+
+```jsonc
+// ~/.claude/mcp.json
+{
+  "mcpServers": {
+    "rental-management": {
+      "command": "pnpm", "args": ["mcp"],
+      "cwd": "/path/to/rental-management",
+      "env": {
+        "RENTAL_API_URL": "https://your-app.vercel.app",
+        "RENTAL_API_TOKEN": "<from /settings/api-tokens>"
+      }
+    }
+  }
+}
+```
+
+Eventually this will be published as an npm package consumable via `npx`, removing the need for users to clone the repo locally.
+
+---
+
+## Documentation
+
+- [`CLAUDE.md`](./CLAUDE.md) — orientation for AI agents and contributors
+- [`DEPLOY.md`](./DEPLOY.md) — Vercel + Neon deployment checklist
+- [`claude-plugin/CHANGELOG.md`](./claude-plugin/CHANGELOG.md) — plugin release notes
+- [`claude-plugin/templates/skill/SKILL.md`](./claude-plugin/templates/skill/SKILL.md) — end-user workflow skill
+- [`claude-plugin/templates/skill/contracts/SKILL.md`](./claude-plugin/templates/skill/contracts/SKILL.md) — contracts sub-skill
+
+---
+
+## License
+
+Private / personal use.

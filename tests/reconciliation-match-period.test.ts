@@ -267,6 +267,88 @@ describe('per-kind matchPeriod derivation', () => {
     await client.close();
   }, 30_000);
 
+  it('gap detection: warning when statements have a gap intersecting recon period', async () => {
+    // Statement A: 2024-01-01 → 2024-12-31 (full year)
+    // Statement B: 2025-04-01 → 2025-12-31 (skip Jan-Mar 2025!)
+    // For 2025 recon: B is candidate. Gap = 2025-01-01 → 2025-03-31 (3 months).
+    // Gap intersects recon period (Jan-Dec 2025) → surfaced as warning in breakdown.gaps.
+    const { client, app, cookie, property, contract } = await bootstrap('mp-gapwarn@b.cz', '2024-01-01');
+
+    await app.request('/api/cost-statements', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        propertyId: property.id, kind: 'electricity',
+        periodFrom: '2024-01-01', periodTo: '2024-12-31',
+        totalAmount: 1000000, adjustmentAmount: 0,
+      }),
+    });
+    await app.request('/api/cost-statements', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        propertyId: property.id, kind: 'electricity',
+        periodFrom: '2025-04-01', periodTo: '2025-12-31',
+        totalAmount: 800000, adjustmentAmount: 0,
+      }),
+    });
+    // Add a payment so electricity item appears (otherwise actual=0 && paid=0 → skipped)
+    await app.request('/api/payments/batch', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify([{
+        amount: 4120000, paidAt: '2025-06-10', source: 'bank',
+        externalId: 'mp-gap-jun', contractId: contract.id, counterparty: 'TENANT',
+      }]),
+    });
+
+    const comp = await app.request(`/api/contracts/${contract.id}/reconciliations/compute`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ periodFrom: '2025-01-01', periodTo: '2025-12-31' }),
+    });
+    expect(comp.status).toBe(201);
+    const rec = (await comp.json() as any).reconciliation;
+    const elec = rec.items.find((i: any) => i.kind === 'electricity');
+    expect(elec).toBeDefined();
+    expect(elec.breakdown.gaps).toBeDefined();
+    expect(elec.breakdown.gaps).toHaveLength(1);
+    expect(elec.breakdown.gaps[0]).toEqual({ from: '2025-01-01', to: '2025-03-31' });
+
+    await client.close();
+  }, 30_000);
+
+  it('no gap warning: consecutive statements touch exactly (A end + 1 day = B start)', async () => {
+    // Statement A: 2024-02-15 → 2025-02-14
+    // Statement B: 2025-02-15 → 2026-02-14 (B.periodFrom = A.periodTo + 1 day)
+    // No gap.
+    const { client, app, cookie, property, contract } = await bootstrap('mp-touching@b.cz', '2024-01-01');
+
+    await app.request('/api/cost-statements', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        propertyId: property.id, kind: 'electricity',
+        periodFrom: '2024-02-15', periodTo: '2025-02-14',
+        totalAmount: 1500000, adjustmentAmount: 0,
+      }),
+    });
+    await app.request('/api/cost-statements', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        propertyId: property.id, kind: 'electricity',
+        periodFrom: '2025-02-15', periodTo: '2026-02-14',
+        totalAmount: 1500000, adjustmentAmount: 0,
+      }),
+    });
+
+    const comp = await app.request(`/api/contracts/${contract.id}/reconciliations/compute`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ periodFrom: '2025-01-01', periodTo: '2025-12-31' }),
+    });
+    expect(comp.status).toBe(201);
+    const rec = (await comp.json() as any).reconciliation;
+    const elec = rec.items.find((i: any) => i.kind === 'electricity');
+    expect(elec.breakdown.gaps).toBeUndefined();
+
+    await client.close();
+  }, 30_000);
+
   it('no shift: gap between statements (prior ends earlier, no boundary touch)', async () => {
     // Statement A: 2024-01-01 → 2024-12-31 (calendar year)
     // Statement B: 2026-02-15 → 2027-02-14 (skip 2025, no overlap)

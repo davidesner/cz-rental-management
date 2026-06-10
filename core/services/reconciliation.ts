@@ -34,6 +34,9 @@ export interface ItemBreakdown {
   matchPeriodIsDifferentFromDefault: boolean;
   /** When auto-shift was applied (prior statement claimed boundary month), original (unshifted) start date. */
   matchPeriodNaturalFrom?: string;
+  /** Gaps between consecutive cost statements of the same kind that intersect the union span.
+   *  Each gap = period where no statement covers — payments in those months don't reconcile. */
+  gaps?: Array<{ from: string; to: string }>;
 }
 
 export interface ReconciliationItemRow {
@@ -83,6 +86,44 @@ function eachMonthInPeriod(periodFrom: string, periodTo: string): Array<{ year: 
     if (m > 12) { y++; m = 1; }
   }
   return result;
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Find gaps between consecutive statements of the same kind whose interval
+ * intersects [intersectFrom, intersectTo]. Each gap = period where no statement
+ * covers — payments in those months don't match against any cost statement.
+ */
+function findGapsForKind(
+  kind: string,
+  statements: Array<{ kind: string; periodFrom: string; periodTo: string }>,
+  intersectFrom: string,
+  intersectTo: string,
+): Array<{ from: string; to: string }> {
+  const sorted = statements
+    .filter(s => s.kind === kind)
+    .sort((a, b) => a.periodFrom.localeCompare(b.periodFrom));
+
+  const gaps: Array<{ from: string; to: string }> = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i]!;
+    const b = sorted[i + 1]!;
+    const dayAfterA = addDays(a.periodTo, 1);
+    if (dayAfterA < b.periodFrom) {
+      const gapFrom = dayAfterA;
+      const gapTo = addDays(b.periodFrom, -1);
+      // Only surface gaps that intersect with our window of interest
+      if (gapFrom <= intersectTo && gapTo >= intersectFrom) {
+        gaps.push({ from: gapFrom, to: gapTo });
+      }
+    }
+  }
+  return gaps;
 }
 
 /**
@@ -295,6 +336,9 @@ function computeItemsWithBreakdown(
       : costPerKind[kind];
     if (actual === 0 && paid === 0) continue;
 
+    // Detect gaps between consecutive statements of this kind, restricted to the union span
+    const gaps = findGapsForKind(kind, statements, unionFrom, unionTo);
+
     result.push({
       kind,
       actualCost: actual,
@@ -307,6 +351,7 @@ function computeItemsWithBreakdown(
         matchPeriodSource: mp.source,
         matchPeriodIsDifferentFromDefault,
         ...(mp.shiftedFromNatural ? { matchPeriodNaturalFrom: mp.shiftedFromNatural } : {}),
+        ...(gaps.length > 0 ? { gaps } : {}),
       },
     });
   }
@@ -336,12 +381,12 @@ async function buildItemsWithBreakdown(
     eq(rentReduction.contractId, contractRow.id)
   );
 
+  // Load ALL property statements (not just those overlapping recon period) — needed
+  // by gap detection and auto-shift which reason about adjacent prior/next statements.
   const statements = await db.select().from(costStatement).where(
     and(
       eq(costStatement.orgId, contractRow.orgId),
       eq(costStatement.propertyId, contractRow.propertyId),
-      lte(costStatement.periodFrom, periodTo),
-      gte(costStatement.periodTo, periodFrom),
     ),
   );
 

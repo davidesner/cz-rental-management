@@ -36,6 +36,7 @@ interface ItemBreakdown {
   matchPeriodIsDifferentFromDefault?: boolean;
   /** When auto-shift applied (prior statement claimed boundary month), original natural start date. */
   matchPeriodNaturalFrom?: string;
+  gaps?: Array<{ from: string; to: string }>;
 }
 
 interface ReconciliationItem {
@@ -80,6 +81,23 @@ function ItemBreakdownPanel({ breakdown }: { breakdown: ItemBreakdown | undefine
 
   return (
     <div className="bg-muted/30 border-t px-4 py-3 space-y-4">
+      {/* Gap warning */}
+      {breakdown.gaps && breakdown.gaps.length > 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <p className="font-semibold mb-1">⚠ Mezera v podkladech</p>
+          <p className="mb-1">
+            Mezi cost statementy tohoto druhu chybí podklad pro:
+          </p>
+          <ul className="list-disc ml-5">
+            {breakdown.gaps.map((g, i) => (
+              <li key={i}>{g.from} – {g.to}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-amber-700">
+            Platby v tom období se nepárují s žádným nákladem. Doplň cost statement nebo zkontroluj že je to záměr.
+          </p>
+        </div>
+      )}
       {/* Cost statements */}
       <div>
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">

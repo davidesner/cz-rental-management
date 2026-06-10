@@ -16,7 +16,7 @@ What the user does: point the agent at their source documents — bank statement
 
 ### Where this leads
 
-That the MCP server (CLI TBD) is just an agentic interface and it works with any client that speaks the protocol (Claude Code, Claude Desktop, Cursor, …). The Claude Code plugin is one workflow on top, not the only one possible. Combined with other MCPs (email, file, bank export parser), the same backend supports:
+That the MCP server (CLI TBD) is just an agentic interface and it works with any client that speaks the protocol (Claude Code, Claude Desktop, Cursor, …). The Claude Code plugin is one workflow on top, not the only one possible. Combined with other MCPs (email, file, bank export parser) and Skills, you can get to worklfows like:
 
 - An always-on agent that watches a landlord inbox, registers incoming `evidenční list` PDFs as cost statements, flags late payments. No custom app — just wired-together MCP servers and a system prompt.
 - Monthly bank export → matched against contracts → late-payment surfaces in the UI.
@@ -24,6 +24,50 @@ That the MCP server (CLI TBD) is just an agentic interface and it works with any
 - Year-end → reconciliation PDF generated and emailed.
 
 The domain logic and the MCP surface stay the same regardless of which agent runs on top.
+
+---
+
+## Features
+
+Built from real-life messiness of a Czech residential lease — not a textbook generalization.
+
+### Contracts evolve over time
+
+A lease isn't a single snapshot. Rent goes up, payment day changes, service advance gets adjusted, a utility is added or removed. The model is SCD2 — every change to `contract_terms`, `contract_utility`, or `property_service_tariff` opens a new row with a `validFrom`, closing the prior one. Past reconciliations still see their original terms; new reconciliations see the latest. Amendments are first-class data, not free-text notes.
+
+### Each cost kind can have its own billing cycle
+
+Annual services reconciliation runs on the calendar year. Electricity from PRE comes on a Feb 15 – Feb 14 cycle. Water comes monthly. Gas comes quarterly. The reconciliation derives a separate `matchPeriod` per kind from whatever statements cover the recon period, and the slot iteration spans the union — so a Jan–Dec reconciliation correctly counts an electricity advance paid in Feb of the following year, against a Feb–Feb statement.
+
+When two annual cycles touch at a boundary month (e.g., a Feb 15 – Feb 14 statement followed by another Feb 15 – Feb 14 next year), the second statement's `matchPeriod` auto-shifts forward by one month to prevent double-counting that February across two reconciliations.
+
+### Coverage validation
+
+If two consecutive statements of the same kind have a gap (e.g., one covers Jan–Mar, the next picks up in May), the reconciliation surfaces a warning showing exactly which days are not covered by any statement. Payments in that gap won't reconcile against anything — either you're missing a statement or it's intentional and the warning is dismissable context.
+
+### Rent reductions (srážky)
+
+The tenant occasionally pays for something that should have been the owner's (e.g., a one-off repair, a fix the tenant covered upfront). They agree to subtract that amount from a specific month's rent. The platform models this as a `rent_reduction` row tied to that month — the rent expectation for that one month becomes `max(0, baseRent − reduction)`, and the allocation respects that lowered floor without contaminating other months or pretending the tenant paid less than they did.
+
+### Cost statement adjustments
+
+Each cost statement carries a signed `adjustmentAmount` with a human-readable note. Use case: the owner has a solar installation they're still paying off, so they take a credit per kWh consumed (the tenant's electricity advances against actual cost minus solar credit). The adjustment lands in the audit trail next to the original `totalAmount` so the tenant can see exactly why their bill differs from the raw invoice.
+
+### Evidenční list with deductible (FO odečet)
+
+The SVJ `evidenční list` lists a total monthly advance and inside it a "deductible" portion that belongs to the owner (typical case: FO odečet — depreciation-like amount the owner offsets against income tax). The tenant's actual service obligation is `totalSvjAdvance − deductibleAmount`. Tariff history is temporal — when SVJ raises the advance mid-year, both halves can change independently.
+
+### Source document linking
+
+Cost statements, tariffs, and contract amendments each carry an optional `documentRef` — a URL or file path. The UI renders URLs as clickable links (hostname extracted) so you can jump from a number in the reconciliation breakdown directly to the source PDF in Drive, Dropbox, or wherever the document lives. Agents writing data via MCP store the document path automatically.
+
+### Payment timing on the contract, not the platform
+
+Some leases say "rent due on the 5th of the current month", others say "rent for July paid by 25 June" (paid in advance). Both are common. Each contract carries its own `paymentDueDay` + `paymentAppliesTo` (`current` or `next`) on the temporal terms, so the reconciliation knows when a payment is late and which month it naturally belongs to. Amendments can change this mid-contract; payments paid under the old rule keep the old offset for their natural-month assignment.
+
+### Reconciliation is recomputed on every view
+
+The persisted reconciliation row stores only the final numbers per kind. The breakdown (months, payments, allocations, cost statements) is rebuilt on every GET from current data. If something changes underneath — a new payment, an updated cost statement, a rent reduction added late — the UI flags the persisted total as stale next to the freshly-computed one. No silent drift between what's stored and what the data now implies.
 
 ---
 

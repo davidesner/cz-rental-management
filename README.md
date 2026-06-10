@@ -8,7 +8,7 @@ Annual property reconciliation traditionally takes hours, sometimes a whole day 
 
 This project is built on a simple premise: **in a world of capable AI agents, no one wants to click through a UI to fill values into a proprietary form**. So we don't ask them to. The web app is intentionally minimal — it holds only the business logic and the data structure, plus a thin UI for review and correction. The real value lives elsewhere:
 
-- A **clean REST API + MCP server** that exposes every entity (properties, contracts, payments, cost statements, reconciliations, tenants, …) with strong types and idempotent writes — designed for agents first, humans second.
+- A **clean REST API + MCP server** (and a CLI planned) that exposes every entity (properties, contracts, payments, cost statements, reconciliations, tenants, …) with strong types and idempotent writes — designed for agents first, humans second.
 - A **Claude Code plugin** with skills that teach an agent *how* to perform the annual reconciliation: read whatever source documents the user happens to have (PDF, DOCX, image, CSV, bank export, email body) → parse → compute domain-specific adjustments → write the result to the platform → produce a polished PDF for the tenant.
 - A **per-property learning loop**: the first time the agent processes documents for a property, it writes its own parsers and computers and saves regression fixtures. Subsequent runs reuse them. The skill compounds in value with every use.
 
@@ -16,14 +16,14 @@ What the user does: point the agent at their source documents — bank statement
 
 ### Where this leads
 
-The architecture is a stepping stone toward **fully automated workflows**. Same building blocks (MCP + skills + small reliable backend), more autonomy:
+That the MCP server (CLI TBD) is just an agentic interface and it works with any client that speaks the protocol (Claude Code, Claude Desktop, Cursor, …). The Claude Code plugin is one workflow on top, not the only one possible. Combined with other MCPs (email, file, bank export parser), the same backend supports:
 
-- New `evidenční list` PDF arrives by email → an agent watching the inbox parses it, registers a new cost statement in the platform → the next reconciliation picks it up automatically.
-- Monthly bank export drops into a folder → payments reconciled against contracts → tenant-late alerts surface in the UI.
-- Rent change for next year? → agent generates a polished Typst-rendered contract amendment from the new terms and the prior amendment template, ready for signature.
-- Year-end reconciliation auto-runs → a tenant-ready PDF report is generated and (with consent) emailed.
+- An always-on agent that watches a landlord inbox, registers incoming `evidenční list` PDFs as cost statements, flags late payments. No custom app — just wired-together MCP servers and a system prompt.
+- Monthly bank export → matched against contracts → late-payment surfaces in the UI.
+- Rent change → amendment rendered to PDF from the new terms and a prior amendment template.
+- Year-end → reconciliation PDF generated and emailed.
 
-The app itself stays small and boring on purpose. The intelligence is where it should be: in the agent that uses the data.
+The domain logic and the MCP surface stay the same regardless of which agent runs on top.
 
 ---
 

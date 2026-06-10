@@ -25,7 +25,7 @@ Předpokládá MCP server `rental-management` připojený.
 - **Templates** žijí v `properties/<slug>/contracts/templates/` (per-property) NEBO `contracts/templates/` (sdílené napříč properties). Sdílené má přednost při nejasnosti.
 - **Variable convention**: `{{namespace.field}}` syntaxe (mustache-style). Skill string-replace before compile, ne native Typst inputs (jednodušší debug).
 - **Output**: PDF + `.typ` source vedle sebe. User volí kam uložit (default: cwd, nebo `properties/<slug>/contracts/<year>/`).
-- **Naming**: `<TENANT>-<KIND>_<descriptor>_<lang>.pdf`, např. `TENANT-DODATEK_5-od-7_26_CZ.pdf` (kebab/snake mix podle stylu user).
+- **Naming**: `<TENANT>-<KIND>_<descriptor>_<lang>.pdf`, např. `NOVAK-DODATEK_5-od-7_26_CZ.pdf` (kebab/snake mix podle stylu user).
 - **Verze**: každý render zapiše do `.typ` source vedle PDF — pak reformat / drobné úpravy se dělají v `.typ` a recompile.
 
 ## Variables katalog (běžné)
@@ -34,7 +34,7 @@ Pro **smlouvu** (lease):
 - `{{landlord.name}}`, `{{landlord.address}}`, `{{landlord.dob}}`, `{{landlord.email}}`, `{{landlord.phone}}`
 - `{{landlord.bankAccount}}` (číslo účtu na nájemné)
 - `{{tenants}}` — pole nájemníků (alternativa: `{{tenant1.name}}`, `{{tenant2.name}}` pro fixní počet)
-- `{{property.unitNumber}}` (např. "<unit-number>"), `{{property.cadastre}}` (např. "<cadastre>"), `{{property.address}}`, `{{property.layout}}` (např. "3+kk s terasou"), `{{property.accessories}}` (sklep, parkování)
+- `{{property.unitNumber}}` (např. "1234/56"), `{{property.cadastre}}` (např. "Vinohrady"), `{{property.address}}`, `{{property.layout}}` (např. "3+kk s terasou"), `{{property.accessories}}` (sklep, parkování)
 - `{{lease.startDate}}`, `{{lease.endDate}}` (`YYYY-MM-DD`), `{{lease.fixedTermDescription}}` (např. "1 rok s automatickým prodloužením")
 - `{{terms.baseRent}}` (CZK, formatted bez "Kč"), `{{terms.serviceAdvance}}`, `{{terms.paymentDueDay}}`
 - `{{deposit.amount}}`, `{{deposit.dueDate}}`
@@ -71,10 +71,10 @@ Use case: user má DOCX/PDF (např. starou smlouvu, vzor od právníka, dodatek 
 3. **Návrhni placeholders** — projdi s user-em:
    ```
    "Našel jsem tyto hodnoty co můžou být variable:
-   - '<landlord-name>' → {{landlord.name}}
-   - '<landlord-address>' → {{landlord.address}}
-   - '<unit-number>' → {{property.unitNumber}}
-   - '33.000,- Kč' → {{terms.baseRent}}
+   - '<jméno vlastníka>' → {{landlord.name}}
+   - '<adresa vlastníka>' → {{landlord.address}}
+   - '<číslo jednotky>' → {{property.unitNumber}}
+   - '<částka nájmu>' → {{terms.baseRent}}
    ...
    Souhlasíš? Nebo některé chceš nechat jako fixní text?"
    ```
@@ -102,11 +102,11 @@ Use case: user má DOCX/PDF (např. starou smlouvu, vzor od právníka, dodatek 
 
 ## Workflow B — Render document z uložené šablony
 
-Use case: user řekne "vyrob dodatek pro <property-name-b> s novým nájmem od 2026-07-01".
+Use case: user řekne "vyrob dodatek pro <property> s novým nájmem od 2026-07-01".
 
 1. **Identifikuj kind + property + lang**:
    - "dodatek" → kind=amendment
-   - "<property-name-b>" → property slug
+   - "<property name>" → property slug
    - Lang: zeptej se (cz/en), default cz
 
 2. **Najdi template** — `contracts/templates/INDEX.md` nebo glob `**/*.typ` co matchne kind+lang. Pokud víc, ukaž user možnosti.
@@ -127,7 +127,7 @@ Use case: user řekne "vyrob dodatek pro <property-name-b> s novým nájmem od 2
      "tenant": { "name": "<tenant-name>", ... },
      "property": { "unitNumber": "<unit-number>", ... },
      "terms": { "newBaseRent": "<amount>", ... },
-     "amendment": { "number": "5", ... }
+     "amendment": { "number": "<n>", ... }
    }
    ```
 
@@ -182,7 +182,7 @@ Začátek každé šablony (A4, CZ default):
 
 Pro EN šablonu: `lang: "en"` + `*#numeral.* \ *#title*` (bez slova "Článek").
 
-**Sazba peněz**: doporučuji formátovat input už ve vars (`"<amount>"` s nezlomitelnou mezerou), template přidá jen `*…CZK*` nebo `*…Kč*` podle jazyka.
+**Sazba peněz**: doporučuji formátovat input už ve vars (např. `"12 345"` s nezlomitelnou mezerou), template přidá jen `*…CZK*` nebo `*…Kč*` podle jazyka.
 
 **Justify + české typo**: `lang: "cs"` v Typst aktivuje správné dělení slov.
 

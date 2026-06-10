@@ -56,9 +56,9 @@ Detekované změny v template oproti lokálu:
   - (nic)
 
 🔒 Zachováno (user-owned):
-  - properties/property-slug-b/README.md
-  - properties/property-slug-b/electricity_parser.py
-  - properties/property-slug-a/* (3 soubory)
+  - properties/<slug-a>/README.md
+  - properties/<slug-a>/electricity_parser.py
+  - properties/<slug-b>/* (3 soubory)
   - fixtures/* (5 souborů)
 
 Co chceš dělat?

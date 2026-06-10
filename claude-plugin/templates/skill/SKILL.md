@@ -1,5 +1,5 @@
 ---
-description: Roční vyúčtování pronájmu pro nájemníka — parsuje SVJ vyúčtování, faktury za elektřinu, bankovní výpisy; spočítá adjustmenty (FO odečet, solar credit); zapíše přes MCP. Aktivuj když user řekne "vyúčtování", "rozpočítat nájem", "process bills", "spočítej <property-name-a>" apod.
+description: Roční vyúčtování pronájmu pro nájemníka — parsuje SVJ vyúčtování, faktury za elektřinu, bankovní výpisy; spočítá adjustmenty (FO odečet, solar credit); zapíše přes MCP. Aktivuj když user řekne "vyúčtování", "rozpočítat nájem", "process bills", "spočítej <property name>" apod.
 ---
 
 # Rental Management Reconciliation
@@ -24,7 +24,7 @@ Tato kontrola se dělá **jednou na začátku konverzace**, ne před každou MCP
 1. **Identifikuj property**:
    - Z user promptu (jméno nemovitosti)
    - Nebo přes MCP `properties_list` a zeptej se user
-2. **Slug** = property name kebab-cased (např. "<property-name-a>" → `property-slug-a`)
+2. **Slug** = property name kebab-cased (např. "Smetanovy Sady" → `smetanovy-sady`)
 3. **Hledej `properties/<slug>/`** v této skill složce (tj. relativně k tomuto SKILL.md):
    - **Pokud existuje**: čti `properties/<slug>/README.md`, použij tamní parsery a pravidla
    - **Pokud ne**: vstoupíš do **learning mode** (níže)
@@ -50,16 +50,16 @@ Property README je **metodický dokument** (recept na vyúčtování), ne snapsh
 **Patří tam:**
 - MCP identifikátory (`propertyId`, `contractId`) — stabilní reference do platformy
 - Adresa a obecná identifikace nemovitosti
-- Zdroje dokumentů a jejich struktura ("<svj-name> posílá Detail + Přehled PDF; byt a garáž na stejném VS")
+- Zdroje dokumentů a jejich struktura (např. "správce posílá Detail + Přehled PDF; byt a garáž na stejném VS")
 - Speciální pravidla **jako koncept** ("FO odečet je část SVJ záloh, kterou nese vlastník; výpočet `monthly_deductible × 12 × proporce`")
 - Pointery na parsery, fixtures, podklady
 - Workflow/postup specifický pro tuhle property (např. "garáž má vlastní VS")
 
 **NEPATŘÍ tam:**
-- Konkrétní částky/sazby (FO <amount>/měs, solar <rate> Kč/kWh, nájem <amount>) — **mění se v čase, jsou v MCP nebo v podkladech daného roku**
+- Konkrétní částky/sazby (např. FO odečet měsíčně, sazba za kWh solární energie, nájemné) — **mění se v čase, jsou v MCP nebo v podkladech daného roku**
 - Jména nájemců, čísla účtů — v MCP (`tenants_get`, `contracts_get`)
 - Datumy kontraktu, auto-renewal historie — v MCP (`contracts_get`)
-- Snapshoty minulých reconciliations ("Backfill 2024 — výsledek +693 Kč") — v MCP (`reconciliations_list`)
+- Snapshoty minulých reconciliations (např. "Backfill 2024 — výsledek +XYZ Kč") — v MCP (`reconciliations_list`)
 - MCP IDs konkrétních cost_statements / plateb z minulých let
 - Hodnoty z jednotlivých faktur (čísla faktur, kWh) — v podkladech
 
@@ -112,7 +112,7 @@ Když máš více statementů stejného druhu (např. roční PRE pro elektřinu
 
 **Pravidlo**: pokud PŘEDCHOZÍ statement stejného druhu/property končí ve stejném kalendářním měsíci jako start aktuálního statementu, aktuální matchPeriod se posune o měsíc dopředu (boundary měsíc "vlastní" předchozí statement).
 
-**Příklad** (<property-name-b> PRE):
+**Příklad** (elektřina s ročním Feb-Feb cyklem):
 - Statement A: `2024-02-15 → 2025-02-14` → 2024 recon, matchPeriod **Feb 2024 - Feb 2025** (13 měsíců, no prior)
 - Statement B: `2025-02-15 → 2026-02-14` → 2025 recon, matchPeriod **Mar 2025 - Feb 2026** (12 měsíců, prior A končí v Feb 2025 → shift)
 - Feb 2025 je zahrnut JEN v 2024 recon (A), ne v 2025 recon (B) → **žádný double-count**

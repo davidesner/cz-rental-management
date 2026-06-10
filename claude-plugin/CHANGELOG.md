@@ -5,6 +5,12 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 0.3.1 — 2026-06-10
+
+### Changed
+- Příklady v `SKILL.md`, `contracts/SKILL.md`, `commands/update.md`, `README.md` přepsány na generické placeholdery (`<jmeno>`, `<adresa>`, `<unit-number>`, …) — šablona má smysl jako generic skeleton, ne konkrétní snapshot.
+- `plugin.json` author email synced.
+
 ## 0.3.0 — 2026-06-10
 
 ### Added
@@ -38,4 +44,4 @@ Verzování dle [semver](https://semver.org/):
   - Per-property folder pattern (`properties/<slug>/README.md` + parsers + fixtures)
   - Period matching pravidlo + proportional split prevence
   - Self-update workflow pro ukládání parserů / pravidel
-- Plugin marketplace bootstrap (local dev — `/Users/esner/LOCAL_PLUGINS/`)
+- Plugin marketplace bootstrap (local dev — symlink ze `~/LOCAL_PLUGINS/`)

@@ -17,7 +17,7 @@ Plugin **neposkytuje** workflow skill přímo. Místo toho ti pomůže udělat *
 ### Pro dev (local plugin path)
 
 ```bash
-claude --plugin-dir /Users/esner/Projects/rental_management/claude-plugin
+claude --plugin-dir /path/to/rental-management/claude-plugin
 ```
 
 V Claude Code session pak invokuj setup:

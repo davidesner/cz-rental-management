@@ -72,3 +72,38 @@ export async function listContractTerms(db: DB, orgId: string, contractId: strin
   await assertContractInOrg(db, orgId, contractId, allowedPropertyIds);
   return db.select().from(contractTerms).where(eq(contractTerms.contractId, contractId)).orderBy(asc(contractTerms.validFrom));
 }
+
+export interface UpdateTermsInput {
+  baseRent?: number;
+  serviceAdvance?: number;
+  paymentDueDay?: number;
+  paymentAppliesTo?: 'current' | 'next';
+  source?: 'initial' | 'addendum' | 'change';
+  note?: string | null;
+}
+
+/**
+ * Patch an existing contract terms row. validFrom + contractId are immutable — changing
+ * either would corrupt the SCD2 timeline used by allocation logic.
+ * To "move" a terms row in time, delete and re-add via `addContractTerms`.
+ */
+export async function updateContractTerms(
+  db: DB, orgId: string, contractId: string, termsId: string,
+  allowedPropertyIds: string[] | null, input: UpdateTermsInput,
+): Promise<TermsRow> {
+  await assertContractInOrg(db, orgId, contractId, allowedPropertyIds);
+  const [existing] = await db.select().from(contractTerms)
+    .where(and(eq(contractTerms.id, termsId), eq(contractTerms.contractId, contractId)));
+  if (!existing) throw new AppError('not_found', 'terms not in contract');
+
+  const patch: Record<string, unknown> = {};
+  for (const key of ['baseRent', 'serviceAdvance', 'paymentDueDay', 'paymentAppliesTo', 'source', 'note'] as const) {
+    if (input[key] !== undefined) patch[key] = input[key];
+  }
+  if (Object.keys(patch).length === 0) return existing as TermsRow;
+
+  const [row] = await db.update(contractTerms).set(patch)
+    .where(and(eq(contractTerms.id, termsId), eq(contractTerms.contractId, contractId)))
+    .returning();
+  return row! as TermsRow;
+}

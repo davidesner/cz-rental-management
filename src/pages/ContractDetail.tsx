@@ -236,9 +236,10 @@ function validAt<T extends { validFrom: string; validTo?: string | null }>(rows:
 interface PodminkyTableProps {
   terms: ContractTerm[];
   utilities: Utility[];
+  onEditTerm?: (term: ContractTerm) => void;
 }
 
-function PodminkyTable({ terms, utilities }: PodminkyTableProps) {
+function PodminkyTable({ terms, utilities, onEditTerm }: PodminkyTableProps) {
   const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 
   // Which utility kinds appear at all in this contract
@@ -267,6 +268,7 @@ function PodminkyTable({ terms, utilities }: PodminkyTableProps) {
             <TableHead>Splatnost</TableHead>
             <TableHead>Zdroj</TableHead>
             <TableHead>Poznámka</TableHead>
+            {onEditTerm && <TableHead className="w-12"></TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -310,6 +312,17 @@ function PodminkyTable({ terms, utilities }: PodminkyTableProps) {
                 <TableCell className="text-xs text-muted-foreground max-w-md truncate" title={noteParts.join(' · ')}>
                   {noteParts.join(' · ') || '—'}
                 </TableCell>
+                {onEditTerm && (
+                  <TableCell className="w-12">
+                    {activeTerm && activeTerm.validFrom === d && (
+                      <button
+                        className="text-xs text-muted-foreground hover:text-primary px-1"
+                        onClick={() => onEditTerm(activeTerm)}
+                        title="Upravit"
+                      >Upravit</button>
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}
@@ -933,6 +946,108 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
   );
 }
 
+// ─── Edit existing Podminky (terms) dialog ────────────────────────────────────
+
+interface EditPodminkyDialogProps {
+  contractId: string;
+  term: ContractTerm;
+  onClose: () => void;
+  onUpdated: () => void;
+}
+
+function EditPodminkyDialog({ contractId, term, onClose, onUpdated }: EditPodminkyDialogProps) {
+  const [form, setForm] = useState({
+    baseRentCzk: (term.baseRent / 100).toFixed(2),
+    serviceAdvanceCzk: (term.serviceAdvance / 100).toFixed(2),
+    paymentDueDay: String(term.paymentDueDay),
+    paymentAppliesTo: term.paymentAppliesTo as 'current' | 'next',
+    source: term.source as 'initial' | 'addendum' | 'change',
+    note: term.note ?? '',
+  });
+  const [err, setErr] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await api.patch(`/api/contracts/${contractId}/terms/${term.id}`, {
+        baseRent: Math.round(parseFloat(form.baseRentCzk.replace(',', '.')) * 100),
+        serviceAdvance: Math.round(parseFloat(form.serviceAdvanceCzk.replace(',', '.')) * 100),
+        paymentDueDay: parseInt(form.paymentDueDay, 10) || 10,
+        paymentAppliesTo: form.paymentAppliesTo,
+        source: form.source,
+        note: form.note || null,
+      });
+      onUpdated();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-xl font-semibold">Upravit podmínky</h2>
+        <p className="text-xs text-muted-foreground">
+          Platnost od <strong>{term.validFrom}</strong> (datum nelze změnit — pro přesun v čase smaž a přidej nové).
+        </p>
+        <div>
+          <Label>Nájem (Kč)</Label>
+          <Input type="text" value={form.baseRentCzk} onChange={e => setForm({ ...form, baseRentCzk: e.target.value })} />
+        </div>
+        <div>
+          <Label>Záloha SVJ (Kč)</Label>
+          <Input type="text" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Splatnost ke dni</Label>
+            <Input type="number" min={1} max={31} value={form.paymentDueDay} onChange={e => setForm({ ...form, paymentDueDay: e.target.value })} />
+          </div>
+          <div>
+            <Label>Platba za</Label>
+            <select
+              className={SELECT_CLS}
+              value={form.paymentAppliesTo}
+              onChange={e => setForm({ ...form, paymentAppliesTo: e.target.value as 'current' | 'next' })}
+            >
+              <option value="current">Aktuální měsíc</option>
+              <option value="next">Následující měsíc (předem)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <Label>Zdroj</Label>
+          <select
+            className={SELECT_CLS}
+            value={form.source}
+            onChange={e => setForm({ ...form, source: e.target.value as 'initial' | 'addendum' | 'change' })}
+          >
+            <option value="initial">Počáteční</option>
+            <option value="addendum">Dodatek</option>
+            <option value="change">Změna</option>
+          </select>
+        </div>
+        <div>
+          <Label>Poznámka (volitelné)</Label>
+          <Input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
+        </div>
+        {err && <p className="text-sm text-destructive">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={submitting}>Zrušit</Button>
+          <Button onClick={handleSubmit} disabled={submitting}>
+            {submitting ? 'Ukládám…' : 'Uložit'}
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ─── RentReduction dialog ─────────────────────────────────────────────────────
 
 interface RentReductionDialogProps {
@@ -1304,6 +1419,7 @@ export function ContractDetailPage() {
 
   // ── Podmínky dialog state ──────────────────────────────────────────────────
   const [podminkyOpen, setPodminkyOpen] = useState(false);
+  const [editTermsTarget, setEditTermsTarget] = useState<ContractTerm | null>(null);
 
   // ── Cost statement dialog state ────────────────────────────────────────────
   const [csOpen, setCsOpen] = useState(false);
@@ -1447,7 +1563,11 @@ export function ContractDetailPage() {
               <Button onClick={() => setPodminkyOpen(true)}>Přidat změnu</Button>
             </CardHeader>
             <CardContent>
-              <PodminkyTable terms={terms} utilities={utilities} />
+              <PodminkyTable
+                terms={terms}
+                utilities={utilities}
+                onEditTerm={(t) => setEditTermsTarget(t)}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -1671,6 +1791,18 @@ export function ContractDetailPage() {
           onCreated={() => {
             qc.invalidateQueries({ queryKey: ['contracts', id, 'terms'] });
             qc.invalidateQueries({ queryKey: ['contracts', id, 'utilities'] });
+          }}
+        />
+      )}
+
+      {/* ── Edit Podmínky dialog ───────────────────────────────────────────── */}
+      {editTermsTarget && id && (
+        <EditPodminkyDialog
+          contractId={id}
+          term={editTermsTarget}
+          onClose={() => setEditTermsTarget(null)}
+          onUpdated={() => {
+            qc.invalidateQueries({ queryKey: ['contracts', id, 'terms'] });
           }}
         />
       )}

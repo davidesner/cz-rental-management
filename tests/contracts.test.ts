@@ -85,6 +85,57 @@ describe('contracts REST', () => {
     await client.close();
   });
 
+  it('contract_terms PATCH: in-place update existing row (baseRent + payment timing + note)', async () => {
+    const { client, app, cookie, property, tenant } = await setup();
+    const ctr = (await (await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ propertyId: property.id, tenantId: tenant.id, startDate: '2024-01-01' }),
+    })).json() as any).contract;
+    const created = (await (await app.request(`/api/contracts/${ctr.id}/terms`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        validFrom: '2024-01-01', baseRent: 3000000, serviceAdvance: 500000,
+        paymentDueDay: 25, paymentAppliesTo: 'next', source: 'initial', note: 'typo',
+      }),
+    })).json() as any).terms;
+
+    // PATCH baseRent + paymentDueDay + note
+    const patchRes = await app.request(`/api/contracts/${ctr.id}/terms/${created.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ baseRent: 3200000, paymentDueDay: 28, note: 'opraveno' }),
+    });
+    expect(patchRes.status).toBe(200);
+    const patched = (await patchRes.json() as any).terms;
+    expect(patched.id).toBe(created.id);
+    expect(patched.baseRent).toBe(3200000);
+    expect(patched.paymentDueDay).toBe(28);
+    expect(patched.paymentAppliesTo).toBe('next'); // unchanged
+    expect(patched.serviceAdvance).toBe(500000);    // unchanged
+    expect(patched.validFrom).toBe('2024-01-01');   // immutable
+    expect(patched.note).toBe('opraveno');
+
+    // List confirms persisted change (same id, same validFrom — in-place update, NOT new row)
+    const listed = (await (await app.request(`/api/contracts/${ctr.id}/terms`, { headers: { cookie } })).json() as any).terms;
+    expect(listed).toHaveLength(1);
+    expect(listed[0].baseRent).toBe(3200000);
+
+    await client.close();
+  });
+
+  it('contract_terms PATCH: rejects unknown termsId', async () => {
+    const { client, app, cookie, property, tenant } = await setup();
+    const ctr = (await (await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ propertyId: property.id, tenantId: tenant.id, startDate: '2024-01-01' }),
+    })).json() as any).contract;
+    const res = await app.request(`/api/contracts/${ctr.id}/terms/bogus`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ baseRent: 1 }),
+    });
+    expect(res.status).toBe(404);
+    await client.close();
+  });
+
   it('contract_terms_add: payment* inherits from prior open terms when omitted', async () => {
     const { client, app, cookie, property, tenant } = await setup();
     const res = await app.request('/api/contracts', {

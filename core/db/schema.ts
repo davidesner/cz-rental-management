@@ -1,4 +1,4 @@
-import { boolean, date, integer, pgTable, text, timestamp, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, date, integer, pgTable, text, timestamp, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
 
 // ----- better-auth tables (names match better-auth defaults) -----
 
@@ -8,6 +8,11 @@ export const user = pgTable('user', {
   email: text('email').notNull().unique(),
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
+  // Set to true by scripts/create-user.ts for CLI-provisioned users; cleared by
+  // the account.update.after hook in core/auth/better-auth.ts when Better Auth's
+  // change-password endpoint fires. While true, the auth middleware blocks every
+  // route except the change-password flow + /me.
+  mustChangePassword: boolean('must_change_password').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -48,6 +53,16 @@ export const verification = pgTable('verification', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Better Auth rate-limit storage. Required when `rateLimit.storage: 'database'`
+// in core/auth/better-auth.ts (memory storage is per-instance and ineffective on
+// serverless function instances).
+export const rateLimit = pgTable('rate_limit', {
+  id: text('id').primaryKey(),
+  key: text('key').notNull().unique(),
+  count: integer('count').notNull(),
+  lastRequest: bigint('last_request', { mode: 'number' }).notNull(),
 });
 
 // ----- tenancy tables -----

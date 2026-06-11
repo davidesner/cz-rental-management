@@ -67,35 +67,44 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
   return row! as PaymentRow;
 }
 
+export const PAYMENT_BATCH_MAX = 500;
+
 export async function recordPaymentsBatch(db: DB, orgId: string, allowedPropertyIds: string[] | null, inputs: PaymentInput[]): Promise<{ created: PaymentRow[]; existing: PaymentRow[] }> {
-  const created: PaymentRow[] = [];
-  const existing: PaymentRow[] = [];
-  for (const input of inputs) {
-    await verifyContractInOrgIfSet(db, orgId, input.contractId, allowedPropertyIds);
-    if (input.externalId) {
-      const found = await db.select().from(payment).where(and(eq(payment.orgId, orgId), eq(payment.externalId, input.externalId))).then(rs => rs[0]);
-      if (found) {
-        existing.push(found as PaymentRow);
-        continue;
-      }
-    }
-    const id = createId();
-    const [row] = await db.insert(payment).values({
-      id, orgId,
-      contractId: input.contractId ?? null,
-      amount: input.amount,
-      paidAt: input.paidAt,
-      counterparty: input.counterparty ?? null,
-      counterpartyAccount: input.counterpartyAccount ?? null,
-      externalId: input.externalId ?? null,
-      statementRef: input.statementRef ?? null,
-      source: input.source,
-      description: input.description ?? null,
-      note: input.note ?? null,
-    }).returning();
-    created.push(row! as PaymentRow);
+  if (inputs.length > PAYMENT_BATCH_MAX) {
+    throw new AppError('bad_request', `batch size ${inputs.length} exceeds max ${PAYMENT_BATCH_MAX}`);
   }
-  return { created, existing };
+  // Whole batch is one transaction — failure on any item rolls back the rest,
+  // so we never leave partial state when a verification error fires mid-loop.
+  return db.transaction(async (tx) => {
+    const created: PaymentRow[] = [];
+    const existing: PaymentRow[] = [];
+    for (const input of inputs) {
+      await verifyContractInOrgIfSet(tx, orgId, input.contractId, allowedPropertyIds);
+      if (input.externalId) {
+        const found = await tx.select().from(payment).where(and(eq(payment.orgId, orgId), eq(payment.externalId, input.externalId))).then(rs => rs[0]);
+        if (found) {
+          existing.push(found as PaymentRow);
+          continue;
+        }
+      }
+      const id = createId();
+      const [row] = await tx.insert(payment).values({
+        id, orgId,
+        contractId: input.contractId ?? null,
+        amount: input.amount,
+        paidAt: input.paidAt,
+        counterparty: input.counterparty ?? null,
+        counterpartyAccount: input.counterpartyAccount ?? null,
+        externalId: input.externalId ?? null,
+        statementRef: input.statementRef ?? null,
+        source: input.source,
+        description: input.description ?? null,
+        note: input.note ?? null,
+      }).returning();
+      created.push(row! as PaymentRow);
+    }
+    return { created, existing };
+  });
 }
 
 export interface ListFilters {

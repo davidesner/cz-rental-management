@@ -64,6 +64,20 @@
       "when": 1781104310728,
       "tag": "0008_remarkable_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781166843507,
+      "tag": "0009_optimal_galactus",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781167839659,
+      "tag": "0010_black_omega_red",
+      "breakpoints": true
     }
   ]
 }

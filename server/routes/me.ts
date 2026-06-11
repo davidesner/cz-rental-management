@@ -23,7 +23,7 @@ export function meRoutes() {
       .innerJoin(organization, eq(organization.id, membership.orgId))
       .where(eq(membership.userId, ctx.userId));
     return c.json({
-      user: { id: u.id, email: u.email, name: u.name },
+      user: { id: u.id, email: u.email, name: u.name, mustChangePassword: u.mustChangePassword },
       memberships,
       activeOrgId: ctx.orgId,
     });

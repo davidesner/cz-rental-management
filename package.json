@@ -14,7 +14,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx core/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "user:create": "tsx scripts/create-user.ts"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": ">=0.25.0"
+    }
   },
   "dependencies": {
     "@hono/node-server": "^2.0.4",

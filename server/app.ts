@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { secureHeaders } from 'hono/secure-headers';
 import { createAuth } from '../core/auth/better-auth.js';
 import { errorMiddleware } from './middleware/errors.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -41,6 +42,27 @@ export function buildApp(deps: AppDeps): HonoApp {
   const auth = createAuth(deps.db);
 
   app.onError(errorMiddleware);
+
+  app.use('*', secureHeaders({
+    contentSecurityPolicy: {
+      defaultSrc: ["'self'"],
+      // Vite injects inline styles; React/TanStack don't ship inline scripts at runtime
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'", 'data:'],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+    },
+    strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+    xFrameOptions: 'DENY',
+    xContentTypeOptions: 'nosniff',
+    referrerPolicy: 'strict-origin-when-cross-origin',
+    permissionsPolicy: { camera: [], microphone: [], geolocation: [] },
+  }));
 
   app.use('*', async (c, next) => {
     c.set('auth', auth);

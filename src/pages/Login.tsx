@@ -1,5 +1,5 @@
 import { useForm } from 'react-hook-form';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,9 +47,6 @@ export function LoginPage() {
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full">Přihlásit</Button>
-            <p className="text-sm text-muted-foreground text-center">
-              Nemáš účet? <Link className="underline" to="/register">Registrovat</Link>
-            </p>
           </form>
         </CardContent>
       </Card>

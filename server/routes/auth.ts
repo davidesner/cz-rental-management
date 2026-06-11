@@ -11,6 +11,6 @@ interface AuthRouteContext {
 
 export function authRoutes(auth: Auth) {
   const r = new Hono<AuthRouteContext>();
-  r.on(['POST', 'GET'], '/auth/*', (c) => auth.handler(c.req.raw as unknown as Request));
+  r.on(['POST', 'GET'], '/auth/*', (c) => auth.handler(c.req.raw));
   return r;
 }

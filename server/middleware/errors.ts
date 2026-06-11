@@ -8,6 +8,7 @@ const statusByKind: Record<string, number> = {
   validation: 422,
   unauthenticated: 401,
   bad_request: 400,
+  must_change_password: 403,
 };
 
 export function errorMiddleware(err: Error, c: Context) {

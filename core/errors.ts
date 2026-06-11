@@ -4,7 +4,8 @@ export type AppErrorKind =
   | 'conflict'
   | 'validation'
   | 'unauthenticated'
-  | 'bad_request';
+  | 'bad_request'
+  | 'must_change_password';
 
 export class AppError extends Error {
   constructor(

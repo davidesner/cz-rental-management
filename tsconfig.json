@@ -23,5 +23,5 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["core/**/*", "server/**/*", "tests/**/*", "mcp/**/*", "drizzle.config.ts", "src/**/*", "vite.config.ts", "tailwind.config.ts"]
+  "include": ["core/**/*", "server/**/*", "tests/**/*", "mcp/**/*", "scripts/**/*", "drizzle.config.ts", "src/**/*", "vite.config.ts", "tailwind.config.ts"]
 }

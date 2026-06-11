@@ -33,10 +33,24 @@ Pozn.: drizzle-kit potřebuje **direct** connection (ne pooled) — PgBouncer tr
    | Key | Value | Where |
    |---|---|---|
    | `DATABASE_URL` | `<POOLED-connection-string>` (s `-pooler`) | Production, Preview |
-   | `BETTER_AUTH_SECRET` | `openssl rand -base64 32` | Production, Preview |
+   | `BETTER_AUTH_SECRET` | `openssl rand -base64 32` (min 32 chars — app fails to boot otherwise) | Production, Preview |
    | `BETTER_AUTH_URL` | `https://<your-app>.vercel.app` (nebo custom doména) | Production |
+   | `BETTER_AUTH_TRUSTED_ORIGINS` | comma-separated list of allowed origins, e.g. `https://<your-app>.vercel.app,https://custom-domain.cz` — required for non-localhost `BETTER_AUTH_URL`, app fails to boot otherwise | Production, Preview |
 
 4. Deploy: `vercel --prod` nebo push to `main`
+
+### 4. Manually provision users
+
+Public signup is disabled — there's no `/register` UI and `/api/auth/sign-up/email` returns disabled in production. Create users from the CLI against the production DB:
+
+```bash
+DATABASE_URL="<pooled-url>" BETTER_AUTH_SECRET="<prod-secret>" BETTER_AUTH_URL="https://<your-app>.vercel.app" \
+  pnpm user:create user@example.com 'min-10-char-password' "Full Name"
+```
+
+The script writes the user, auto-creates their personal organization, **and sets `mustChangePassword: true`**. On first login the user is redirected to `/change-password` and the API blocks every other request (`403 must_change_password`) until they pick a new password. The flag is cleared automatically by a Better Auth `account.update.after` hook the moment `/api/auth/change-password` succeeds.
+
+Hand the user their temporary password through a secure channel (Signal, password manager invite, etc.) — they'll only use it once. To re-enable public signup later, edit `core/auth/better-auth.ts` (`allowSignup` const).
 
 ## Co se hostuje kde
 
@@ -102,3 +116,6 @@ Eventuálně publish jako npm balíček — viz `claude-plugin/CHANGELOG.md` roa
 - **`Connection terminated`** — Neon project sleeps po inaktivitě (free tier). První request po sleep trvá 2-3s.
 - **Cookie not set / login redirect loop** — `BETTER_AUTH_URL` nesedí s aktuální doménou. Cookie domain musí matchnout.
 - **Migrations fail s `cannot execute outside of a transaction block`** — používáš pooled URL místo direct. drizzle-kit potřebuje direct.
+- **App refuses to boot with `BETTER_AUTH_SECRET must be set...`** — env var missing or shorter than 32 chars. Generate with `openssl rand -base64 32`.
+- **App refuses to boot with `BETTER_AUTH_TRUSTED_ORIGINS must be set...`** — set the env var to your prod origin(s), comma-separated.
+- **CORS / origin rejected when calling auth API** — origin not in `BETTER_AUTH_TRUSTED_ORIGINS`. Add it and redeploy.

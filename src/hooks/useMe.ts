@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
 export interface Me {
-  user: { id: string; email: string; name: string };
+  user: { id: string; email: string; name: string; mustChangePassword: boolean };
   memberships: Array<{ membershipId: string; orgId: string; orgName: string; role: 'owner' | 'member' }>;
   activeOrgId: string | null;
 }

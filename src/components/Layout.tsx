@@ -7,8 +7,12 @@ export function ProtectedLayout() {
   const { data: me, isLoading, isError } = useMe();
   const navigate = useNavigate();
   useEffect(() => { if (isError) navigate('/login'); }, [isError, navigate]);
+  useEffect(() => {
+    if (me?.user.mustChangePassword) navigate('/change-password', { replace: true });
+  }, [me, navigate]);
   if (isLoading) return <div className="p-8">Načítání…</div>;
   if (!me) return null;
+  if (me.user.mustChangePassword) return null;
   return (
     <div className="min-h-screen flex">
       <aside className="w-60 border-r p-6 space-y-3">

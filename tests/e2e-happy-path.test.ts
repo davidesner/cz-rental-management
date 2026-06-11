@@ -18,9 +18,10 @@ describe('end-to-end: register → org → token → property → access', () =>
     expect(orgRes.status).toBe(201);
     const org = (await orgRes.json() as any).organization;
 
+    // x-org-id ties the token to "David rentals" org (default would be auto-org from better-auth hook)
     const tokRes = await app.request('/api/api-tokens', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', cookie },
+      headers: { 'content-type': 'application/json', cookie, 'x-org-id': org.id },
       body: JSON.stringify({ name: 'mcp-laptop' }),
     });
     expect(tokRes.status).toBe(201);
@@ -29,20 +30,22 @@ describe('end-to-end: register → org → token → property → access', () =>
     const me = await app.request('/api/me', { headers: { authorization: `Bearer ${token}` } });
     expect(me.status).toBe(200);
     const meBody = await me.json() as any;
-    expect(meBody.memberships[0].orgId).toBe(org.id);
-    expect(meBody.memberships[0].role).toBe('owner');
+    // Find the "David rentals" membership specifically (auto-org membership also present)
+    const davidMembership = meBody.memberships.find((m: any) => m.orgId === org.id);
+    expect(davidMembership).toBeDefined();
+    expect(davidMembership.role).toBe('owner');
 
     const propRes = await app.request('/api/properties', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: 'Kolčavka A12' }),
+      body: JSON.stringify({ name: '<property-name>' }),
     });
     expect(propRes.status).toBe(201);
     const prop = (await propRes.json() as any).property;
 
     const grant = await app.request('/api/property-access', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', cookie },
+      headers: { 'content-type': 'application/json', cookie, 'x-org-id': org.id },
       body: JSON.stringify({ membershipId: org.membershipId, propertyId: prop.id }),
     });
     expect(grant.status).toBe(201);

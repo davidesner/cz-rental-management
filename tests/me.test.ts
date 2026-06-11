@@ -26,7 +26,8 @@ describe('GET /api/me', () => {
       activeOrgId: string | null;
     };
     expect(body.user.email).toBe('a@b.cz');
-    expect(body.memberships).toHaveLength(2);
+    // 3 memberships: auto-org (created by better-auth user.create.after hook) + A + B
+    expect(body.memberships).toHaveLength(3);
     expect(body.activeOrgId).toBeTruthy();
     await client.close();
   });

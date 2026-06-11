@@ -11,10 +11,10 @@ async function createOrgViaApi(app: any, cookie: string, name: string) {
   });
   return (await res.json()).organization;
 }
-async function createPropertyViaApi(app: any, cookie: string, name: string) {
+async function createPropertyViaApi(app: any, cookie: string, name: string, orgId?: string) {
   const res = await app.request('/api/properties', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', cookie },
+    headers: { 'content-type': 'application/json', cookie, ...(orgId ? { 'x-org-id': orgId } : {}) },
     body: JSON.stringify({ name }),
   });
   return (await res.json()).property;
@@ -26,22 +26,26 @@ describe('property access', () => {
     const app = makeApp(db);
     const { cookie } = await registerUser(app, 'a@b.cz', 'password123', 'A');
     const org = await createOrgViaApi(app, cookie, 'O');
-    const prop = await createPropertyViaApi(app, cookie, 'Byt 1');
+    // Property must belong to the same org as the membership we'll grant access to.
+    // Without x-org-id, requests default to auto-org (created by better-auth hook) — wrong org here.
+    const prop = await createPropertyViaApi(app, cookie, 'Byt 1', org.id);
 
     const grant = await app.request('/api/property-access', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', cookie },
+      headers: { 'content-type': 'application/json', cookie, 'x-org-id': org.id },
       body: JSON.stringify({ membershipId: org.membershipId, propertyId: prop.id }),
     });
     expect(grant.status).toBe(201);
 
-    const list = await app.request(`/api/property-access?membershipId=${org.membershipId}`, { headers: { cookie } });
+    const list = await app.request(`/api/property-access?membershipId=${org.membershipId}`, {
+      headers: { cookie, 'x-org-id': org.id },
+    });
     const body = await list.json() as { propertyIds: string[] };
     expect(body.propertyIds).toEqual([prop.id]);
 
     const rev = await app.request(`/api/property-access?membershipId=${org.membershipId}&propertyId=${prop.id}`, {
       method: 'DELETE',
-      headers: { cookie },
+      headers: { cookie, 'x-org-id': org.id },
     });
     expect(rev.status).toBe(204);
     await client.close();

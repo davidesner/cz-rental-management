@@ -39,7 +39,8 @@ describe('GET /api/organizations', () => {
     const res = await app.request('/api/organizations', { headers: { cookie } });
     expect(res.status).toBe(200);
     const body = await res.json() as { organizations: unknown[] };
-    expect(body.organizations).toHaveLength(2);
+    // 3 orgs: auto-org (created by better-auth user.create.after hook) + A + B
+    expect(body.organizations).toHaveLength(3);
     await client.close();
   });
 });

@@ -1,4 +1,4 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 import 'dotenv/config';
 import { FastMCP } from 'fastmcp';
 import { RentalApiClient } from './client.js';

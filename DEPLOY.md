@@ -2,7 +2,7 @@
 
 Tahle apka je monorepo:
 - **Web (frontend + API)** → Vercel
-- **MCP server** → samostatný balíček (`pnpm mcp` lokálně, eventuálně `npx @esnerda/rental-management-mcp`). MCP nikdy nejde na Vercel — runs u uživatele.
+- **MCP server** → samostatný npm balíček `@esnerda/cz-rental-management-mcp` spouštěný přes `npx` u uživatele. MCP nikdy nejde na Vercel.
 
 ## First deploy
 
@@ -59,7 +59,7 @@ Hand the user their temporary password through a secure channel (Signal, passwor
 | Frontend (Vite SPA) | Vercel CDN | `vite build` → `dist/` |
 | Backend (Hono) | Vercel Functions | `api/index.ts` adapter |
 | DB | Neon | — |
-| MCP server | Lokálně u uživatele | `pnpm mcp` (později `npx`) |
+| MCP server | Lokálně u uživatele | `npx -y @esnerda/cz-rental-management-mcp@latest` |
 
 ## Local dev vs prod
 
@@ -89,16 +89,15 @@ Vercel Project Settings → Domains → Add. Po nastavení změň `BETTER_AUTH_U
 
 ## MCP server (samostatně)
 
-`mcp/` má vlastní deployment story — runs u uživatele:
+MCP server je publikován jako samostatný npm balíček `@esnerda/cz-rental-management-mcp` a spouští se přes `npx` u uživatele (nepotřebuje clone repa):
 
 ```json
-// ~/.claude/mcp.json
+// .mcp.json
 {
   "mcpServers": {
     "rental-management": {
-      "command": "pnpm",
-      "args": ["mcp"],
-      "cwd": "/path/to/rental-management",
+      "command": "npx",
+      "args": ["-y", "@esnerda/cz-rental-management-mcp@latest"],
       "env": {
         "RENTAL_API_URL": "https://<your-app>.vercel.app",
         "RENTAL_API_TOKEN": "<token z UI /settings/api-tokens>"
@@ -108,7 +107,9 @@ Vercel Project Settings → Domains → Add. Po nastavení změň `BETTER_AUTH_U
 }
 ```
 
-Eventuálně publish jako npm balíček — viz `claude-plugin/CHANGELOG.md` roadmap.
+Pro lokální vývoj backendu je `pnpm mcp` (z root) pořád k dispozici — pouští stejný server z monorepa přes `tsx`.
+
+Publish workflow: `cd mcp && pnpm build && npm publish --access public`. Source/dist je v `mcp/`, dist je gitignorovaný.
 
 ## Troubleshooting
 

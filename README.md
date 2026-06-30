@@ -262,17 +262,17 @@ This separation means:
 
 ---
 
-## MCP server (separate package — eventually)
+## MCP server
 
-`mcp/` runs as a stdio process at the user's machine. It exposes one tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) and authenticates against the hosted API via a per-user token.
+Published as a standalone npm package: [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp). Runs as a stdio process at the user's machine via `npx` — no need to clone the repo. Exposes one tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) and authenticates against the API via a per-user token.
 
 ```jsonc
-// ~/.claude/mcp.json
+// .mcp.json
 {
   "mcpServers": {
     "rental-management": {
-      "command": "pnpm", "args": ["mcp"],
-      "cwd": "/path/to/rental-management",
+      "command": "npx",
+      "args": ["-y", "@esnerda/cz-rental-management-mcp@latest"],
       "env": {
         "RENTAL_API_URL": "https://your-app.vercel.app",
         "RENTAL_API_TOKEN": "<from /settings/api-tokens>"
@@ -282,7 +282,7 @@ This separation means:
 }
 ```
 
-Eventually this will be published as an npm package consumable via `npx`, removing the need for users to clone the repo locally.
+Source lives in [`mcp/`](./mcp). For local backend dev `pnpm mcp` runs the same server from source via `tsx`. Publish: `cd mcp && pnpm build && npm publish --access public`.
 
 ---
 

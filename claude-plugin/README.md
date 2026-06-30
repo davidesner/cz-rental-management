@@ -57,4 +57,19 @@ Plugin → můžeš pravidelně updatovat (např. `git pull`). Lokální skill s
 
 ## MCP backend
 
-Plugin spoléhá na běžící `rental-management` MCP server (definovaný v `mcp/index.ts` rental-management projektu). Plugin `init` skill ti pomůže s `.mcp.json` konfigurací.
+Plugin spoléhá na běžící `rental-management` MCP server, který je publikovaný jako samostatný npm balíček [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp) a spouští se přes `npx` (není potřeba clone repa). Plugin `init` skill ti pomůže s `.mcp.json` konfigurací:
+
+```json
+{
+  "mcpServers": {
+    "rental-management": {
+      "command": "npx",
+      "args": ["-y", "@esnerda/cz-rental-management-mcp@latest"],
+      "env": {
+        "RENTAL_API_URL": "https://<your-app>",
+        "RENTAL_API_TOKEN": "<from /settings/api-tokens>"
+      }
+    }
+  }
+}
+```

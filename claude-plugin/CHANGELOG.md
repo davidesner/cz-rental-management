@@ -5,6 +5,11 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 0.3.2 — 2026-06-11
+
+### Changed
+- Plugin README: `MCP backend` sekce dokumentuje že MCP server je teď publikovaný npm balíček `@esnerda/cz-rental-management-mcp` spouštěný přes `npx` — není potřeba clone rental-management repa. Doplněn ukázkový `.mcp.json` snippet.
+
 ## 0.3.1 — 2026-06-10
 
 ### Changed

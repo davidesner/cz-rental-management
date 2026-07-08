@@ -23,7 +23,7 @@
     }
   },
   "dependencies": {
-    "@hono/node-server": "^2.0.4",
+    "@hono/node-server": "^1.19.14",
     "@hookform/resolvers": "^5.4.0",
     "@paralleldrive/cuid2": "^3.3.0",
     "@radix-ui/react-dialog": "^1.1.15",

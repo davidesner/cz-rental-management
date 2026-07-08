@@ -1,17 +1,13 @@
 // Vercel serverless entrypoint for the Hono API.
 // Local development uses `server/node.ts` (long-running @hono/node-server).
 //
-// On Vercel:
-// - `vercel.json` rewrites `/api/*` to this handler
-// - DB client uses serverless-safe pool (max: 1, prepare: false)
-// - DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL must be set in project env vars
-// `@hono/node-server/vercel` exports a Node.js-style (req, res) => Promise<void>
-// handler, matching Vercel's legacy Node.js Functions signature that our
-// deployment actually uses. `hono/vercel#handle` returns a fetch-style
-// (request) => Response function — that's for Vercel Edge/Fluid Compute and
-// silently hangs under the legacy Node.js runtime (see prior deploy: status
-// code 0, "default export returned a Response — returns are ignored").
-import { handle } from '@hono/node-server/vercel';
+// Experiment: `hono/vercel` returns a fetch-style (Request) => Response handler.
+// Vercel's modern Node.js Functions runtime supports fetch-style natively when
+// the file exports `runtime` at the top level. `@hono/node-server/vercel`'s
+// (req, res) Node-style handler worked for GETs but hung for POSTs — likely
+// because Vercel's runtime is fetch-style and our req/res handler couldn't
+// read the streamed request body.
+import { handle } from 'hono/vercel';
 import { createDb } from '../core/db/client.js';
 import { buildApp } from '../server/app.js';
 
@@ -23,4 +19,5 @@ if (!process.env.DATABASE_URL) {
 const { db } = createDb(process.env.DATABASE_URL);
 const app = buildApp({ db });
 
+export const runtime = 'nodejs';
 export default handle(app);

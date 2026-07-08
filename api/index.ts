@@ -17,5 +17,6 @@ if (!process.env.DATABASE_URL) {
 const { db } = createDb(process.env.DATABASE_URL);
 const app = buildApp({ db });
 
+export const runtime = 'nodejs';
+
 export default handle(app);
-export const config = { runtime: 'nodejs' };

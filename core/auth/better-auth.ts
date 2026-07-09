@@ -20,21 +20,29 @@ function requireEnv(name: string, minLength = 0): string {
 function resolveTrustedOrigins(baseURL: string): string[] {
   const env = process.env.BETTER_AUTH_TRUSTED_ORIGINS;
   if (env) return env.split(',').map((s) => s.trim()).filter(Boolean);
-  // No env override. Only acceptable in tests / local dev — otherwise refuse to boot,
-  // because Better Auth's CSRF check would reject every browser request from prod.
   const isLocal = baseURL.startsWith('http://localhost') || baseURL.startsWith('http://127.0.0.1');
-  if (!isLocal && !process.env.VITEST) {
-    throw new Error(
-      'BETTER_AUTH_TRUSTED_ORIGINS must be set when BETTER_AUTH_URL is not localhost ' +
-      '(comma-separated list of origins allowed to call the auth API).',
-    );
+  if (isLocal || process.env.VITEST) {
+    return ['http://localhost:5173', 'http://localhost:3000'];
   }
-  return ['http://localhost:5173', 'http://localhost:3000'];
+  // On Vercel preview deploys BETTER_AUTH_TRUSTED_ORIGINS is typically unset
+  // (each preview URL differs). Trust the deployment's own URL — matches
+  // baseURL fallback above. Prod always sets the env explicitly.
+  if (process.env.VERCEL_URL) return [baseURL];
+  throw new Error(
+    'BETTER_AUTH_TRUSTED_ORIGINS must be set when BETTER_AUTH_URL is not localhost ' +
+    '(comma-separated list of origins allowed to call the auth API).',
+  );
 }
 
 export function createAuth(db: DB) {
   const secret = requireEnv('BETTER_AUTH_SECRET', 32);
-  const baseURL = requireEnv('BETTER_AUTH_URL');
+  // Prefer an explicit BETTER_AUTH_URL. On Vercel preview deployments where it
+  // isn't set (each preview has a distinct URL), fall back to the per-deployment
+  // VERCEL_URL that Vercel auto-populates.
+  const explicitBaseUrl = process.env.BETTER_AUTH_URL;
+  const vercelUrl = process.env.VERCEL_URL;
+  const baseURL = explicitBaseUrl
+    ?? (vercelUrl ? `https://${vercelUrl}` : requireEnv('BETTER_AUTH_URL'));
   const trustedOrigins = resolveTrustedOrigins(baseURL);
 
   // Sign-up is disabled in production (manual user provisioning via scripts/create-user.ts).

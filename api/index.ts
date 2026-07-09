@@ -1,17 +1,12 @@
 // Vercel serverless entrypoint for the Hono API.
 // Local development uses `server/node.ts` (long-running @hono/node-server).
 //
-// Body-read shim: @hono/node-server/vercel v1.19 has three body-construction
-// paths for POST/PUT/etc.
-//   1. incoming.rawBody Buffer   → fast path
-//   2. incoming[wrapBodyStream]  → Cloudflare-style
-//   3. Readable.toWeb(incoming)  → fallback
-// Vercel's modern Node.js runtime hits path 3 with an IncomingMessage-like
-// object that isn't a real Readable — `Readable.toWeb` produces a stream that
-// never closes, so POSTs hang while GETs (no body read) work. We pre-read the
-// body via async iteration and attach it as `rawBody` to force path 1.
-import { handle } from '@hono/node-server/vercel';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+// Diagnostic build: raw fetch-style handler (`(request: Request) => Response`)
+// with explicit runtime declaration. Vercel Functions v2 nodejs runtime should
+// give us a Web Request. Previous adapter-based attempts hung on POST body reads
+// on the stable production URL but worked via _vercel_share bypass — indicating
+// the request object shape differs between routing paths. Bypassing the
+// @hono/node-server adapter and going straight to app.fetch removes ambiguity.
 import { createDb } from '../core/db/client.js';
 import { buildApp } from '../server/app.js';
 
@@ -19,31 +14,22 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL not set');
 }
 
-// Module-level init (warm function instances reuse this client)
 const { db } = createDb(process.env.DATABASE_URL);
 const app = buildApp({ db });
-const honoHandler = handle(app);
 
-type ReqWithRawBody = IncomingMessage & { rawBody?: Buffer };
+export const runtime = 'nodejs';
 
-async function readBody(req: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(chunk instanceof Buffer ? chunk : Buffer.from(chunk));
+export default async function handler(request: Request): Promise<Response> {
+  const started = Date.now();
+  const url = new URL(request.url);
+  // stderr goes to Vercel runtime logs; helps diagnose the POST hang.
+  console.log(`[api] ${request.method} ${url.pathname} start`);
+  try {
+    const response = await app.fetch(request);
+    console.log(`[api] ${request.method} ${url.pathname} → ${response.status} in ${Date.now() - started}ms`);
+    return response;
+  } catch (err) {
+    console.error(`[api] ${request.method} ${url.pathname} threw in ${Date.now() - started}ms:`, err);
+    throw err;
   }
-  return Buffer.concat(chunks);
-}
-
-export default async function vercelHandler(req: ReqWithRawBody, res: ServerResponse) {
-  const method = req.method ?? 'GET';
-  if (method !== 'GET' && method !== 'HEAD' && !(req.rawBody instanceof Buffer)) {
-    try {
-      req.rawBody = await readBody(req);
-    } catch (err) {
-      res.statusCode = 400;
-      res.end(`bad request body: ${err instanceof Error ? err.message : String(err)}`);
-      return;
-    }
-  }
-  return honoHandler(req, res);
 }

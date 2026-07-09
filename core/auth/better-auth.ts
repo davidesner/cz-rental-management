@@ -18,16 +18,22 @@ function requireEnv(name: string, minLength = 0): string {
 }
 
 function resolveTrustedOrigins(baseURL: string): string[] {
-  const env = process.env.BETTER_AUTH_TRUSTED_ORIGINS;
-  if (env) return env.split(',').map((s) => s.trim()).filter(Boolean);
+  const explicit = process.env.BETTER_AUTH_TRUSTED_ORIGINS
+    ?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
   const isLocal = baseURL.startsWith('http://localhost') || baseURL.startsWith('http://127.0.0.1');
-  if (isLocal || process.env.VITEST) {
+  if (explicit.length === 0 && (isLocal || process.env.VITEST)) {
     return ['http://localhost:5173', 'http://localhost:3000'];
   }
-  // On Vercel preview deploys BETTER_AUTH_TRUSTED_ORIGINS is typically unset
-  // (each preview URL differs). Trust the deployment's own URL — matches
-  // baseURL fallback above. Prod always sets the env explicitly.
-  if (process.env.VERCEL_URL) return [baseURL];
+  // On Vercel, every deployment gets a per-deploy alias (…-<hash>-<team>.vercel.app)
+  // in addition to the stable production alias. Better Auth's CSRF check reads
+  // the actual request URL, which frequently arrives as the per-deploy alias,
+  // so an explicit list keyed to just the stable URL would reject legit
+  // requests. Merge in `VERCEL_URL` (Vercel-populated, per-deploy) so both
+  // aliases pass — same reasoning as the baseURL fallback above.
+  if (process.env.VERCEL_URL) {
+    return [...new Set([...explicit, `https://${process.env.VERCEL_URL}`, baseURL])];
+  }
+  if (explicit.length > 0) return explicit;
   throw new Error(
     'BETTER_AUTH_TRUSTED_ORIGINS must be set when BETTER_AUTH_URL is not localhost ' +
     '(comma-separated list of origins allowed to call the auth API).',

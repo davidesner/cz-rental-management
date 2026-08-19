@@ -104,8 +104,26 @@ do Vercel projektu. Pro každý preview deployment vyrobí copy-on-write branch
 Protože branch je copy-on-write kopie parenta, **preview má i uživatele z production** —
 nemusíš nic seedovat (signup je vypnutý, takže by ani nešlo).
 
-⚠️ Po instalaci **smaž `DATABASE_URL` ze scope Preview** v Project Settings → Environment
-Variables. Jinak project-level hodnota (production DB) přebije to, co integrace injectuje.
+⚠️ **Než integraci nainstaluješ**, smaž (nebo přejmenuj) ve Vercel Project Settings →
+Environment Variables ruční `DATABASE_URL` a případné `PGHOST` / `PGUSER` / `PGDATABASE` /
+`PGPASSWORD`. Integrace si tyhle názvy nastavuje sama a při kolizi spadne na
+`Failed to set environment variables`. Od té chvíle `DATABASE_URL` spravuje integrace —
+i pro production (míří na default branch zvoleného Neon projektu).
+
+`BETTER_AUTH_*` proměnné se toho netýkají, ty si nastavuješ dál sám.
+
+Postup instalace (Neon-managed varianta — tu potřebuješ, když už Neon projekt máš;
+marketplace varianta zakládá nový Neon účet):
+
+1. [console.neon.tech](https://console.neon.tech) → **Integrations** → u Vercelu **Add**
+2. **Install from Vercel Marketplace** → **Install**
+3. V modalu vyber **Link Existing Neon Account** → Continue
+4. Vyber Vercel account + projekty, které mají integraci vidět
+   (jeden Neon projekt = jeden Vercel projekt)
+5. Vyber Vercel projekt, pak Neon projekt, database a role
+6. Zapni **Automatically delete obsolete Neon branches** — jinak ti branche zůstávají
+   po každém zavřeném PR
+7. Connect → Done
 
 **2. Migrations při buildu — `pnpm migrate:preview`**
 

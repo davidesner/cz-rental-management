@@ -13,6 +13,11 @@ export default defineConfig({
       TESTCONTAINERS_RYUK_DISABLED: 'true',
     },
     // Exclude Playwright E2E specs — those are run via `pnpm test:e2e`
-    exclude: ['tests-e2e/**', 'node_modules/**'],
+    // `.claude/worktrees/**` holds full checkouts of other branches; without
+    // this, vitest globs their tests/ too and runs every spec twice — once
+    // against this branch and once against unrelated code, silently conflating
+    // the results. `mcp/node_modules/**` is not covered by the bare
+    // `node_modules/**` pattern and pulls in ~165 vendored zod specs.
+    exclude: ['tests-e2e/**', '**/node_modules/**', '.claude/**'],
   },
 });

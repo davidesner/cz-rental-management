@@ -17,3 +17,6 @@ playwright/.cache/
 # Claude Code — locally installed skills + their lockfile
 .claude/skills/
 /skills-lock.json
+
+# Worktrees created for parallel branch work — full repo copies
+.claude/worktrees/

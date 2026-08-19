@@ -57,4 +57,32 @@ describe('payments REST', () => {
     expect((await list.json() as any).payments).toHaveLength(2);
     await client.close();
   });
+
+  it('returns contract names, and nulls for an unassigned payment', async () => {
+    const { client, app, cookie, contract: c } = await bootstrap();
+
+    await app.request('/api/payments', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ contractId: c.id, amount: 1200000, paidAt: '2024-10-01', source: 'manual' }),
+    });
+    await app.request('/api/payments', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ contractId: null, amount: 500000, paidAt: '2024-10-02', source: 'manual' }),
+    });
+
+    const res = await app.request('/api/payments', { headers: { cookie } });
+    const payments = (await res.json() as any).payments as any[];
+
+    const assigned = payments.find(p => p.contractId === c.id);
+    // bootstrap() in this file creates the property as 'KP' and the tenant as 'SB'.
+    expect(assigned.propertyName).toBe('KP');
+    expect(assigned.tenantName).toBe('SB');
+
+    const unassigned = payments.find(p => p.contractId === null);
+    expect(unassigned).toBeDefined();               // leftJoin must not drop it
+    expect(unassigned.propertyName).toBeNull();
+    expect(unassigned.tenantName).toBeNull();
+
+    await client.close();
+  });
 });

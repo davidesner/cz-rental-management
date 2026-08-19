@@ -1,7 +1,7 @@
 import { createId } from '@paralleldrive/cuid2';
 import { and, eq, isNull, gte, lte, desc } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
-import { payment, contract } from '../db/schema.js';
+import { payment, contract, property, tenant } from '../db/schema.js';
 import { AppError } from '../errors.js';
 
 export interface PaymentInput {
@@ -32,6 +32,8 @@ export interface PaymentRow {
   note: string | null;
   importedAt: Date;
   createdAt: Date;
+  propertyName: string | null;
+  tenantName: string | null;
 }
 
 async function verifyContractInOrgIfSet(db: DB, orgId: string, contractId: string | null | undefined, allowedPropertyIds: string[] | null) {
@@ -114,32 +116,67 @@ export interface ListFilters {
   to?: string;
 }
 
+// payment.contractId is nullable (ON DELETE set null), so these are leftJoins
+// and the names are nullable — an unassigned payment has no contract, and must
+// still appear in the list.
+const paymentSelect = {
+  id: payment.id,
+  orgId: payment.orgId,
+  contractId: payment.contractId,
+  amount: payment.amount,
+  paidAt: payment.paidAt,
+  counterparty: payment.counterparty,
+  counterpartyAccount: payment.counterpartyAccount,
+  externalId: payment.externalId,
+  statementRef: payment.statementRef,
+  source: payment.source,
+  description: payment.description,
+  note: payment.note,
+  importedAt: payment.importedAt,
+  createdAt: payment.createdAt,
+  propertyName: property.name,
+  tenantName: tenant.name,
+  contractPropertyId: contract.propertyId,
+};
+
 export async function listPayments(db: DB, orgId: string, allowedPropertyIds: string[] | null, filters: ListFilters): Promise<PaymentRow[]> {
   const conds = [eq(payment.orgId, orgId)];
   if (filters.contractId) conds.push(eq(payment.contractId, filters.contractId));
   if (filters.unassigned) conds.push(isNull(payment.contractId));
   if (filters.from) conds.push(gte(payment.paidAt, filters.from));
   if (filters.to) conds.push(lte(payment.paidAt, filters.to));
-  let rows = await db.select().from(payment).where(and(...conds)).orderBy(desc(payment.paidAt));
-  if (allowedPropertyIds !== null) {
-    // restrict to payments whose contract belongs to allowed property OR unassigned
-    const contractRows = await db.select().from(contract).where(eq(contract.orgId, orgId));
-    const allowedContractIds = new Set(contractRows.filter(c => allowedPropertyIds.includes(c.propertyId)).map(c => c.id));
-    rows = rows.filter(p => p.contractId === null || allowedContractIds.has(p.contractId));
-  }
-  return rows as PaymentRow[];
+  const rows = await db
+    .select(paymentSelect)
+    .from(payment)
+    .leftJoin(contract, eq(contract.id, payment.contractId))
+    .leftJoin(property, eq(property.id, contract.propertyId))
+    .leftJoin(tenant, eq(tenant.id, contract.tenantId))
+    .where(and(...conds))
+    .orderBy(desc(payment.paidAt));
+  const visible = allowedPropertyIds === null
+    ? rows
+    // unchanged rule: unassigned payments stay visible to everyone
+    : rows.filter(r => r.contractPropertyId === null || allowedPropertyIds.includes(r.contractPropertyId));
+  return visible.map(({ contractPropertyId: _ignored, ...row }) => row);
 }
 
 export async function getPayment(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<PaymentRow> {
-  const [row] = await db.select().from(payment).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
+  const [row] = await db
+    .select(paymentSelect)
+    .from(payment)
+    .leftJoin(contract, eq(contract.id, payment.contractId))
+    .leftJoin(property, eq(property.id, contract.propertyId))
+    .leftJoin(tenant, eq(tenant.id, contract.tenantId))
+    .where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
   if (!row) throw new AppError('not_found', 'payment not found');
-  if (allowedPropertyIds !== null && row.contractId !== null) {
-    const [c] = await db.select().from(contract).where(eq(contract.id, row.contractId));
-    if (!c || !allowedPropertyIds.includes(c.propertyId)) {
-      throw new AppError('forbidden', 'no access to payment\'s contract');
-    }
+  // Same rule and same message as before the join: only assigned payments are
+  // access-checked, and the error text is asserted by existing tests.
+  if (allowedPropertyIds !== null && row.contractId !== null
+      && (row.contractPropertyId === null || !allowedPropertyIds.includes(row.contractPropertyId))) {
+    throw new AppError('forbidden', 'no access to payment\'s contract');
   }
-  return row as PaymentRow;
+  const { contractPropertyId: _ignored, ...rest } = row;
+  return rest;
 }
 
 export async function assignPaymentToContract(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, contractId: string | null): Promise<PaymentRow> {

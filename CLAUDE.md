@@ -50,6 +50,9 @@ pnpm mcp
 - **No real PII in code or docs.** Use `<placeholder>` style for names/addresses/amounts in examples and tests.
 - **Don't commit `.mcp.json`** — contains API tokens.
 - **Don't compute money in the LLM head.** Write Python scripts (`claude-plugin/templates/skill/scripts/`) for arithmetic. The plugin skill explicitly forbids in-head math.
+- **`main` is protected — work on a branch and open a PR.** `.github/workflows/ci.yml` must go green first (`test`, `typecheck`, `build`), and the branch must be up to date with `main`. This applies to admins too.
+- **Don't narrow `exclude` in `vitest.config.ts` to root-relative globs.** Setting `exclude` replaces vitest's defaults; patterns need a `**/` prefix or vitest collects dependencies' own test files out of nested `node_modules`.
+- **Production migrations stay manual** (`pnpm db:migrate` against the direct URL). Only *preview* deployments auto-migrate, via `pnpm migrate:preview` inside `vercel-build` — double-gated on `VERCEL_ENV=preview` + `PREVIEW_DB_MIGRATIONS=1`. See `@DEPLOY.md`.
 
 ## Reference
 

@@ -79,9 +79,62 @@ Po každé schema změně:
 1. `pnpm db:generate` (vyrobí SQL diff v `drizzle/`)
 2. Commit + push (nový migrations file půjde do gitu)
 3. Před deployem: `DATABASE_URL="<direct-url>" pnpm db:migrate` proti production DB
-4. Deploy (Vercel build neudělá migrations automaticky — to je záměr, předejde nečekaným změnám schémat při rebuild)
+4. Deploy (production build neudělá migrations automaticky — to je záměr, předejde nečekaným změnám schémat při rebuild)
 
-Pokud někdy chceš auto-migrations při deployu, můžeš přidat krok do `vercel-build` script. Ale doporučuju manual control.
+**Production zůstává manual.** Preview deployments se ale migrují samy — viz níž.
+
+## Preview deployments (Neon branch + auto-migrations)
+
+Preview deployment potřebuje DB se **aktuálním** schématem, jinak PR nejde vyzkoušet.
+Zároveň nesmí sahat na production data.
+
+Řešení má dvě poloviny:
+
+**1. Vlastní DB branch per preview — Neon Vercel integration**
+
+Nainstaluj [Neon Vercel integration](https://neon.com/docs/guides/vercel-native-integration)
+do Vercel projektu. Pro každý preview deployment vyrobí copy-on-write branch
+`preview/<git-branch>` a nastaví do toho deploymentu:
+
+| Var | Co to je |
+|---|---|
+| `DATABASE_URL` | pooled (PgBouncer) connection na tu branch |
+| `DATABASE_URL_UNPOOLED` | direct connection na tu branch — potřebné pro migrations |
+
+Protože branch je copy-on-write kopie parenta, **preview má i uživatele z production** —
+nemusíš nic seedovat (signup je vypnutý, takže by ani nešlo).
+
+⚠️ Po instalaci **smaž `DATABASE_URL` ze scope Preview** v Project Settings → Environment
+Variables. Jinak project-level hodnota (production DB) přebije to, co integrace injectuje.
+
+**2. Migrations při buildu — `pnpm migrate:preview`**
+
+`vercel-build` je `tsc --noEmit && pnpm migrate:preview && vite build`.
+`scripts/migrate-preview.ts` se spustí jen když platí **obojí**:
+
+- `VERCEL_ENV === 'preview'` — nastavuje Vercel runtime
+- `PREVIEW_DB_MIGRATIONS === '1'` — nastav ručně, **jen ve scope Preview**
+
+Jinak no-op (vypíše `skipped — ...` a skončí s exit 0). Ta druhá podmínka je bezpečnostní
+pojistka: bez Neon integrace by preview zdědil production `DATABASE_URL` a migrations by
+šly na produkci. Dokud `PREVIEW_DB_MIGRATIONS` nenastavíš, nemůže se to stát.
+
+Migrations jdou přes `DATABASE_URL_UNPOOLED` (fallback: `DATABASE_URL` s odstraněným
+`-pooler` z hostname). Drizzle migrator dělá DDL v transakci, což PgBouncer transaction
+mode odmítne — proto direct connection, ne pooled.
+
+Setup checklist:
+
+```
+Vercel → Project Settings → Environment Variables
+  PREVIEW_DB_MIGRATIONS = 1          scope: Preview only
+  DATABASE_URL                       scope: Production only  (odstranit z Preview!)
+  BETTER_AUTH_SECRET                 scope: Production + Preview
+  BETTER_AUTH_TRUSTED_ORIGINS        scope: Production + Preview
+```
+
+`BETTER_AUTH_URL` v Preview nenastavuj — kód spadne zpátky na `VERCEL_URL`
+(`core/auth/better-auth.ts`), což je pro per-deploy domény to jediné, co funguje.
 
 ## Custom doména
 

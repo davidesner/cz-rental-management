@@ -8,13 +8,13 @@
     "dev:web": "vite",
     "mcp": "tsx mcp/index.ts",
     "build": "tsc --noEmit",
-    "vercel-build": "tsc --noEmit && vite build",
+    "vercel-build": "tsc --noEmit && pnpm migrate:preview && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx core/db/migrate.ts",
+    "migrate:preview": "tsx scripts/migrate-preview.ts",
     "db:studio": "drizzle-kit studio",
-    "test:e2e": "playwright test",
     "user:create": "tsx scripts/create-user.ts"
   },
   "pnpm": {
@@ -50,7 +50,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.16",
     "@types/react-dom": "^19.2.3",

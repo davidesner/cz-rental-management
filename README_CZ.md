@@ -109,8 +109,27 @@ pnpm db:migrate
 pnpm dev               # API na :3000, Vite na :5173
 ```
 
+```bash
+# Testy — každý test si vyrobí vlastní disposable databázi, takže potřebuje
+# admin Postgres URL, ne databázi aplikace.
+TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres" pnpm test
+```
+
 Deploy na Vercel + Neon: viz [`DEPLOY.md`](./DEPLOY.md).
 Orientace v repu pro contributory / AI agenty: viz [`CLAUDE.md`](./CLAUDE.md).
+
+## CI
+
+`.github/workflows/ci.yml` běží na každý push a každý pull request. Tři joby, všechny
+musí projít, než jde PR mergnout do `main`:
+
+| Job | Příkaz | Co pokrývá |
+|---|---|---|
+| `test` | `pnpm test` | Celá vitest suite proti Postgres 16 service containeru |
+| `typecheck` | `pnpm build` | `tsc --noEmit` nad `core/`, `server/`, `tests/`, `mcp/`, `scripts/`, `src/` |
+| `build` | `vite build` | Production bundle frontendu |
+
+`main` je protected: žádné direct pushe, PR povinný, branch musí být up to date s `main`.
 
 ---
 
@@ -161,7 +180,6 @@ src/                  → React frontend (Vite)
 mcp/                  → Standalone MCP server (samostatná concern)
   tools/              → Jeden soubor per resource vystavující MCP tooly
 tests/                → Vitest integration + service testy (fresh DB per test)
-tests-e2e/            → Playwright browser testy
 drizzle/              → Generované SQL migrace
 claude-plugin/        → Claude Code plugin (workflow skill)
 ```

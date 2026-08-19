@@ -109,8 +109,28 @@ pnpm db:migrate
 pnpm dev               # API on :3000, Vite on :5173
 ```
 
+```bash
+# Run the tests — each test provisions its own disposable database, so this needs
+# an admin Postgres URL rather than the app's own database.
+TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres" pnpm test
+```
+
 Deployment to Vercel + Neon: see [`DEPLOY.md`](./DEPLOY.md).
 Repo orientation for contributors / AI agents: see [`CLAUDE.md`](./CLAUDE.md).
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push and every pull request. Three jobs, all
+required to pass before `main` accepts a merge:
+
+| Job | Command | What it covers |
+|---|---|---|
+| `test` | `pnpm test` | Full vitest suite against a Postgres 16 service container |
+| `typecheck` | `pnpm build` | `tsc --noEmit` over `core/`, `server/`, `tests/`, `mcp/`, `scripts/`, `src/` |
+| `build` | `vite build` | Frontend production bundle |
+
+`main` is protected: no direct pushes, PR required, and the branch must be up to date
+with `main` before merging.
 
 ---
 
@@ -161,7 +181,6 @@ src/                  → React frontend (Vite)
 mcp/                  → Standalone MCP server (separate concern)
   tools/              → One file per resource exposing MCP tools
 tests/                → Vitest integration + service tests (fresh-DB per test)
-tests-e2e/            → Playwright browser tests
 drizzle/              → Generated SQL migrations
 claude-plugin/        → Claude Code plugin (workflow skill)
 ```

@@ -9,9 +9,6 @@ rental_backups/
 .DS_Store
 coverage/
 .vscode/
-test-results/
-playwright-report/
-playwright/.cache/
 *.tgz
 
 # Claude Code — locally installed skills + their lockfile

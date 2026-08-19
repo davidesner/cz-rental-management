@@ -33,7 +33,7 @@ export interface QueryRecorder {
   count: () => number;
 }
 
-export async function freshDb(): Promise<{
+export async function freshDb(opts?: { recordQueries?: boolean }): Promise<{
   db: DB;
   client: { close: () => Promise<void> };
   recorder: QueryRecorder;
@@ -54,10 +54,18 @@ export async function freshDb(): Promise<{
     queries: () => [...recorded],
     count: () => recorded.length,
   };
-  const sql = postgres(testUrl, {
-    max: 5,
-    debug: (_conn, query) => { if (recording) recorded.push(query.replace(/\s+/g, ' ').trim()); },
-  });
+  // Only install `debug` when the caller actually records. postgres.js keys
+  // `enumerable: options.debug` when decorating query errors
+  // (postgres/src/connection.js), so an always-on hook would change the shape
+  // of every DB error across the whole suite.
+  const sql = postgres(testUrl, opts?.recordQueries
+    ? {
+        max: 5,
+        debug: (_conn: unknown, query: string) => {
+          if (recording) recorded.push(query.replace(/\s+/g, ' ').trim());
+        },
+      }
+    : { max: 5 });
   const db = drizzle(sql, { schema });
   await migrate(db, { migrationsFolder: './drizzle' });
 

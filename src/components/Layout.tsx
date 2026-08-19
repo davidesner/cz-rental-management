@@ -20,10 +20,14 @@ export function ProtectedLayout() {
   // first, and only then the page's own queries. Rendering the shell
   // immediately lets both waves overlap, roughly halving time-to-content.
   //
-  // Safe because authorisation is enforced server-side, not here: an
-  // unauthenticated or must-change-password user gets 401/403 on the page
-  // queries and is redirected by the effects above. This only removes a
-  // client-side *render* gate, never an access-control check.
+  // Safe because authorisation is enforced server-side, not here: this only
+  // removes a client-side *render* gate, never an access-control check.
+  //
+  // The trade-off is real though: a user with an expired session now briefly
+  // sees the authenticated shell and fires a burst of page queries (401), and
+  // a mustChangePassword user fires the same burst (403), before the effects
+  // above redirect. No data leaks — the server rejects every one — but those
+  // requests are issued and wasted rather than never sent.
   return (
     <div className="min-h-screen flex">
       <aside className="w-60 border-r p-6 space-y-3">

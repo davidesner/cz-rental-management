@@ -76,8 +76,10 @@ export function authMiddleware() {
     if (authz?.startsWith('Bearer ')) {
       const token = authz.slice('Bearer '.length).trim();
       // Token → membership → owning user's password flag in one round-trip.
-      // LEFT JOINs so a token whose membership was deleted still reports
-      // "membership missing" rather than looking like an invalid token.
+      // Both FKs are NOT NULL with ON DELETE CASCADE, so the joined rows always
+      // exist and INNER would behave identically; LEFT is kept only so a future
+      // schema change that relaxes either FK degrades to "membership missing"
+      // instead of silently dropping the row and reporting "invalid token".
       const [row] = await db
         .select({
           tokenId: apiToken.id,

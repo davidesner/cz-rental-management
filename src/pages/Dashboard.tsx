@@ -10,7 +10,7 @@ export function DashboardPage() {
         <CardHeader><CardTitle>Vítej, {me?.user.name}</CardTitle></CardHeader>
         <CardContent>
           <div className="text-sm text-muted-foreground">Aktivní organizace: {me?.memberships[0]?.orgName ?? '—'}</div>
-          {(me?.memberships ?? []).length === 0 && <p>Použij API nebo MCP pro vytvoření organizace.</p>}
+          {me && me.memberships.length === 0 && <p>Použij API nebo MCP pro vytvoření organizace.</p>}
         </CardContent>
       </Card>
     </div>

@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { createId } from '@paralleldrive/cuid2';
 import { freshDb } from './helpers/db.js';
 import { makeApp } from './helpers/app.js';
 import { registerUser } from './helpers/fixtures.js';
+import { membership, propertyAccess } from '../core/db/schema.js';
 
 async function bootstrap() {
   const { db, client } = await freshDb();
@@ -11,7 +13,7 @@ async function bootstrap() {
   const p = (await (await app.request('/api/properties', { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ name: 'KP' }) })).json() as any).property;
   const t = (await (await app.request('/api/tenants', { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ name: 'SB' }) })).json() as any).tenant;
   const ct = (await (await app.request('/api/contracts', { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ propertyId: p.id, tenantId: t.id, startDate: '2024-09-20' }) })).json() as any).contract;
-  return { client, app, cookie, contract: ct };
+  return { db, client, app, cookie, contract: ct };
 }
 
 describe('payments REST', () => {
@@ -141,6 +143,63 @@ describe('payments REST', () => {
       expect(batchAssigned.tenantName).toBe('SB');
       expect(batchUnassigned.propertyName).toBeNull();
       expect(batchUnassigned.tenantName).toBeNull();
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("member restricted to one property is denied access to another property's payment via idempotent externalId match", async () => {
+    const { db, client, app, cookie: ownerCookie, contract: contractA } = await bootstrap();
+    try {
+      // A second property/tenant/contract in the SAME org, owned by the same owner.
+      const propB = (await (await app.request('/api/properties', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify({ name: 'PropB' }),
+      })).json() as any).property;
+      const tenantB = (await (await app.request('/api/tenants', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify({ name: 'TenantB' }),
+      })).json() as any).tenant;
+      const contractB = (await (await app.request('/api/contracts', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify({ propertyId: propB.id, tenantId: tenantB.id, startDate: '2024-09-20' }),
+      })).json() as any).contract;
+
+      // Owner creates a payment already assigned to contractB (property B), with a known externalId.
+      const seed = await app.request('/api/payments', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify({ contractId: contractB.id, amount: 100000, paidAt: '2024-10-01', source: 'bank', externalId: 'shared-ext' }),
+      });
+      expect(seed.status).toBe(201);
+
+      // A second user, wired into the SAME org as a 'member' restricted to
+      // property A ('KP') only. There is no HTTP invite endpoint in this
+      // codebase — membership/propertyAccess rows are the mechanism
+      // authMiddleware itself reads, so we insert them directly, same as
+      // tests/auth-middleware.test.ts does for api tokens.
+      const { userId: memberUserId, cookie: memberCookie } = await registerUser(app, 'member@b.cz', 'password123', 'M');
+      const orgId = contractA.orgId;
+      const membershipId = createId();
+      await db.insert(membership).values({ id: membershipId, userId: memberUserId, orgId, role: 'member' });
+      await db.insert(propertyAccess).values({ membershipId, propertyId: contractA.propertyId });
+
+      // The member attempts the same idempotent duplicate POST (same org,
+      // same externalId) that would otherwise return the existing row —
+      // one actually assigned to property B, which this member cannot see.
+      // x-org-id selects the membership in the owner's org (the member's own
+      // auto-created org would otherwise win).
+      const dup = await app.request('/api/payments', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: memberCookie, 'x-org-id': orgId },
+        body: JSON.stringify({ contractId: contractA.id, amount: 100000, paidAt: '2024-10-01', source: 'bank', externalId: 'shared-ext' }),
+      });
+
+      expect(dup.status).toBe(403);
+      const dupText = JSON.stringify(await dup.json());
+      // The bug this guards against: the response body carrying property B's
+      // (or its tenant's) name instead of a clean 403.
+      expect(dupText).not.toContain('PropB');
+      expect(dupText).not.toContain('TenantB');
     } finally {
       await client.close();
     }

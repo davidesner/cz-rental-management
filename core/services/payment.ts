@@ -50,10 +50,14 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
   // Idempotency on externalId
   if (input.externalId) {
     const existing = await db.select().from(payment).where(and(eq(payment.orgId, orgId), eq(payment.externalId, input.externalId))).then(rs => rs[0]);
-    // Re-fetch through getPayment: .select() here can't carry the joined
-    // names, and no access check ran on this pre-existing row before either —
-    // allowedPropertyIds: null preserves that (unchanged) behaviour.
-    if (existing) return getPayment(db, orgId, existing.id, null);
+    // The found row's real contractId can differ from input.contractId (a
+    // caller-controlled value already checked above) — externalId matching
+    // ignores contractId entirely. Re-fetch through getPayment passing the
+    // caller's own allowedPropertyIds, so access is checked against the row
+    // that's actually returned, not the one the caller merely asked for.
+    // getPayment throws AppError('forbidden', "no access to payment's
+    // contract") when it fails, same as any other read of this row.
+    if (existing) return getPayment(db, orgId, existing.id, allowedPropertyIds);
   }
   const id = createId();
   await db.insert(payment).values({
@@ -116,9 +120,15 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
       createdIds.push(id);
     }
     if (createdIds.length === 0 && existingIds.length === 0) return { created: [], existing: [] };
-    // Ownership/access for every id here was already verified above (or, for
-    // pre-existing idempotent rows, was never checked — same as before this
-    // change), so allowedPropertyIds: null is safe, mirroring recordPayment.
+    // Access for createdIds was already verified above via
+    // verifyContractInOrgIfSet against the caller-supplied contractId that
+    // was actually inserted, so those rows are safe as-is. existingIds rows
+    // are different: externalId matching ignores input.contractId entirely,
+    // so the row found may be assigned to a contract the caller never had
+    // checked — same gap as recordPayment's idempotent branch. Check each
+    // existingIds row's *actual* contractPropertyId below, one query for the
+    // whole batch rather than a per-row re-fetch (stays N+1-free even at
+    // PAYMENT_BATCH_MAX).
     const rows = await tx
       .select(paymentSelect)
       .from(payment)
@@ -127,6 +137,15 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
       .leftJoin(tenant, eq(tenant.id, contract.tenantId))
       .where(inArray(payment.id, [...createdIds, ...existingIds]));
     const byId = new Map(rows.map(r => [r.id, r]));
+    if (allowedPropertyIds !== null) {
+      for (const id of existingIds) {
+        const row = byId.get(id)!;
+        if (row.contractId !== null
+            && (row.contractPropertyId === null || !allowedPropertyIds.includes(row.contractPropertyId))) {
+          throw new AppError('forbidden', 'no access to payment\'s contract');
+        }
+      }
+    }
     const strip = (id: string): PaymentRow => {
       const { contractPropertyId: _ignored, ...row } = byId.get(id)!;
       return row;
@@ -196,7 +215,10 @@ export async function getPayment(db: DB, orgId: string, id: string, allowedPrope
     .where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
   if (!row) throw new AppError('not_found', 'payment not found');
   // Same rule and same message as before the join: only assigned payments are
-  // access-checked, and the error text is asserted by existing tests.
+  // access-checked. The error text is asserted by
+  // tests/payments.test.ts's "member restricted to one property is denied
+  // access to another property's payment via idempotent externalId match"
+  // regression test.
   if (allowedPropertyIds !== null && row.contractId !== null
       && (row.contractPropertyId === null || !allowedPropertyIds.includes(row.contractPropertyId))) {
     throw new AppError('forbidden', 'no access to payment\'s contract');

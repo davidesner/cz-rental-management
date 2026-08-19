@@ -14,3 +14,6 @@ coverage/
 # Claude Code — locally installed skills + their lockfile
 .claude/skills/
 /skills-lock.json
+# Git worktrees created inside the repo; `git add -A` would otherwise commit a
+# whole nested checkout.
+.claude/worktrees/

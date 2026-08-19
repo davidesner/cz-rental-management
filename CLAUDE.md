@@ -52,7 +52,7 @@ pnpm mcp
 - **Don't compute money in the LLM head.** Write Python scripts (`claude-plugin/templates/skill/scripts/`) for arithmetic. The plugin skill explicitly forbids in-head math.
 - **`main` is protected — work on a branch and open a PR.** `.github/workflows/ci.yml` must go green first (`test`, `typecheck`, `build`), and the branch must be up to date with `main`. This applies to admins too.
 - **Don't narrow `exclude` in `vitest.config.ts` to root-relative globs.** Setting `exclude` replaces vitest's defaults; patterns need a `**/` prefix or vitest collects dependencies' own test files out of nested `node_modules`.
-- **Production migrations stay manual** (`pnpm db:migrate` against the direct URL). Only *preview* deployments auto-migrate, via `pnpm migrate:preview` inside `vercel-build` — double-gated on `VERCEL_ENV=preview` + `PREVIEW_DB_MIGRATIONS=1`. See `@DEPLOY.md`.
+- **Migrations run in the Vercel build**, via `pnpm migrate:deploy` inside `vercel-build` (`scripts/migrate-deploy.ts`). Each environment is double-gated: `VERCEL_ENV=preview` + `PREVIEW_DB_MIGRATIONS=1`, `VERCEL_ENV=production` + `PRODUCTION_DB_MIGRATIONS=1`. So **merging to `main` migrates production** before the new code goes live. Forward-only — rolling back a deploy does not roll back the schema. See `@DEPLOY.md`.
 
 ## Reference
 

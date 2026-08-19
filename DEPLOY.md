@@ -78,10 +78,16 @@ Po každé schema změně:
 
 1. `pnpm db:generate` (vyrobí SQL diff v `drizzle/`)
 2. Commit + push (nový migrations file půjde do gitu)
-3. Před deployem: `DATABASE_URL="<direct-url>" pnpm db:migrate` proti production DB
-4. Deploy (production build neudělá migrations automaticky — to je záměr, předejde nečekaným změnám schémat při rebuild)
+3. **Zkontroluj vygenerované SQL** — `drizzle-kit generate` umí vyrobit destruktivní
+   krok (`DROP COLUMN`, změna typu). Tohle je to jediné místo, kde to zachytíš.
+4. Merge do `main` → production build spustí migrace sám (`PRODUCTION_DB_MIGRATIONS=1`),
+   viz níž. Deployment se promotuje teprve po úspěšné migraci.
 
-**Production zůstává manual.** Preview deployments se ale migrují samy — viz níž.
+Ruční varianta (když je flag vypnutý, nebo potřebuješ migrovat mimo deploy):
+
+```bash
+DATABASE_URL="<DIRECT-url>" pnpm db:migrate
+```
 
 ## Preview deployments (Neon branch + auto-migrations)
 
@@ -125,25 +131,39 @@ Protože branch je copy-on-write kopie parenta, **preview má i uživatele z pro
 nemusíš nic seedovat (signup je vypnutý, takže by to ani nešlo). Zároveň to znamená, že
 preview URL zobrazuje živá data.
 
-### 2. Migrations při buildu — `pnpm migrate:preview`
+### 2. Migrations při buildu — `pnpm migrate:deploy`
 
-`vercel-build` je `tsc --noEmit && pnpm migrate:preview && vite build`.
-`scripts/migrate-preview.ts` migruje jen když platí **obojí**:
+`vercel-build` je `tsc --noEmit && pnpm migrate:deploy && vite build`.
+`scripts/migrate-deploy.ts` migruje jen když platí **obojí** pro dané prostředí:
 
-- `VERCEL_ENV === 'preview'` — nastavuje Vercel runtime
-- `PREVIEW_DB_MIGRATIONS === '1'` — ruční opt-in, **jen ve scope Preview**
+| `VERCEL_ENV` | opt-in flag | scope env var |
+|---|---|---|
+| `preview` | `PREVIEW_DB_MIGRATIONS=1` | Preview |
+| `production` | `PRODUCTION_DB_MIGRATIONS=1` | Production |
 
-Jinak no-op (`skipped — ...`, exit 0). Druhá podmínka je pojistka: kdyby branching byl
-vypnutý, preview by zdědil production `DATABASE_URL` a migrations by šly na produkci.
-Bez `PREVIEW_DB_MIGRATIONS` se to stát nemůže.
+Jinak no-op (`skipped — ...`, exit 0) — a ve zprávě je vidět reálná hodnota, takže
+překlep nebo špatný scope poznáš na první pohled.
+
+**Proč v buildu, a ne jako samostatný CI job:** Vercel promotuje deployment teprve po
+úspěšném buildu. Migrace tady tedy garantuje pořadí — schéma je aktuální dřív, než nový
+kód obslouží první request, a když migrace spadne, spadne build a běží dál ta předchozí
+verze. Job běžící paralelně s deployem tuhle garanci nemá.
+
+Opt-in flagy jsou kill switch: odnastavíš a deploye přestanou na schéma sahat, bez změny
+kódu. U preview navíc chrání proti tomu, že by bez branchingu preview zdědil production
+`DATABASE_URL` a migrace šly na produkci.
 
 Migrations jdou přes `DATABASE_URL_UNPOOLED` (fallback: `DATABASE_URL` s odstraněným
 `-pooler` z hostname). Drizzle migrator dělá DDL v transakci, což PgBouncer transaction
 mode odmítne — proto direct connection, ne pooled.
 
+⚠️ **Migrace jsou forward-only.** Rollback deploymentu **neudělá** rollback schématu —
+skončíš s novým schématem a starým kódem. Když potřebuješ schéma zpátky, je to manuální
+operace proti direct connection (nebo Neon PITR / restore z branche).
+
 ⚠️ **Env var nastavuj bez trailing newline.** `echo 1 | vercel env add ...` uloží
-doslova `"1\n"`. Script si hodnoty trimuje, takže to dnes projde, ale jiné nástroje ne —
-použij `printf '1' | vercel env add PREVIEW_DB_MIGRATIONS preview` nebo dashboard.
+doslova `"1\n"`. Script si hodnoty trimuje, takže to projde, ale jiné nástroje ne —
+použij `printf '1' | vercel env add PRODUCTION_DB_MIGRATIONS production` nebo dashboard.
 
 ### Setup checklist
 
@@ -154,7 +174,8 @@ Vercel → Storage → neon-citrine-bell → Configure
   Custom Environment Variable Prefix     = prázdné
 
 Vercel → Project Settings → Environment Variables
-  PREVIEW_DB_MIGRATIONS = 1          scope: Preview only
+  PREVIEW_DB_MIGRATIONS    = 1       scope: Preview only
+  PRODUCTION_DB_MIGRATIONS = 1       scope: Production only
   BETTER_AUTH_SECRET                 scope: Production + Preview
   BETTER_AUTH_TRUSTED_ORIGINS        scope: Production + Preview
   DATABASE_URL / DATABASE_URL_UNPOOLED / PG* / POSTGRES_*   spravuje integrace, needituj
@@ -168,15 +189,16 @@ Vercel → Project Settings → Environment Variables
 V build logu preview deploymentu:
 
 ```
-[migrate-preview] migrations applied to postgresql://<redacted>@[REDACTED]/neondb?...
+[migrate-deploy] applying migrations to preview at postgresql://<redacted>@[REDACTED]/neondb?...
+[migrate-deploy] preview schema is up to date
 ```
 
 Hostname je `[REDACTED]` — to škrtá Vercel (matchuje sensitive env var), ne náš kód.
 Z logu se tedy **nedá** poznat, jestli šlo o branch nebo produkci. Ověř to v Neonu:
 musí existovat branch `preview/<git-branch>`.
 
-Když log říká `skipped — PREVIEW_DB_MIGRATIONS is ...`, vypíše i reálnou hodnotu —
-podle toho poznáš překlep nebo špatný scope.
+Když log říká `skipped — ... is ...`, vypíše i reálnou hodnotu — podle toho poznáš
+překlep nebo špatný scope.
 
 ### Cleanup preview branchí
 

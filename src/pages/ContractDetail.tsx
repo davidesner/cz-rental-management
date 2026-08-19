@@ -16,6 +16,8 @@ interface Contract {
   id: string;
   propertyId: string;
   tenantId: string;
+  propertyName: string;
+  tenantName: string;
   startDate: string;
   endDate: string | null;
   securityDeposit: number | null;
@@ -99,7 +101,6 @@ interface Reconciliation {
 }
 
 interface Property { id: string; name: string; }
-interface Tenant { id: string; name: string; }
 
 interface Payment {
   id: string;
@@ -1385,21 +1386,11 @@ export function ContractDetailPage() {
 
   const contract = contractData?.contract;
 
-  // Tenant + property lookups
-  const { data: tenantsData } = useQuery({
-    queryKey: ['tenants'],
-    queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants'),
-  });
+  // Properties lookup — still needed for the cost-statement dialog's dropdown.
   const { data: propertiesData } = useQuery({
     queryKey: ['properties'],
     queryFn: () => api.get<{ properties: Property[] }>('/api/properties'),
   });
-
-  const tenantsById = Object.fromEntries((tenantsData?.tenants ?? []).map(t => [t.id, t]));
-  const propertiesById = Object.fromEntries((propertiesData?.properties ?? []).map(p => [p.id, p]));
-
-  const tenant = contract ? tenantsById[contract.tenantId] : undefined;
-  const property = contract ? propertiesById[contract.propertyId] : undefined;
 
   // Cost statements for this property
   const { data: costStatementsData } = useQuery({
@@ -1487,14 +1478,14 @@ export function ContractDetailPage() {
         {contract && (
           <p className="text-muted-foreground mt-1">
             <span className="font-medium text-foreground" title="Nájemník">
-              {tenant?.name ?? contract.tenantId}
+              {contract.tenantName}
             </span>
             {' · '}
             <Link
               to={`/properties/${contract.propertyId}`}
               className="underline text-primary hover:opacity-70"
             >
-              {property?.name ?? contract.propertyId}
+              {contract.propertyName}
             </Link>
           </p>
         )}

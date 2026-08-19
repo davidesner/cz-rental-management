@@ -17,7 +17,7 @@ interface ApiToken {
 
 export function ApiTokensPage() {
   const qc = useQueryClient();
-  const { data, isPending } = useQuery({
+  const { data } = useQuery({
     queryKey: ['api-tokens'],
     queryFn: () => api.get<{ tokens: ApiToken[] }>('/api/api-tokens'),
   });
@@ -42,8 +42,6 @@ export function ApiTokensPage() {
     mutationFn: (id: string) => api.delete<void>(`/api/api-tokens/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['api-tokens'] }),
   });
-
-  const tokens = data?.tokens ?? [];
 
   return (
     <div className="space-y-6">
@@ -72,14 +70,14 @@ export function ApiTokensPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isPending ? (
+            {!data ? (
               <TableSkeleton cols={4} />
-            ) : tokens.length === 0 ? (
+            ) : data.tokens.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Zatím žádné API tokeny.</TableCell>
               </TableRow>
             ) : (
-              tokens.map(t => (
+              data.tokens.map(t => (
                 <TableRow key={t.id}>
                   <TableCell className="font-medium">{t.name}</TableCell>
                   <TableCell>{t.lastUsedAt ?? '—'}</TableCell>

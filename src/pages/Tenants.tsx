@@ -14,7 +14,7 @@ interface Tenant {
 
 export function TenantsPage() {
   const qc = useQueryClient();
-  const { data, isPending } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
+  const { data } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', phone: '', accountNumber: '' });
   const [err, setErr] = useState<string | null>(null);
@@ -48,14 +48,14 @@ export function TenantsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isPending ? (
+            {!data ? (
               <TableSkeleton cols={3} />
-            ) : (data?.tenants ?? []).length === 0 ? (
+            ) : data.tenants.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-muted-foreground py-8">Zatím žádní nájemci.</TableCell>
               </TableRow>
             ) : (
-              (data?.tenants ?? []).map(t => (
+              data.tenants.map(t => (
                 <TableRow key={t.id}>
                   <TableCell className="font-medium">{t.name}</TableCell>
                   <TableCell>{t.email ?? '—'}</TableCell>

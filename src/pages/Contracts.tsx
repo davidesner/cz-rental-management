@@ -25,7 +25,7 @@ interface Contract {
 export function ContractsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { data, isPending } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts') });
+  const { data } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts') });
   const { data: propertiesData } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
   const { data: tenantsData } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
   const [open, setOpen] = useState(false);
@@ -73,14 +73,14 @@ export function ContractsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isPending ? (
+            {!data ? (
               <TableSkeleton cols={4} />
-            ) : (data?.contracts ?? []).length === 0 ? (
+            ) : data.contracts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Zatím žádné pronájmy.</TableCell>
               </TableRow>
             ) : (
-              (data?.contracts ?? []).map(c => (
+              data.contracts.map(c => (
                 <TableRow
                   key={c.id}
                   className="cursor-pointer hover:bg-muted/50"

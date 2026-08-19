@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -252,9 +253,11 @@ interface PodminkyTableProps {
   terms: ContractTerm[];
   utilities: Utility[];
   onEditTerm?: (term: ContractTerm) => void;
+  /** True while the terms/utilities queries feeding this table haven't returned data yet. */
+  isPending: boolean;
 }
 
-function PodminkyTable({ terms, utilities, onEditTerm }: PodminkyTableProps) {
+function PodminkyTable({ terms, utilities, onEditTerm, isPending }: PodminkyTableProps) {
   const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 
   // Which utility kinds appear at all in this contract
@@ -266,9 +269,7 @@ function PodminkyTable({ terms, utilities, onEditTerm }: PodminkyTableProps) {
     ...utilities.map(u => u.validFrom),
   ])).sort();
 
-  if (dates.length === 0) {
-    return <p className="text-sm text-muted-foreground py-4">Zatím žádné podmínky. Přidej první.</p>;
-  }
+  const cols = 8 + presentKinds.length + (onEditTerm ? 1 : 0);
 
   return (
     <div className="overflow-x-auto">
@@ -288,7 +289,14 @@ function PodminkyTable({ terms, utilities, onEditTerm }: PodminkyTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {dates.map(d => {
+          {isPending ? (
+            <TableSkeleton cols={cols} />
+          ) : dates.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={cols} className="text-center text-sm text-muted-foreground py-4">Zatím žádné podmínky. Přidej první.</TableCell>
+            </TableRow>
+          ) : (
+          dates.map(d => {
             const activeTerm = validAt(terms, d);
             const baseRent = activeTerm?.baseRent ?? 0;
             const serviceAdvance = activeTerm?.serviceAdvance ?? 0;
@@ -344,7 +352,8 @@ function PodminkyTable({ terms, utilities, onEditTerm }: PodminkyTableProps) {
                 )}
               </TableRow>
             );
-          })}
+          })
+          )}
         </TableBody>
       </Table>
     </div>
@@ -1539,7 +1548,9 @@ export function ContractDetailPage() {
           {/* Sekce Aktuální podmínky */}
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-3">Aktuální podmínky</h2>
-            {!currentTerm && currentUtilities.length === 0 ? (
+            {!termsData || !utilitiesData ? (
+              <p className="text-sm text-muted-foreground py-4">Načítání…</p>
+            ) : !currentTerm && currentUtilities.length === 0 ? (
               <p className="text-sm text-muted-foreground">Žádné aktuální podmínky.</p>
             ) : (() => {
                 const sluzbyTotal = (currentTerm?.serviceAdvance ?? 0) + currentUtilities.reduce((s, u) => s + u.monthlyAdvance, 0);
@@ -1596,6 +1607,7 @@ export function ContractDetailPage() {
                 terms={terms}
                 utilities={utilities}
                 onEditTerm={(t) => setEditTermsTarget(t)}
+                isPending={!termsData || !utilitiesData}
               />
             </CardContent>
           </Card>
@@ -1638,23 +1650,26 @@ export function ContractDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(paymentsData?.payments ?? []).map(p => (
-                      <TableRow key={p.id}>
-                        <TableCell>{p.paidAt}</TableCell>
-                        <TableCell>{fmtKc(p.amount)}</TableCell>
-                        <TableCell>{p.counterparty ?? '—'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.counterpartyAccount ?? '—'}</TableCell>
-                        <TableCell>{p.source}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.externalId ?? '—'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={p.note ?? undefined}>
-                          {p.note ?? p.description ?? '—'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {(paymentsData?.payments ?? []).length === 0 && (
+                    {!paymentsData ? (
+                      <TableSkeleton cols={7} />
+                    ) : paymentsData.payments.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Žádné platby pro tento pronájem.</TableCell>
                       </TableRow>
+                    ) : (
+                      paymentsData.payments.map(p => (
+                        <TableRow key={p.id}>
+                          <TableCell>{p.paidAt}</TableCell>
+                          <TableCell>{fmtKc(p.amount)}</TableCell>
+                          <TableCell>{p.counterparty ?? '—'}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{p.counterpartyAccount ?? '—'}</TableCell>
+                          <TableCell>{p.source}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{p.externalId ?? '—'}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={p.note ?? undefined}>
+                            {p.note ?? p.description ?? '—'}
+                          </TableCell>
+                        </TableRow>
+                      ))
                     )}
                   </TableBody>
                 </Table>
@@ -1687,33 +1702,36 @@ export function ContractDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredStatements.map(s => {
-                      const adj = s.adjustmentAmount ?? 0;
-                      const reconciliable = s.totalAmount + adj;
-                      return (
-                        <TableRow key={s.id}>
-                          <TableCell>{s.kind}</TableCell>
-                          <TableCell>{s.periodFrom} – {s.periodTo}</TableCell>
-                          <TableCell>{fmtKc(s.totalAmount)}</TableCell>
-                          <TableCell>{s.adjustmentAmount != null ? fmtKcSigned(s.adjustmentAmount) : <span className="text-muted-foreground">—</span>}</TableCell>
-                          <TableCell className="font-bold">{fmtKc(reconciliable)}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
-                            {s.adjustmentNote ?? '—'}
-                          </TableCell>
-                          <TableCell>{
-                            s.documentRef
-                              ? /^https?:\/\//.test(s.documentRef)
-                                ? <a href={s.documentRef} target="_blank" rel="noreferrer" className="text-primary underline text-xs">odkaz</a>
-                                : <span className="text-xs text-muted-foreground" title={s.documentRef}>{s.documentRef.slice(0, 20)}{s.documentRef.length > 20 ? '…' : ''}</span>
-                              : <span className="text-muted-foreground">—</span>
-                          }</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    {filteredStatements.length === 0 && (
+                    {!costStatementsData ? (
+                      <TableSkeleton cols={7} />
+                    ) : filteredStatements.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Žádné výkazy nákladů pro toto období.</TableCell>
                       </TableRow>
+                    ) : (
+                      filteredStatements.map(s => {
+                        const adj = s.adjustmentAmount ?? 0;
+                        const reconciliable = s.totalAmount + adj;
+                        return (
+                          <TableRow key={s.id}>
+                            <TableCell>{s.kind}</TableCell>
+                            <TableCell>{s.periodFrom} – {s.periodTo}</TableCell>
+                            <TableCell>{fmtKc(s.totalAmount)}</TableCell>
+                            <TableCell>{s.adjustmentAmount != null ? fmtKcSigned(s.adjustmentAmount) : <span className="text-muted-foreground">—</span>}</TableCell>
+                            <TableCell className="font-bold">{fmtKc(reconciliable)}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
+                              {s.adjustmentNote ?? '—'}
+                            </TableCell>
+                            <TableCell>{
+                              s.documentRef
+                                ? /^https?:\/\//.test(s.documentRef)
+                                  ? <a href={s.documentRef} target="_blank" rel="noreferrer" className="text-primary underline text-xs">odkaz</a>
+                                  : <span className="text-xs text-muted-foreground" title={s.documentRef}>{s.documentRef.slice(0, 20)}{s.documentRef.length > 20 ? '…' : ''}</span>
+                                : <span className="text-muted-foreground">—</span>
+                            }</TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -1744,54 +1762,57 @@ export function ContractDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reconciliations.map(r => {
-                      const totalDiff = (r.items ?? []).reduce((sum, i) => sum + i.difference, 0);
-                      return (
-                        <TableRow key={r.id}>
-                          <TableCell>{r.periodFrom} – {r.periodTo}</TableCell>
-                          <TableCell>{r.status}</TableCell>
-                          <TableCell>{fmtKc(totalDiff)}</TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={recomputeReconciliation.isPending}
-                                onClick={() => {
-                                  const msg = r.status === 'finalized'
-                                    ? 'Přepočítat FINALIZOVANÉ vyúčtování?'
-                                    : 'Přepočítat toto vyúčtování?';
-                                  if (confirm(msg)) recomputeReconciliation.mutate(r.id);
-                                }}
-                              >
-                                Přepočítat
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-destructive hover:text-destructive"
-                                disabled={deleteReconciliation.isPending}
-                                onClick={() => {
-                                  const msg = r.status === 'finalized'
-                                    ? 'Smazat FINALIZOVANÉ vyúčtování?'
-                                    : 'Smazat toto vyúčtování?';
-                                  if (confirm(msg)) deleteReconciliation.mutate(r.id);
-                                }}
-                              >
-                                Smazat
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    {reconciliations.length === 0 && (
+                    {!reconciliationsData ? (
+                      <TableSkeleton cols={5} />
+                    ) : reconciliations.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Žádná vyúčtování pro tento pronájem.</TableCell>
                       </TableRow>
+                    ) : (
+                      reconciliations.map(r => {
+                        const totalDiff = (r.items ?? []).reduce((sum, i) => sum + i.difference, 0);
+                        return (
+                          <TableRow key={r.id}>
+                            <TableCell>{r.periodFrom} – {r.periodTo}</TableCell>
+                            <TableCell>{r.status}</TableCell>
+                            <TableCell>{fmtKc(totalDiff)}</TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={recomputeReconciliation.isPending}
+                                  onClick={() => {
+                                    const msg = r.status === 'finalized'
+                                      ? 'Přepočítat FINALIZOVANÉ vyúčtování?'
+                                      : 'Přepočítat toto vyúčtování?';
+                                    if (confirm(msg)) recomputeReconciliation.mutate(r.id);
+                                  }}
+                                >
+                                  Přepočítat
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  disabled={deleteReconciliation.isPending}
+                                  onClick={() => {
+                                    const msg = r.status === 'finalized'
+                                      ? 'Smazat FINALIZOVANÉ vyúčtování?'
+                                      : 'Smazat toto vyúčtování?';
+                                    if (confirm(msg)) deleteReconciliation.mutate(r.id);
+                                  }}
+                                >
+                                  Smazat
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>

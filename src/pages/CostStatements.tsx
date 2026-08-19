@@ -47,7 +47,7 @@ function fmtKcSigned(halere: number) {
 
 export function CostStatementsPage() {
   const qc = useQueryClient();
-  const { data, isPending } = useQuery({
+  const { data } = useQuery({
     queryKey: ['cost-statements'],
     queryFn: () => api.get<{ statements: CostStatement[] }>('/api/cost-statements'),
   });
@@ -198,8 +198,6 @@ export function CostStatementsPage() {
     setYear(new Date().getFullYear());
   }
 
-  const statements = data?.statements ?? [];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -220,14 +218,14 @@ export function CostStatementsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isPending ? (
+            {!data ? (
               <TableSkeleton cols={7} />
-            ) : statements.length === 0 ? (
+            ) : data.statements.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Zatím žádné výkazy nákladů.</TableCell>
               </TableRow>
             ) : (
-              statements.map(s => {
+              data.statements.map(s => {
                 const adj = s.adjustmentAmount ?? 0;
                 const reconciliable = s.totalAmount + adj;
                 return (

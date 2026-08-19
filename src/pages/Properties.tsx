@@ -16,7 +16,7 @@ interface Property {
 
 export function PropertiesPage() {
   const qc = useQueryClient();
-  const { data, isPending } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
+  const { data } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', address: '', reconciliationSkill: '' });
   const [err, setErr] = useState<string | null>(null);
@@ -49,14 +49,14 @@ export function PropertiesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isPending ? (
+            {!data ? (
               <TableSkeleton cols={3} />
-            ) : (data?.properties ?? []).length === 0 ? (
+            ) : data.properties.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-muted-foreground py-8">Zatím žádné nemovitosti.</TableCell>
               </TableRow>
             ) : (
-              (data?.properties ?? []).map(p => (
+              data.properties.map(p => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">
                     <Link to={`/properties/${p.id}`} className="hover:underline">{p.name}</Link>

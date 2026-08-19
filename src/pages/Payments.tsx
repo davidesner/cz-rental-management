@@ -32,7 +32,7 @@ export function PaymentsPage() {
   const qc = useQueryClient();
   const [showUnassigned, setShowUnassigned] = useState(false);
 
-  const { data, isPending } = useQuery({
+  const { data } = useQuery({
     queryKey: ['payments', showUnassigned],
     queryFn: () => api.get<{ payments: Payment[] }>(`/api/payments${showUnassigned ? '?unassigned=true' : ''}`),
   });
@@ -107,14 +107,14 @@ export function PaymentsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isPending ? (
+            {!data ? (
               <TableSkeleton cols={6} />
-            ) : (data?.payments ?? []).length === 0 ? (
+            ) : data.payments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Žádné platby.</TableCell>
               </TableRow>
             ) : (
-              (data?.payments ?? []).map(p => (
+              data.payments.map(p => (
                 <TableRow key={p.id}>
                   <TableCell>{p.paidAt}</TableCell>
                   <TableCell>{fmtKc(p.amount)}</TableCell>

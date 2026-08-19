@@ -118,12 +118,12 @@ export function PropertyDetailPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tariffs.isPending ? (
+              {!tariffs.data ? (
                 <TableSkeleton cols={7} />
-              ) : (tariffs.data?.tariffs ?? []).length === 0 ? (
+              ) : tariffs.data.tariffs.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">Zatím žádný evidenční list. Přidej první „Nový záznam".</TableCell></TableRow>
               ) : (
-                (tariffs.data?.tariffs ?? []).map(t => (
+                tariffs.data.tariffs.map(t => (
                   <TableRow key={t.id} className={t.validTo === null ? 'bg-accent/30' : ''}>
                     <TableCell>{t.validFrom}</TableCell>
                     <TableCell>{t.validTo ?? <span className="font-semibold">aktuální</span>}</TableCell>

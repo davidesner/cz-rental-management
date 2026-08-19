@@ -66,8 +66,16 @@ Considered and rejected:
   production, so adding queries is the wrong direction.
 - **Denormalise names onto the rows** — needs a migration and goes stale.
 
-`leftJoin`, not `innerJoin`, so a payment with no contract still returns its
-row with null names.
+Join type follows the FK nullability, per table — not one blanket rule:
+
+| Join | FK | Type | Names |
+|---|---|---|---|
+| contract → property, tenant | `NOT NULL`, `ON DELETE restrict` | `innerJoin` | `string` |
+| payment → contract → … | nullable, `ON DELETE set null` | `leftJoin` | `string \| null` |
+
+A `leftJoin` on contracts would be wrong, not merely redundant: it would force
+`ContractRow` to declare names as nullable when they can never be null, pushing
+a phantom `?? ''` into every consumer.
 
 ### 2. API shape — additive only
 

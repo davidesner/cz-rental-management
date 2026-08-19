@@ -204,4 +204,61 @@ describe('payments REST', () => {
       await client.close();
     }
   });
+
+  it("member restricted to one property is denied access to another property's payment via a batch idempotent externalId match", async () => {
+    // Same leak as the single-POST test above, but exercising
+    // recordPaymentsBatch's existingIds branch specifically — it has
+    // genuinely distinct logic (inspects contractPropertyId inline from the
+    // batched inArray result rather than re-fetching through getPayment), so
+    // it needs its own committed coverage rather than relying on the
+    // single-POST test to stand in for it.
+    const { db, client, app, cookie: ownerCookie, contract: contractA } = await bootstrap();
+    try {
+      // A second property/tenant/contract in the SAME org, owned by the same owner.
+      const propB = (await (await app.request('/api/properties', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify({ name: 'PropB' }),
+      })).json() as any).property;
+      const tenantB = (await (await app.request('/api/tenants', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify({ name: 'TenantB' }),
+      })).json() as any).tenant;
+      const contractB = (await (await app.request('/api/contracts', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify({ propertyId: propB.id, tenantId: tenantB.id, startDate: '2024-09-20' }),
+      })).json() as any).contract;
+
+      // Owner seeds a payment assigned to contractB (property B) via the
+      // batch endpoint, with a known externalId.
+      const seed = await app.request('/api/payments/batch', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify([{ contractId: contractB.id, amount: 100000, paidAt: '2024-10-01', source: 'bank', externalId: 'batch-shared-ext' }]),
+      });
+      expect(seed.status).toBe(201);
+
+      // Same restricted-member setup as the single-POST test: direct
+      // membership/propertyAccess rows, no HTTP invite endpoint exists.
+      const { userId: memberUserId, cookie: memberCookie } = await registerUser(app, 'member2@b.cz', 'password123', 'M2');
+      const orgId = contractA.orgId;
+      const membershipId = createId();
+      await db.insert(membership).values({ id: membershipId, userId: memberUserId, orgId, role: 'member' });
+      await db.insert(propertyAccess).values({ membershipId, propertyId: contractA.propertyId });
+
+      // The member submits a batch containing the same externalId,
+      // referencing contractA (which the member *can* access) — the row the
+      // endpoint actually resolves is the one seeded above, on property B.
+      const dup = await app.request('/api/payments/batch', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: memberCookie, 'x-org-id': orgId },
+        body: JSON.stringify([{ contractId: contractA.id, amount: 100000, paidAt: '2024-10-01', source: 'bank', externalId: 'batch-shared-ext' }]),
+      });
+
+      expect(dup.status).toBe(403);
+      const dupText = JSON.stringify(await dup.json());
+      expect(dupText).not.toContain('PropB');
+      expect(dupText).not.toContain('TenantB');
+    } finally {
+      await client.close();
+    }
+  });
 });

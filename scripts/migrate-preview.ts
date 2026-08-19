@@ -24,11 +24,19 @@ function skip(reason: string): never {
   process.exit(0);
 }
 
-if (process.env.VERCEL_ENV !== 'preview') {
+// Trimmed: a value set through a pipe (`echo 1 | vercel env add`) keeps its trailing
+// newline, and Vercel stores it verbatim — so an exact `=== '1'` silently skips.
+const flag = process.env.PREVIEW_DB_MIGRATIONS?.trim();
+const vercelEnv = process.env.VERCEL_ENV?.trim();
+
+if (vercelEnv !== 'preview') {
   skip(`VERCEL_ENV is ${process.env.VERCEL_ENV ?? '<unset>'}, not "preview"`);
 }
-if (process.env.PREVIEW_DB_MIGRATIONS !== '1') {
-  skip('PREVIEW_DB_MIGRATIONS is not "1" (set it on the Preview environment to enable)');
+if (flag !== '1') {
+  skip(
+    `PREVIEW_DB_MIGRATIONS is ${JSON.stringify(process.env.PREVIEW_DB_MIGRATIONS ?? null)}, ` +
+      'not "1" (set it on the Preview environment to enable)',
+  );
 }
 
 /**

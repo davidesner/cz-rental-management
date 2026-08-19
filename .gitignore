@@ -17,3 +17,5 @@ coverage/
 # Git worktrees created inside the repo; `git add -A` would otherwise commit a
 # whole nested checkout.
 .claude/worktrees/
+.vercel
+.env*.local

@@ -1,5 +1,5 @@
 import { createId } from '@paralleldrive/cuid2';
-import { and, eq, isNull, gte, lte, desc } from 'drizzle-orm';
+import { and, eq, isNull, gte, lte, desc, inArray } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
 import { payment, contract, property, tenant } from '../db/schema.js';
 import { AppError } from '../errors.js';
@@ -50,10 +50,13 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
   // Idempotency on externalId
   if (input.externalId) {
     const existing = await db.select().from(payment).where(and(eq(payment.orgId, orgId), eq(payment.externalId, input.externalId))).then(rs => rs[0]);
-    if (existing) return existing as PaymentRow;
+    // Re-fetch through getPayment: .select() here can't carry the joined
+    // names, and no access check ran on this pre-existing row before either —
+    // allowedPropertyIds: null preserves that (unchanged) behaviour.
+    if (existing) return getPayment(db, orgId, existing.id, null);
   }
   const id = createId();
-  const [row] = await db.insert(payment).values({
+  await db.insert(payment).values({
     id, orgId,
     contractId: input.contractId ?? null,
     amount: input.amount,
@@ -65,8 +68,11 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
     source: input.source,
     description: input.description ?? null,
     note: input.note ?? null,
-  }).returning();
-  return row! as PaymentRow;
+  });
+  // Ownership/access was already verified above via verifyContractInOrgIfSet,
+  // and .insert().returning() wouldn't include the joined names — re-fetch
+  // through getPayment instead, mirroring core/services/contract.ts#createContract.
+  return getPayment(db, orgId, id, null);
 }
 
 export const PAYMENT_BATCH_MAX = 500;
@@ -78,19 +84,23 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
   // Whole batch is one transaction — failure on any item rolls back the rest,
   // so we never leave partial state when a verification error fires mid-loop.
   return db.transaction(async (tx) => {
-    const created: PaymentRow[] = [];
-    const existing: PaymentRow[] = [];
+    // Track ids in loop order instead of re-fetching (with the joined names)
+    // one row at a time — that would add a query per input, which matters at
+    // PAYMENT_BATCH_MAX (500). A single batched re-fetch below costs one
+    // extra query for the whole call instead of N.
+    const createdIds: string[] = [];
+    const existingIds: string[] = [];
     for (const input of inputs) {
       await verifyContractInOrgIfSet(tx, orgId, input.contractId, allowedPropertyIds);
       if (input.externalId) {
-        const found = await tx.select().from(payment).where(and(eq(payment.orgId, orgId), eq(payment.externalId, input.externalId))).then(rs => rs[0]);
+        const found = await tx.select({ id: payment.id }).from(payment).where(and(eq(payment.orgId, orgId), eq(payment.externalId, input.externalId))).then(rs => rs[0]);
         if (found) {
-          existing.push(found as PaymentRow);
+          existingIds.push(found.id);
           continue;
         }
       }
       const id = createId();
-      const [row] = await tx.insert(payment).values({
+      await tx.insert(payment).values({
         id, orgId,
         contractId: input.contractId ?? null,
         amount: input.amount,
@@ -102,10 +112,26 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
         source: input.source,
         description: input.description ?? null,
         note: input.note ?? null,
-      }).returning();
-      created.push(row! as PaymentRow);
+      });
+      createdIds.push(id);
     }
-    return { created, existing };
+    if (createdIds.length === 0 && existingIds.length === 0) return { created: [], existing: [] };
+    // Ownership/access for every id here was already verified above (or, for
+    // pre-existing idempotent rows, was never checked — same as before this
+    // change), so allowedPropertyIds: null is safe, mirroring recordPayment.
+    const rows = await tx
+      .select(paymentSelect)
+      .from(payment)
+      .leftJoin(contract, eq(contract.id, payment.contractId))
+      .leftJoin(property, eq(property.id, contract.propertyId))
+      .leftJoin(tenant, eq(tenant.id, contract.tenantId))
+      .where(inArray(payment.id, [...createdIds, ...existingIds]));
+    const byId = new Map(rows.map(r => [r.id, r]));
+    const strip = (id: string): PaymentRow => {
+      const { contractPropertyId: _ignored, ...row } = byId.get(id)!;
+      return row;
+    };
+    return { created: createdIds.map(strip), existing: existingIds.map(strip) };
   });
 }
 
@@ -180,10 +206,13 @@ export async function getPayment(db: DB, orgId: string, id: string, allowedPrope
 }
 
 export async function assignPaymentToContract(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, contractId: string | null): Promise<PaymentRow> {
-  const existing = await getPayment(db, orgId, id, allowedPropertyIds);
+  await getPayment(db, orgId, id, allowedPropertyIds);
   await verifyContractInOrgIfSet(db, orgId, contractId, allowedPropertyIds);
-  const [row] = await db.update(payment).set({ contractId }).where(and(eq(payment.id, id), eq(payment.orgId, orgId))).returning();
-  return row! as PaymentRow;
+  await db.update(payment).set({ contractId }).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
+  // Access already verified above (existing payment + new contractId), and
+  // .update().returning() wouldn't include the joined names — re-fetch
+  // through getPayment instead, mirroring core/services/contract.ts#updateContract.
+  return getPayment(db, orgId, id, allowedPropertyIds);
 }
 
 export async function updatePayment(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, patch: Partial<Omit<PaymentInput, 'externalId'>>): Promise<PaymentRow> {
@@ -194,8 +223,11 @@ export async function updatePayment(db: DB, orgId: string, id: string, allowedPr
     if ((patch as any)[key] !== undefined) cleaned[key] = (patch as any)[key];
   }
   if (Object.keys(cleaned).length === 0) return getPayment(db, orgId, id, allowedPropertyIds);
-  const [row] = await db.update(payment).set(cleaned).where(and(eq(payment.id, id), eq(payment.orgId, orgId))).returning();
-  return row! as PaymentRow;
+  await db.update(payment).set(cleaned).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
+  // Access already verified above, and .update().returning() wouldn't include
+  // the joined names — re-fetch through getPayment instead, mirroring
+  // core/services/contract.ts#updateContract.
+  return getPayment(db, orgId, id, allowedPropertyIds);
 }
 
 export async function deletePayment(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<void> {

@@ -21,6 +21,16 @@ export function TableSkeleton({ cols, rows = 3, className }: TableSkeletonProps)
   const widths = ['w-32', 'w-24', 'w-40', 'w-20', 'w-28', 'w-36'];
   return (
     <>
+      {/*
+       * The bars themselves stay aria-hidden (decorative), but a screen-reader
+       * user still needs to be told the table is loading — otherwise they
+       * perceive a table with no rows and no message, the same loading/empty
+       * conflation this component exists to prevent visually. This row is the
+       * one perceivable thing here: sr-only text, not aria-hidden.
+       */}
+      <TableRow>
+        <TableCell colSpan={cols} className="sr-only">Načítání…</TableCell>
+      </TableRow>
       {Array.from({ length: rows }).map((_, r) => (
         <TableRow key={r} aria-hidden="true">
           {Array.from({ length: cols }).map((_, c) => (

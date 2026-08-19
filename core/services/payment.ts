@@ -132,7 +132,7 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
     const rows = await tx
       .select(paymentSelect)
       .from(payment)
-      .leftJoin(contract, eq(contract.id, payment.contractId))
+      .leftJoin(contract, and(eq(contract.id, payment.contractId), eq(contract.orgId, payment.orgId)))
       .leftJoin(property, eq(property.id, contract.propertyId))
       .leftJoin(tenant, eq(tenant.id, contract.tenantId))
       .where(inArray(payment.id, [...createdIds, ...existingIds]));
@@ -193,7 +193,7 @@ export async function listPayments(db: DB, orgId: string, allowedPropertyIds: st
   const rows = await db
     .select(paymentSelect)
     .from(payment)
-    .leftJoin(contract, eq(contract.id, payment.contractId))
+    .leftJoin(contract, and(eq(contract.id, payment.contractId), eq(contract.orgId, payment.orgId)))
     .leftJoin(property, eq(property.id, contract.propertyId))
     .leftJoin(tenant, eq(tenant.id, contract.tenantId))
     .where(and(...conds))
@@ -209,7 +209,7 @@ export async function getPayment(db: DB, orgId: string, id: string, allowedPrope
   const [row] = await db
     .select(paymentSelect)
     .from(payment)
-    .leftJoin(contract, eq(contract.id, payment.contractId))
+    .leftJoin(contract, and(eq(contract.id, payment.contractId), eq(contract.orgId, payment.orgId)))
     .leftJoin(property, eq(property.id, contract.propertyId))
     .leftJoin(tenant, eq(tenant.id, contract.tenantId))
     .where(and(eq(payment.id, id), eq(payment.orgId, orgId)));

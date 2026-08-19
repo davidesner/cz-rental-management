@@ -20,9 +20,7 @@ interface Payment {
   tenantName: string | null;
 }
 
-interface Contract { id: string; propertyId: string; tenantId: string; }
-interface Property { id: string; name: string; }
-interface Tenant { id: string; name: string; }
+interface Contract { id: string; propertyId: string; tenantId: string; propertyName: string; tenantName: string; }
 
 function fmtKc(halere: number) {
   return (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
@@ -37,15 +35,10 @@ export function PaymentsPage() {
     queryFn: () => api.get<{ payments: Payment[] }>(`/api/payments${showUnassigned ? '?unassigned=true' : ''}`),
   });
   const { data: contractsData } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts') });
-  const { data: propertiesData } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
-  const { data: tenantsData } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
 
   const contracts = contractsData?.contracts ?? [];
-  const propertyMap = Object.fromEntries((propertiesData?.properties ?? []).map(p => [p.id, p.name]));
-  const tenantMap = Object.fromEntries((tenantsData?.tenants ?? []).map(t => [t.id, t.name]));
 
-  const contractLabel = (c: Contract) =>
-    `${propertyMap[c.propertyId] ?? c.propertyId} / ${tenantMap[c.tenantId] ?? c.tenantId}`;
+  const contractLabel = (c: Contract) => `${c.propertyName} / ${c.tenantName}`;
 
   // New payment dialog
   const [newOpen, setNewOpen] = useState(false);

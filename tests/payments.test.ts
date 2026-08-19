@@ -85,4 +85,64 @@ describe('payments REST', () => {
 
     await client.close();
   });
+
+  it('every write endpoint returns real names or null, never undefined (regression: raw .returning() rows cannot carry joined names)', async () => {
+    const { client, app, cookie, contract: c } = await bootstrap();
+    try {
+      // POST /api/payments — created assigned to a contract
+      const createAssigned = await app.request('/api/payments', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ contractId: c.id, amount: 100000, paidAt: '2024-10-01', source: 'manual' }),
+      });
+      const assignedPayment = (await createAssigned.json() as any).payment;
+      // bootstrap() in this file creates the property as 'KP' and the tenant as 'SB'.
+      expect(assignedPayment.propertyName).toBe('KP');
+      expect(assignedPayment.tenantName).toBe('SB');
+
+      // POST /api/payments — created unassigned (names must be null, not undefined)
+      const createUnassigned = await app.request('/api/payments', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ contractId: null, amount: 200000, paidAt: '2024-10-02', source: 'manual' }),
+      });
+      const unassignedPayment = (await createUnassigned.json() as any).payment;
+      expect(unassignedPayment.propertyName).toBeNull();
+      expect(unassignedPayment.tenantName).toBeNull();
+
+      // PATCH /api/payments/:id/assign
+      const assignRes = await app.request(`/api/payments/${unassignedPayment.id}/assign`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ contractId: c.id }),
+      });
+      const assignedViaPatch = (await assignRes.json() as any).payment;
+      expect(assignedViaPatch.propertyName).toBe('KP');
+      expect(assignedViaPatch.tenantName).toBe('SB');
+
+      // PATCH /api/payments/:id (non-contract field, exercises the update+refetch path)
+      const updateRes = await app.request(`/api/payments/${assignedViaPatch.id}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ note: 'hello' }),
+      });
+      const updatedPayment = (await updateRes.json() as any).payment;
+      expect(updatedPayment.propertyName).toBe('KP');
+      expect(updatedPayment.tenantName).toBe('SB');
+
+      // POST /api/payments/batch — one assigned, one unassigned
+      const batchRes = await app.request('/api/payments/batch', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify([
+          { contractId: c.id, amount: 300000, paidAt: '2024-10-03', source: 'manual' },
+          { contractId: null, amount: 400000, paidAt: '2024-10-04', source: 'manual' },
+        ]),
+      });
+      const batchBody = await batchRes.json() as any;
+      const batchAssigned = batchBody.created.find((p: any) => p.contractId === c.id);
+      const batchUnassigned = batchBody.created.find((p: any) => p.contractId === null);
+      expect(batchAssigned.propertyName).toBe('KP');
+      expect(batchAssigned.tenantName).toBe('SB');
+      expect(batchUnassigned.propertyName).toBeNull();
+      expect(batchUnassigned.tenantName).toBeNull();
+    } finally {
+      await client.close();
+    }
+  });
 });

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
 
 interface Property {
   id: string; name: string; address: string | null;
@@ -15,7 +16,7 @@ interface Property {
 
 export function PropertiesPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
+  const { data, isPending } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', address: '', reconciliationSkill: '' });
   const [err, setErr] = useState<string | null>(null);
@@ -48,19 +49,22 @@ export function PropertiesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(data?.properties ?? []).map(p => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">
-                  <Link to={`/properties/${p.id}`} className="hover:underline">{p.name}</Link>
-                </TableCell>
-                <TableCell>{p.address ?? '—'}</TableCell>
-                <TableCell className="font-mono text-xs">{p.reconciliationSkill ?? '—'}</TableCell>
-              </TableRow>
-            ))}
-            {(data?.properties ?? []).length === 0 && (
+            {isPending ? (
+              <TableSkeleton cols={3} />
+            ) : (data?.properties ?? []).length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-muted-foreground py-8">Zatím žádné nemovitosti.</TableCell>
               </TableRow>
+            ) : (
+              (data?.properties ?? []).map(p => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">
+                    <Link to={`/properties/${p.id}`} className="hover:underline">{p.name}</Link>
+                  </TableCell>
+                  <TableCell>{p.address ?? '—'}</TableCell>
+                  <TableCell className="font-mono text-xs">{p.reconciliationSkill ?? '—'}</TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>

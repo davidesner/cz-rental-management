@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
 
 interface Tenant {
   id: string; name: string; email: string | null; phone: string | null; accountNumber: string | null;
@@ -13,7 +14,7 @@ interface Tenant {
 
 export function TenantsPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
+  const { data, isPending } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', phone: '', accountNumber: '' });
   const [err, setErr] = useState<string | null>(null);
@@ -47,17 +48,20 @@ export function TenantsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(data?.tenants ?? []).map(t => (
-              <TableRow key={t.id}>
-                <TableCell className="font-medium">{t.name}</TableCell>
-                <TableCell>{t.email ?? '—'}</TableCell>
-                <TableCell className="font-mono text-xs">{t.accountNumber ?? '—'}</TableCell>
-              </TableRow>
-            ))}
-            {(data?.tenants ?? []).length === 0 && (
+            {isPending ? (
+              <TableSkeleton cols={3} />
+            ) : (data?.tenants ?? []).length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-muted-foreground py-8">Zatím žádní nájemci.</TableCell>
               </TableRow>
+            ) : (
+              (data?.tenants ?? []).map(t => (
+                <TableRow key={t.id}>
+                  <TableCell className="font-medium">{t.name}</TableCell>
+                  <TableCell>{t.email ?? '—'}</TableCell>
+                  <TableCell className="font-mono text-xs">{t.accountNumber ?? '—'}</TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>

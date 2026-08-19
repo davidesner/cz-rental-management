@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
 
 interface ApiToken {
   id: string;
@@ -16,7 +17,7 @@ interface ApiToken {
 
 export function ApiTokensPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ['api-tokens'],
     queryFn: () => api.get<{ tokens: ApiToken[] }>('/api/api-tokens'),
   });
@@ -71,29 +72,32 @@ export function ApiTokensPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tokens.map(t => (
-              <TableRow key={t.id}>
-                <TableCell className="font-medium">{t.name}</TableCell>
-                <TableCell>{t.lastUsedAt ?? '—'}</TableCell>
-                <TableCell>{t.createdAt}</TableCell>
-                <TableCell>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      if (confirm(`Odvolat token "${t.name}"?`)) revoke.mutate(t.id);
-                    }}
-                    disabled={revoke.isPending}
-                  >
-                    Odvolat
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {tokens.length === 0 && (
+            {isPending ? (
+              <TableSkeleton cols={4} />
+            ) : tokens.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Zatím žádné API tokeny.</TableCell>
               </TableRow>
+            ) : (
+              tokens.map(t => (
+                <TableRow key={t.id}>
+                  <TableCell className="font-medium">{t.name}</TableCell>
+                  <TableCell>{t.lastUsedAt ?? '—'}</TableCell>
+                  <TableCell>{t.createdAt}</TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => {
+                        if (confirm(`Odvolat token "${t.name}"?`)) revoke.mutate(t.id);
+                      }}
+                      disabled={revoke.isPending}
+                    >
+                      Odvolat
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>

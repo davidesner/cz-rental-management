@@ -2,12 +2,20 @@ name: CI
 
 on:
   # Every push to any branch, so a commit gets a verdict even before a PR exists.
+  #
+  # Deliberately no `pull_request` trigger: it would fire a second, identical run for
+  # every commit already covered by `push`, and branch protection would then see two
+  # check runs per name on one SHA. Required checks match on name + head SHA, so the
+  # push-triggered run is what satisfies them.
+  #
+  # The gap this leaves is PRs from forks — those commits are pushed to the fork, so
+  # nothing runs here and the PR sits unmergeable at "waiting for status". That is the
+  # safe direction to fail, but if this repo ever takes fork contributions, add
+  # `pull_request_target`-style handling rather than a plain `pull_request` trigger.
   push:
     branches: ['**']
-  pull_request:
 
-# Superseded commits on the same ref stop wasting a runner. Push and pull_request
-# events land in different groups by design — each SHA still gets its own verdict.
+# Superseded commits on the same branch stop wasting a runner.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

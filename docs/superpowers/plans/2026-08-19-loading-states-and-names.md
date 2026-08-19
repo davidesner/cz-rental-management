@@ -181,7 +181,7 @@ Append to `tests/payments.test.ts`, following the setup helper already in that f
 
 ```ts
   it('returns contract names, and nulls for an unassigned payment', async () => {
-    const { client, app, cookie, contract: c } = await setupWithContract();
+    const { client, app, cookie, contract: c } = await bootstrap();
 
     await app.request('/api/payments', {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
@@ -196,8 +196,9 @@ Append to `tests/payments.test.ts`, following the setup helper already in that f
     const payments = (await res.json() as any).payments as any[];
 
     const assigned = payments.find(p => p.contractId === c.id);
-    expect(assigned.propertyName).toBe('<property-name-a>');
-    expect(assigned.tenantName).toBe('<tenant-name>');
+    // bootstrap() in this file creates the property as 'KP' and the tenant as 'SB'.
+    expect(assigned.propertyName).toBe('KP');
+    expect(assigned.tenantName).toBe('SB');
 
     const unassigned = payments.find(p => p.contractId === null);
     expect(unassigned).toBeDefined();               // leftJoin must not drop it
@@ -208,7 +209,8 @@ Append to `tests/payments.test.ts`, following the setup helper already in that f
   });
 ```
 
-If `tests/payments.test.ts` has no `setupWithContract` helper, reuse whatever setup helper that file already defines and adapt the destructuring — do not invent a new fixture module.
+`bootstrap()` already exists at the top of `tests/payments.test.ts` and returns
+`{ client, app, cookie, contract }`. Reuse it — do not add a fixture module.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -314,16 +316,20 @@ export async function getPayment(db: DB, orgId: string, id: string, allowedPrope
     .leftJoin(tenant, eq(tenant.id, contract.tenantId))
     .where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
   if (!row) throw new AppError('not_found', 'payment not found');
-  if (allowedPropertyIds !== null && row.contractPropertyId !== null
-      && !allowedPropertyIds.includes(row.contractPropertyId)) {
-    throw new AppError('forbidden', 'no access to payment\'s property');
+  // Same rule and same message as before the join: only assigned payments are
+  // access-checked, and the error text is asserted by existing tests.
+  if (allowedPropertyIds !== null && row.contractId !== null
+      && (row.contractPropertyId === null || !allowedPropertyIds.includes(row.contractPropertyId))) {
+    throw new AppError('forbidden', 'no access to payment\'s contract');
   }
   const { contractPropertyId: _ignored, ...rest } = row;
   return rest;
 }
 ```
 
-Read the existing `getPayment` body before replacing it and preserve its current authorisation behaviour exactly — if it differs from the above, keep the existing behaviour and only add the names.
+This replaces a second query: the previous body looked the contract up separately
+to read its `propertyId`. Keep the error string `'no access to payment\'s contract'`
+verbatim — it is not `'...property'`.
 
 - [ ] **Step 7: Run tests**
 

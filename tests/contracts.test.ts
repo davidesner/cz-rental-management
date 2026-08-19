@@ -232,4 +232,28 @@ describe('contracts REST', () => {
     expect(bad.status).toBe(404);
     await client.close();
   });
+
+  it('returns resolved tenant and property names on list and get', async () => {
+    const { client, app, cookie, property, tenant } = await setup();
+    const create = await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ propertyId: property.id, tenantId: tenant.id, startDate: '2024-09-20' }),
+    });
+    const created = (await create.json() as any).contract;
+
+    const listRes = await app.request('/api/contracts', { headers: { cookie } });
+    const listed = (await listRes.json() as any).contracts[0];
+    expect(listed.propertyName).toBe('<property-name-a>');
+    expect(listed.tenantName).toBe('<tenant-name>');
+    // IDs must survive — the change is additive.
+    expect(listed.propertyId).toBe(property.id);
+    expect(listed.tenantId).toBe(tenant.id);
+
+    const getRes = await app.request(`/api/contracts/${created.id}`, { headers: { cookie } });
+    const got = (await getRes.json() as any).contract;
+    expect(got.propertyName).toBe('<property-name-a>');
+    expect(got.tenantName).toBe('<tenant-name>');
+
+    await client.close();
+  });
 });

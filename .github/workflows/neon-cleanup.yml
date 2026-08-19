@@ -1,0 +1,45 @@
+name: Cleanup Neon preview branch
+
+# Deleting a git branch does NOT clean up its Neon preview branch. With the
+# Vercel-Managed integration, Neon only drops the branch once the last Vercel
+# deployment for it is deleted, and Vercel retains pre-production deployments for
+# 180 days by default. Lowering that retention doesn't reliably help either: Vercel
+# keeps a minimum number of recent deployments regardless, so on a low-traffic
+# project the branch may never be collected. Hence deleting it explicitly here.
+on:
+  pull_request:
+    types: [closed]
+
+# Read-only on the repo; the Neon API key is what does the deleting.
+permissions:
+  contents: read
+
+jobs:
+  delete-branch:
+    name: delete-branch
+    runs-on: ubuntu-latest
+    steps:
+      # Without the secret this job would fail on every closed PR, which trains
+      # people to ignore it. Skip loudly instead.
+      - name: Check for Neon credentials
+        id: creds
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+        run: |
+          if [ -n "$NEON_API_KEY" ] && [ -n "$NEON_PROJECT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Neon branch cleanup — set the NEON_API_KEY secret and the NEON_PROJECT_ID variable to enable it. See DEPLOY.md."
+          fi
+
+      # The Vercel integration names its branches `preview/<git-branch>`, so this
+      # targets exactly what it created. head_ref is the PR's source branch.
+      - name: Delete preview branch
+        if: steps.creds.outputs.configured == 'true'
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: preview/${{ github.head_ref }}
+          api_key: ${{ secrets.NEON_API_KEY }}

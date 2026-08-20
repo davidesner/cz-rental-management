@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -255,9 +256,11 @@ interface PodminkyTableProps {
   onEditTerm?: (term: ContractTerm) => void;
   /** True while the terms/utilities queries feeding this table haven't returned data yet. */
   isPending: boolean;
+  isError: boolean;
+  onRetry: () => void;
 }
 
-function PodminkyTable({ terms, utilities, onEditTerm, isPending }: PodminkyTableProps) {
+function PodminkyTable({ terms, utilities, onEditTerm, isPending, isError, onRetry }: PodminkyTableProps) {
   const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 
   // Which utility kinds appear at all in this contract
@@ -289,7 +292,9 @@ function PodminkyTable({ terms, utilities, onEditTerm, isPending }: PodminkyTabl
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isPending ? (
+          {isError ? (
+            <TableError cols={cols} onRetry={onRetry} />
+          ) : isPending ? (
             <TableSkeleton cols={cols} />
           ) : dates.length === 0 ? (
             <TableRow>
@@ -1382,12 +1387,12 @@ export function ContractDetailPage() {
     queryFn: () => api.get<{ contract: Contract }>(`/api/contracts/${id}`),
     enabled: !!id,
   });
-  const { data: termsData } = useQuery({
+  const { data: termsData, isError: termsError, refetch: termsRefetch } = useQuery({
     queryKey: ['contracts', id, 'terms'],
     queryFn: () => api.get<{ terms: ContractTerm[] }>(`/api/contracts/${id}/terms`),
     enabled: !!id,
   });
-  const { data: utilitiesData } = useQuery({
+  const { data: utilitiesData, isError: utilitiesError, refetch: utilitiesRefetch } = useQuery({
     queryKey: ['contracts', id, 'utilities'],
     queryFn: () => api.get<{ utilities: Utility[] }>(`/api/contracts/${id}/utilities`),
     enabled: !!id,
@@ -1402,14 +1407,14 @@ export function ContractDetailPage() {
   });
 
   // Cost statements for this property
-  const { data: costStatementsData } = useQuery({
+  const { data: costStatementsData, isError: costStatementsDataError, refetch: costStatementsDataRefetch } = useQuery({
     queryKey: ['cost-statements-by-property', contract?.propertyId],
     queryFn: () => api.get<{ statements: CostStatement[] }>(`/api/cost-statements?propertyId=${contract!.propertyId}`),
     enabled: !!contract?.propertyId,
   });
 
   // Reconciliations for this contract
-  const { data: reconciliationsData } = useQuery({
+  const { data: reconciliationsData, isError: reconciliationsDataError, refetch: reconciliationsDataRefetch } = useQuery({
     queryKey: ['reconciliations-by-contract', id],
     queryFn: () => api.get<{ reconciliations: Reconciliation[] }>(`/api/reconciliations?contractId=${id}`),
     enabled: !!id,
@@ -1426,7 +1431,7 @@ export function ContractDetailPage() {
   });
 
   // Payments for this contract
-  const { data: paymentsData } = useQuery({
+  const { data: paymentsData, isError: paymentsDataError, refetch: paymentsDataRefetch } = useQuery({
     queryKey: ['payments-by-contract', id],
     queryFn: () => api.get<{ payments: Payment[] }>(`/api/payments?contractId=${id}`),
     enabled: !!id,
@@ -1548,7 +1553,12 @@ export function ContractDetailPage() {
           {/* Sekce Aktuální podmínky */}
           <Card className="p-6">
             <h2 className="text-lg font-semibold mb-3">Aktuální podmínky</h2>
-            {!termsData || !utilitiesData ? (
+            {(termsError && !termsData) || (utilitiesError && !utilitiesData) ? (
+              <div className="py-4">
+                <p className="text-sm text-destructive mb-3">Nepodařilo se načíst data.</p>
+                <Button size="sm" variant="outline" onClick={() => { if (!termsData) termsRefetch(); if (!utilitiesData) utilitiesRefetch(); }}>Zkusit znovu</Button>
+              </div>
+            ) : !termsData || !utilitiesData ? (
               <p className="text-sm text-muted-foreground py-4">Načítání…</p>
             ) : !currentTerm && currentUtilities.length === 0 ? (
               <p className="text-sm text-muted-foreground">Žádné aktuální podmínky.</p>
@@ -1608,6 +1618,8 @@ export function ContractDetailPage() {
                 utilities={utilities}
                 onEditTerm={(t) => setEditTermsTarget(t)}
                 isPending={!termsData || !utilitiesData}
+                isError={(termsError && !termsData) || (utilitiesError && !utilitiesData)}
+                onRetry={() => { if (!termsData) termsRefetch(); if (!utilitiesData) utilitiesRefetch(); }}
               />
             </CardContent>
           </Card>
@@ -1650,7 +1662,9 @@ export function ContractDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {!paymentsData ? (
+                    {paymentsDataError && !paymentsData ? (
+                      <TableError cols={7} onRetry={() => paymentsDataRefetch()} />
+                    ) : !paymentsData ? (
                       <TableSkeleton cols={7} />
                     ) : paymentsData.payments.length === 0 ? (
                       <TableRow>
@@ -1702,7 +1716,9 @@ export function ContractDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {!costStatementsData ? (
+                    {costStatementsDataError && !costStatementsData ? (
+                      <TableError cols={7} onRetry={() => costStatementsDataRefetch()} />
+                    ) : !costStatementsData ? (
                       <TableSkeleton cols={7} />
                     ) : filteredStatements.length === 0 ? (
                       <TableRow>
@@ -1762,7 +1778,9 @@ export function ContractDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {!reconciliationsData ? (
+                    {reconciliationsDataError && !reconciliationsData ? (
+                      <TableError cols={5} onRetry={() => reconciliationsDataRefetch()} />
+                    ) : !reconciliationsData ? (
                       <TableSkeleton cols={5} />
                     ) : reconciliations.length === 0 ? (
                       <TableRow>

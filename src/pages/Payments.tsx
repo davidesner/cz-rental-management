@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 
 interface Payment {
   id: string;
@@ -30,7 +31,7 @@ export function PaymentsPage() {
   const qc = useQueryClient();
   const [showUnassigned, setShowUnassigned] = useState(false);
 
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['payments', showUnassigned],
     queryFn: () => api.get<{ payments: Payment[] }>(`/api/payments${showUnassigned ? '?unassigned=true' : ''}`),
   });
@@ -100,7 +101,9 @@ export function PaymentsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!data ? (
+            {isError && !data ? (
+              <TableError cols={6} onRetry={() => refetch()} />
+            ) : !data ? (
               <TableSkeleton cols={6} />
             ) : data.payments.length === 0 ? (
               <TableRow>

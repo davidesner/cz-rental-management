@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 
 interface Property {
   id: string; name: string; address: string | null;
@@ -16,7 +17,7 @@ interface Property {
 
 export function PropertiesPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
+  const { data, isError, refetch } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', address: '', reconciliationSkill: '' });
   const [err, setErr] = useState<string | null>(null);
@@ -49,7 +50,9 @@ export function PropertiesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!data ? (
+            {isError && !data ? (
+              <TableError cols={3} onRetry={() => refetch()} />
+            ) : !data ? (
               <TableSkeleton cols={3} />
             ) : data.properties.length === 0 ? (
               <TableRow>

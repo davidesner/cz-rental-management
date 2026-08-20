@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 
 interface Property { id: string; name: string; }
 interface Tenant { id: string; name: string; }
@@ -25,7 +26,7 @@ interface Contract {
 export function ContractsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { data } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts') });
+  const { data, isError, refetch } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts') });
   const { data: propertiesData } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
   const { data: tenantsData } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
   const [open, setOpen] = useState(false);
@@ -73,7 +74,9 @@ export function ContractsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!data ? (
+            {isError && !data ? (
+              <TableError cols={4} onRetry={() => refetch()} />
+            ) : !data ? (
               <TableSkeleton cols={4} />
             ) : data.contracts.length === 0 ? (
               <TableRow>

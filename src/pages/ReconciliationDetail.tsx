@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
@@ -305,7 +305,7 @@ export function ReconciliationDetailPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['reconciliations', id],
     queryFn: () => api.get<{ reconciliation: Reconciliation }>(`/api/reconciliations/${id}`),
     enabled: !!id,
@@ -385,6 +385,16 @@ export function ReconciliationDetailPage() {
   const isStale = itemsWithLive.some((it) => it.stale);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Načítání…</div>;
+  // Only a real 404 means "nenalezeno" — a failed request must not be reported
+  // as a missing reconciliation.
+  if (isError && !(error instanceof ApiError && error.status === 404)) {
+    return (
+      <div className="p-8 space-y-3">
+        <p className="text-sm text-destructive">Nepodařilo se načíst vyúčtování.</p>
+        <Button size="sm" variant="outline" onClick={() => refetch()}>Zkusit znovu</Button>
+      </div>
+    );
+  }
   if (!r) return <div className="p-8 text-muted-foreground">Nenalezeno.</div>;
 
   return (

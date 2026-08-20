@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 
 interface CostStatement {
   id: string;
@@ -47,7 +48,7 @@ function fmtKcSigned(halere: number) {
 
 export function CostStatementsPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['cost-statements'],
     queryFn: () => api.get<{ statements: CostStatement[] }>('/api/cost-statements'),
   });
@@ -218,7 +219,9 @@ export function CostStatementsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!data ? (
+            {isError && !data ? (
+              <TableError cols={7} onRetry={() => refetch()} />
+            ) : !data ? (
               <TableSkeleton cols={7} />
             ) : data.statements.length === 0 ? (
               <TableRow>

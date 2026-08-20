@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 
 interface Tenant {
   id: string; name: string; email: string | null; phone: string | null; accountNumber: string | null;
@@ -14,7 +15,7 @@ interface Tenant {
 
 export function TenantsPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
+  const { data, isError, refetch } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', phone: '', accountNumber: '' });
   const [err, setErr] = useState<string | null>(null);
@@ -48,7 +49,9 @@ export function TenantsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!data ? (
+            {isError && !data ? (
+              <TableError cols={3} onRetry={() => refetch()} />
+            ) : !data ? (
               <TableSkeleton cols={3} />
             ) : data.tenants.length === 0 ? (
               <TableRow>

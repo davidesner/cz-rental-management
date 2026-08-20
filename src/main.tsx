@@ -15,10 +15,23 @@ import { ApiTokensPage } from './pages/ApiTokens';
 import { ContractDetailPage } from './pages/ContractDetail';
 import { ReconciliationDetailPage } from './pages/ReconciliationDetail';
 import { PropertyDetailPage } from './pages/PropertyDetail';
+import { ApiError } from './lib/api';
 import './index.css';
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: false } },
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      // Retry transient failures only. A 4xx will never succeed on a repeat —
+      // retrying a 401/403 just delays the redirect and hammers the API — so
+      // only network errors and 5xx get a second and third chance. Anything
+      // that survives this surfaces as <TableError> with a manual retry.
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+        return failureCount < 2;
+      },
+    },
+  },
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

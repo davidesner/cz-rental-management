@@ -17,21 +17,32 @@ function requireEnv(name: string, minLength = 0): string {
   return value;
 }
 
-function resolveTrustedOrigins(baseURL: string): string[] {
+export function resolveTrustedOrigins(baseURL: string): string[] {
   const explicit = process.env.BETTER_AUTH_TRUSTED_ORIGINS
     ?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
   const isLocal = baseURL.startsWith('http://localhost') || baseURL.startsWith('http://127.0.0.1');
   if (explicit.length === 0 && (isLocal || process.env.VITEST)) {
     return ['http://localhost:5173', 'http://localhost:3000'];
   }
-  // On Vercel, every deployment gets a per-deploy alias (…-<hash>-<team>.vercel.app)
-  // in addition to the stable production alias. Better Auth's CSRF check reads
-  // the actual request URL, which frequently arrives as the per-deploy alias,
-  // so an explicit list keyed to just the stable URL would reject legit
-  // requests. Merge in `VERCEL_URL` (Vercel-populated, per-deploy) so both
-  // aliases pass — same reasoning as the baseURL fallback above.
-  if (process.env.VERCEL_URL) {
-    return [...new Set([...explicit, `https://${process.env.VERCEL_URL}`, baseURL])];
+  // On Vercel a deployment is reachable on TWO generated hostnames, and Better
+  // Auth's CSRF check compares the request's Origin against this list:
+  //   VERCEL_URL        per-deployment alias, app-<hash>-<team>.vercel.app
+  //   VERCEL_BRANCH_URL branch alias,         app-git-<branch>-<team>.vercel.app
+  // Both must be trusted. Only VERCEL_URL used to be, so opening a preview by
+  // its branch alias — the link in the PR, and the one people actually click —
+  // failed sign-in with 403 "Invalid origin". It hid well: the origin check
+  // only runs on requests that carry cookies, so curl and the health check
+  // never tripped it while every real browser did.
+  //
+  // VERCEL_PROJECT_PRODUCTION_URL is deliberately NOT included. It is set even
+  // in previews, so adding it would let the production origin post to a
+  // preview's auth API for no benefit — production is already covered by
+  // BETTER_AUTH_URL, which arrives here as baseURL.
+  const vercelHosts = [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL]
+    .filter((h): h is string => Boolean(h))
+    .map((h) => `https://${h}`);
+  if (vercelHosts.length > 0) {
+    return [...new Set([...explicit, ...vercelHosts, baseURL])];
   }
   if (explicit.length > 0) return explicit;
   throw new Error(

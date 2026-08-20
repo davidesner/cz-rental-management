@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 
 interface CostStatement {
   id: string;
@@ -46,7 +48,7 @@ function fmtKcSigned(halere: number) {
 
 export function CostStatementsPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['cost-statements'],
     queryFn: () => api.get<{ statements: CostStatement[] }>('/api/cost-statements'),
   });
@@ -197,8 +199,6 @@ export function CostStatementsPage() {
     setYear(new Date().getFullYear());
   }
 
-  const statements = data?.statements ?? [];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -219,27 +219,32 @@ export function CostStatementsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {statements.map(s => {
-              const adj = s.adjustmentAmount ?? 0;
-              const reconciliable = s.totalAmount + adj;
-              return (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium">{propertyMap[s.propertyId] ?? s.propertyId}</TableCell>
-                  <TableCell>{s.kind}</TableCell>
-                  <TableCell>{s.periodFrom} – {s.periodTo}</TableCell>
-                  <TableCell>{fmtKc(s.totalAmount)}</TableCell>
-                  <TableCell>{s.adjustmentAmount != null ? fmtKcSigned(s.adjustmentAmount) : <span className="text-muted-foreground">—</span>}</TableCell>
-                  <TableCell className="font-bold">{fmtKc(reconciliable)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
-                    {s.adjustmentNote ?? '—'}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-            {statements.length === 0 && (
+            {isError && !data ? (
+              <TableError cols={7} onRetry={() => refetch()} />
+            ) : !data ? (
+              <TableSkeleton cols={7} />
+            ) : data.statements.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Zatím žádné výkazy nákladů.</TableCell>
               </TableRow>
+            ) : (
+              data.statements.map(s => {
+                const adj = s.adjustmentAmount ?? 0;
+                const reconciliable = s.totalAmount + adj;
+                return (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">{propertyMap[s.propertyId] ?? s.propertyId}</TableCell>
+                    <TableCell>{s.kind}</TableCell>
+                    <TableCell>{s.periodFrom} – {s.periodTo}</TableCell>
+                    <TableCell>{fmtKc(s.totalAmount)}</TableCell>
+                    <TableCell>{s.adjustmentAmount != null ? fmtKcSigned(s.adjustmentAmount) : <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell className="font-bold">{fmtKc(reconciliable)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
+                      {s.adjustmentNote ?? '—'}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

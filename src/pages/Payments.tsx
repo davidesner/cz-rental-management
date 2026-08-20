@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 
 interface Payment {
   id: string;
@@ -15,11 +17,11 @@ interface Payment {
   contractId: string | null;
   source: string;
   externalId: string | null;
+  propertyName: string | null;
+  tenantName: string | null;
 }
 
-interface Contract { id: string; propertyId: string; tenantId: string; }
-interface Property { id: string; name: string; }
-interface Tenant { id: string; name: string; }
+interface Contract { id: string; propertyId: string; tenantId: string; propertyName: string; tenantName: string; }
 
 function fmtKc(halere: number) {
   return (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
@@ -29,20 +31,15 @@ export function PaymentsPage() {
   const qc = useQueryClient();
   const [showUnassigned, setShowUnassigned] = useState(false);
 
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: ['payments', showUnassigned],
     queryFn: () => api.get<{ payments: Payment[] }>(`/api/payments${showUnassigned ? '?unassigned=true' : ''}`),
   });
   const { data: contractsData } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts') });
-  const { data: propertiesData } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
-  const { data: tenantsData } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
 
   const contracts = contractsData?.contracts ?? [];
-  const propertyMap = Object.fromEntries((propertiesData?.properties ?? []).map(p => [p.id, p.name]));
-  const tenantMap = Object.fromEntries((tenantsData?.tenants ?? []).map(t => [t.id, t.name]));
 
-  const contractLabel = (c: Contract) =>
-    `${propertyMap[c.propertyId] ?? c.propertyId} / ${tenantMap[c.tenantId] ?? c.tenantId}`;
+  const contractLabel = (c: Contract) => `${c.propertyName} / ${c.tenantName}`;
 
   // New payment dialog
   const [newOpen, setNewOpen] = useState(false);
@@ -104,28 +101,35 @@ export function PaymentsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(data?.payments ?? []).map(p => (
-              <TableRow key={p.id}>
-                <TableCell>{p.paidAt}</TableCell>
-                <TableCell>{fmtKc(p.amount)}</TableCell>
-                <TableCell>{p.counterparty ?? '—'}</TableCell>
-                <TableCell>{p.contractId ?? '—'}</TableCell>
-                <TableCell>{p.source}</TableCell>
-                <TableCell>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => { setAssignErr(null); setAssignContractId(p.contractId ?? ''); setAssignPayment(p); }}
-                  >
-                    Přiřadit
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {(data?.payments ?? []).length === 0 && (
+            {isError && !data ? (
+              <TableError cols={6} onRetry={() => refetch()} />
+            ) : !data ? (
+              <TableSkeleton cols={6} />
+            ) : data.payments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Žádné platby.</TableCell>
               </TableRow>
+            ) : (
+              data.payments.map(p => (
+                <TableRow key={p.id}>
+                  <TableCell>{p.paidAt}</TableCell>
+                  <TableCell>{fmtKc(p.amount)}</TableCell>
+                  <TableCell>{p.counterparty ?? '—'}</TableCell>
+                  <TableCell>
+                    {p.contractId ? `${p.propertyName ?? '—'} / ${p.tenantName ?? '—'}` : '—'}
+                  </TableCell>
+                  <TableCell>{p.source}</TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { setAssignErr(null); setAssignContractId(p.contractId ?? ''); setAssignPayment(p); }}
+                    >
+                      Přiřadit
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>

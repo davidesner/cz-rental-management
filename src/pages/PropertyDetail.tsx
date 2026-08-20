@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 
 interface Property {
   id: string; name: string; address: string | null;
@@ -73,6 +75,17 @@ export function PropertyDetailPage() {
   });
 
   if (property.isLoading) return <div>Načítání…</div>;
+  // A failed request is not the same as a missing property. Only a real 404
+  // means "nenalezena"; anything else (network, 500) gets an error the user
+  // can act on, instead of being told the property does not exist.
+  if (property.isError && !(property.error instanceof ApiError && property.error.status === 404)) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-destructive">Nepodařilo se načíst nemovitost.</p>
+        <Button size="sm" variant="outline" onClick={() => property.refetch()}>Zkusit znovu</Button>
+      </div>
+    );
+  }
   if (!property.data) return <div>Nemovitost nenalezena.</div>;
   const p = property.data.property;
 
@@ -117,19 +130,24 @@ export function PropertyDetailPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(tariffs.data?.tariffs ?? []).map(t => (
-                <TableRow key={t.id} className={t.validTo === null ? 'bg-accent/30' : ''}>
-                  <TableCell>{t.validFrom}</TableCell>
-                  <TableCell>{t.validTo ?? <span className="font-semibold">aktuální</span>}</TableCell>
-                  <TableCell>{fmt(t.totalSvjAdvance)}</TableCell>
-                  <TableCell>{fmt(t.deductibleAmount)}</TableCell>
-                  <TableCell className="font-medium">{fmt(t.totalSvjAdvance - t.deductibleAmount)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground max-w-md">{t.deductibleNote ?? '—'}</TableCell>
-                  <TableCell><DocRef value={t.documentRef} /></TableCell>
-                </TableRow>
-              ))}
-              {(tariffs.data?.tariffs ?? []).length === 0 && (
+              {tariffs.isError && !tariffs.data ? (
+                <TableError cols={7} onRetry={() => tariffs.refetch()} />
+              ) : !tariffs.data ? (
+                <TableSkeleton cols={7} />
+              ) : tariffs.data.tariffs.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">Zatím žádný evidenční list. Přidej první „Nový záznam".</TableCell></TableRow>
+              ) : (
+                tariffs.data.tariffs.map(t => (
+                  <TableRow key={t.id} className={t.validTo === null ? 'bg-accent/30' : ''}>
+                    <TableCell>{t.validFrom}</TableCell>
+                    <TableCell>{t.validTo ?? <span className="font-semibold">aktuální</span>}</TableCell>
+                    <TableCell>{fmt(t.totalSvjAdvance)}</TableCell>
+                    <TableCell>{fmt(t.deductibleAmount)}</TableCell>
+                    <TableCell className="font-medium">{fmt(t.totalSvjAdvance - t.deductibleAmount)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-md">{t.deductibleNote ?? '—'}</TableCell>
+                    <TableCell><DocRef value={t.documentRef} /></TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>

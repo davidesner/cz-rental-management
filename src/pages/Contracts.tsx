@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/table-skeleton';
+import { TableError } from '@/components/ui/table-error';
 
 interface Property { id: string; name: string; }
 interface Tenant { id: string; name: string; }
@@ -14,6 +16,8 @@ interface Contract {
   id: string;
   propertyId: string;
   tenantId: string;
+  propertyName: string;
+  tenantName: string;
   startDate: string;
   endDate: string | null;
   securityDeposit: number | null;
@@ -22,7 +26,7 @@ interface Contract {
 export function ContractsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { data } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts') });
+  const { data, isError, refetch } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts') });
   const { data: propertiesData } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
   const { data: tenantsData } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
   const [open, setOpen] = useState(false);
@@ -31,9 +35,6 @@ export function ContractsPage() {
 
   const properties = propertiesData?.properties ?? [];
   const tenants = tenantsData?.tenants ?? [];
-
-  const propertiesById = Object.fromEntries(properties.map(p => [p.id, p]));
-  const tenantsById = Object.fromEntries(tenants.map(t => [t.id, t]));
 
   const create = useMutation({
     mutationFn: () => {
@@ -73,42 +74,37 @@ export function ContractsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(data?.contracts ?? []).map(c => {
-              const tenant = tenantsById[c.tenantId];
-              const property = propertiesById[c.propertyId];
-              return (
+            {isError && !data ? (
+              <TableError cols={4} onRetry={() => refetch()} />
+            ) : !data ? (
+              <TableSkeleton cols={4} />
+            ) : data.contracts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Zatím žádné pronájmy.</TableCell>
+              </TableRow>
+            ) : (
+              data.contracts.map(c => (
                 <TableRow
                   key={c.id}
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => navigate(`/contracts/${c.id}`)}
                 >
-                  <TableCell className="font-medium">
-                    {tenant?.name ?? c.tenantId}
-                  </TableCell>
+                  <TableCell className="font-medium">{c.tenantName}</TableCell>
                   <TableCell>
-                    {property ? (
-                      <Link
-                        to={`/properties/${property.id}`}
-                        className="underline text-primary hover:opacity-70"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {property.name}
-                      </Link>
-                    ) : (
-                      c.propertyId
-                    )}
+                    <Link
+                      to={`/properties/${c.propertyId}`}
+                      className="underline text-primary hover:opacity-70"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      {c.propertyName}
+                    </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">—</TableCell>
                   <TableCell>
                     {c.startDate} – {c.endDate ?? 'běží'}
                   </TableCell>
                 </TableRow>
-              );
-            })}
-            {(data?.contracts ?? []).length === 0 && (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Zatím žádné pronájmy.</TableCell>
-              </TableRow>
+              ))
             )}
           </TableBody>
         </Table>

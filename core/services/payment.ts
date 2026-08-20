@@ -200,8 +200,14 @@ export async function listPayments(db: DB, orgId: string, allowedPropertyIds: st
     .orderBy(desc(payment.paidAt));
   const visible = allowedPropertyIds === null
     ? rows
-    // unchanged rule: unassigned payments stay visible to everyone
-    : rows.filter(r => r.contractPropertyId === null || allowedPropertyIds.includes(r.contractPropertyId));
+    // Unassigned payments stay visible to everyone. An ASSIGNED payment is
+    // visible only if its contract resolves to an allowed property — this must
+    // mirror getPayment's guard exactly, or the same row is listed here and
+    // 403s on read. Keying on contractPropertyId alone was not enough: a
+    // payment whose contract does not join (a different org) yields a null
+    // property id with a non-null contractId, and was being shown to everyone.
+    : rows.filter(r => r.contractId === null
+        || (r.contractPropertyId !== null && allowedPropertyIds.includes(r.contractPropertyId)));
   return visible.map(({ contractPropertyId: _ignored, ...row }) => row);
 }
 

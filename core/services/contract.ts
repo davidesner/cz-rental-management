@@ -27,15 +27,21 @@ export interface ContractRow {
   tenantName: string;
 }
 
-async function verifyOwnership(db: DB, orgId: string, propertyId: string, tenantId: string) {
+async function verifyOwnership(db: DB, orgId: string, propertyId: string, tenantId: string, allowedPropertyIds: string[] | null) {
   const [p] = await db.select().from(property).where(and(eq(property.id, propertyId), eq(property.orgId, orgId)));
   if (!p) throw new AppError('not_found', 'property not in org');
+  // Org membership is not access: a `member` is scoped to specific properties.
+  // Without this, a restricted member could create a contract on any property
+  // in the org — and then read back its name through the joined row.
+  if (allowedPropertyIds !== null && !allowedPropertyIds.includes(propertyId)) {
+    throw new AppError('forbidden', 'no access to property');
+  }
   const [t] = await db.select().from(tenant).where(and(eq(tenant.id, tenantId), eq(tenant.orgId, orgId)));
   if (!t) throw new AppError('not_found', 'tenant not in org');
 }
 
-export async function createContract(db: DB, orgId: string, input: ContractInput): Promise<ContractRow> {
-  await verifyOwnership(db, orgId, input.propertyId, input.tenantId);
+export async function createContract(db: DB, orgId: string, allowedPropertyIds: string[] | null, input: ContractInput): Promise<ContractRow> {
+  await verifyOwnership(db, orgId, input.propertyId, input.tenantId, allowedPropertyIds);
   const id = createId();
   await db.insert(contract).values({
     id, orgId,
@@ -46,11 +52,12 @@ export async function createContract(db: DB, orgId: string, input: ContractInput
     securityDeposit: input.securityDeposit ?? null,
     note: input.note ?? null,
   });
-  // Ownership was already verified above, and the creator necessarily has
-  // access to the property/tenant it just linked — allowedPropertyIds: null
-  // is safe here. .returning() from the insert wouldn't include the joined
-  // names, so re-fetch through getContract instead.
-  return getContract(db, orgId, id, null);
+  // .returning() from the insert wouldn't include the joined names, so
+  // re-fetch through getContract. Pass the caller's own allowedPropertyIds
+  // rather than null: verifyOwnership has already established access, so this
+  // cannot refuse a legitimate create, and re-asserting it here means the two
+  // checks can never drift apart.
+  return getContract(db, orgId, id, allowedPropertyIds);
 }
 
 // contract.propertyId / tenantId are NOT NULL with ON DELETE restrict, so the

@@ -3,7 +3,7 @@ import { createId } from '@paralleldrive/cuid2';
 import { freshDb } from './helpers/db.js';
 import { makeApp } from './helpers/app.js';
 import { registerUser } from './helpers/fixtures.js';
-import { membership, propertyAccess } from '../core/db/schema.js';
+import { membership, propertyAccess, payment } from '../core/db/schema.js';
 
 async function bootstrap() {
   const { db, client } = await freshDb();
@@ -257,6 +257,67 @@ describe('payments REST', () => {
       const dupText = JSON.stringify(await dup.json());
       expect(dupText).not.toContain('PropB');
       expect(dupText).not.toContain('TenantB');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('listPayments and getPayment agree about a payment whose contract does not resolve', async () => {
+    const { db, client, app, cookie: ownerCookie, contract: contractA } = await bootstrap();
+    try {
+      const orgId = contractA.orgId;
+
+      // Build a contract that belongs to a DIFFERENT org. payment.contractId is
+      // a bare FK to contract.id with no org predicate, while the name joins are
+      // org-scoped — so a payment in org A pointing at org B's contract joins to
+      // nothing and yields contractPropertyId === null with contractId !== null.
+      // That is the one state where list and get could apply different rules.
+      const { cookie: otherCookie } = await registerUser(app, 'other-org@b.cz', 'password123', 'O');
+      const otherProp = (await (await app.request('/api/properties', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: otherCookie },
+        body: JSON.stringify({ name: 'ForeignProp' }),
+      })).json() as any).property;
+      const otherTenant = (await (await app.request('/api/tenants', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: otherCookie },
+        body: JSON.stringify({ name: 'ForeignTenant' }),
+      })).json() as any).tenant;
+      const foreignContract = (await (await app.request('/api/contracts', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: otherCookie },
+        body: JSON.stringify({ propertyId: otherProp.id, tenantId: otherTenant.id, startDate: '2024-01-01' }),
+      })).json() as any).contract;
+      expect(foreignContract.orgId).not.toBe(orgId);
+
+      await db.insert(payment).values({
+        id: 'p-dangling', orgId, contractId: foreignContract.id,
+        amount: 50000, paidAt: '2024-10-05', source: 'manual',
+      });
+
+      // A member of org A restricted to a property that is not contractA's.
+      const propB = (await (await app.request('/api/properties', {
+        method: 'POST', headers: { 'content-type': 'application/json', cookie: ownerCookie },
+        body: JSON.stringify({ name: 'PropB' }),
+      })).json() as any).property;
+      const { userId: memberUserId, cookie: memberCookie } = await registerUser(app, 'member2@b.cz', 'password123', 'M2');
+      const membershipId = 'm-list-get-agree';
+      await db.insert(membership).values({ id: membershipId, userId: memberUserId, orgId, role: 'member' });
+      await db.insert(propertyAccess).values({ membershipId, propertyId: propB.id });
+
+      const listRes = await app.request('/api/payments', {
+        headers: { cookie: memberCookie, 'x-org-id': orgId },
+      });
+      const listed = (await listRes.json() as any).payments as any[];
+      const inList = listed.some(p => p.id === 'p-dangling');
+
+      const getRes = await app.request('/api/payments/p-dangling', {
+        headers: { cookie: memberCookie, 'x-org-id': orgId },
+      });
+      const readable = getRes.status === 200;
+
+      // Whatever the rule is, list and get must apply the SAME one.
+      expect(inList).toBe(readable);
+      // And the safe rule is: not visible. It is an assigned payment whose
+      // contract the member demonstrably cannot reach.
+      expect(inList).toBe(false);
     } finally {
       await client.close();
     }

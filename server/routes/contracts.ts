@@ -30,7 +30,7 @@ export function contractRoutes() {
     const ctx = getCtx(c); requireOrg(ctx);
     const body = CreateContract.parse(await c.req.json());
     const db = c.get('db');
-    return c.json({ contract: await createContract(db, ctx.orgId, body) }, 201);
+    return c.json({ contract: await createContract(db, ctx.orgId, ctx.allowedPropertyIds, body) }, 201);
   });
 
   r.get('/contracts', async (c) => {

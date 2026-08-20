@@ -20,7 +20,24 @@ export async function ensureContainer(): Promise<string> {
   return BASE_URL;
 }
 
-export async function freshDb(): Promise<{ db: DB; client: { close: () => Promise<void> } }> {
+/**
+ * Records every SQL statement the pool sends, so tests can assert on the number
+ * of DB round-trips a request costs. Recording is off until `start()` is called,
+ * which keeps setup/fixture queries out of the count.
+ */
+export interface QueryRecorder {
+  start: () => void;
+  stop: () => void;
+  /** Statements captured since the last `start()`, oldest first. */
+  queries: () => string[];
+  count: () => number;
+}
+
+export async function freshDb(opts?: { recordQueries?: boolean }): Promise<{
+  db: DB;
+  client: { close: () => Promise<void> };
+  recorder: QueryRecorder;
+}> {
   const dbName = `test_${process.pid}_${++counter}_${Date.now()}`;
 
   // Create a fresh database via the admin connection
@@ -29,12 +46,32 @@ export async function freshDb(): Promise<{ db: DB; client: { close: () => Promis
   await admin.end();
 
   const testUrl = BASE_URL.replace(/\/[^/?]+(\?|$)/, `/${dbName}$1`);
-  const sql = postgres(testUrl, { max: 5 });
+  let recording = false;
+  let recorded: string[] = [];
+  const recorder: QueryRecorder = {
+    start: () => { recording = true; recorded = []; },
+    stop: () => { recording = false; },
+    queries: () => [...recorded],
+    count: () => recorded.length,
+  };
+  // Only install `debug` when the caller actually records. postgres.js keys
+  // `enumerable: options.debug` when decorating query errors
+  // (postgres/src/connection.js), so an always-on hook would change the shape
+  // of every DB error across the whole suite.
+  const sql = postgres(testUrl, opts?.recordQueries
+    ? {
+        max: 5,
+        debug: (_conn: unknown, query: string) => {
+          if (recording) recorded.push(query.replace(/\s+/g, ' ').trim());
+        },
+      }
+    : { max: 5 });
   const db = drizzle(sql, { schema });
   await migrate(db, { migrationsFolder: './drizzle' });
 
   return {
     db,
+    recorder,
     client: {
       close: async () => {
         // Close the test connection, then drop the test database to leave no residue.

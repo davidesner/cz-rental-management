@@ -9,14 +9,13 @@ rental_backups/
 .DS_Store
 coverage/
 .vscode/
-test-results/
-playwright-report/
-playwright/.cache/
 *.tgz
 
 # Claude Code — locally installed skills + their lockfile
 .claude/skills/
 /skills-lock.json
-
-# Worktrees created for parallel branch work — full repo copies
+# Git worktrees created inside the repo; `git add -A` would otherwise commit a
+# whole nested checkout.
 .claude/worktrees/
+.vercel
+.env*.local

@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  # Every push to any branch, so a commit gets a verdict even before a PR exists.
+  #
+  # Deliberately no `pull_request` trigger: it would fire a second, identical run for
+  # every commit already covered by `push`, and branch protection would then see two
+  # check runs per name on one SHA. Required checks match on name + head SHA, so the
+  # push-triggered run is what satisfies them.
+  #
+  # The gap this leaves is PRs from forks — those commits are pushed to the fork, so
+  # nothing runs here and the PR sits unmergeable at "waiting for status". That is the
+  # safe direction to fail, but if this repo ever takes fork contributions, add
+  # `pull_request_target`-style handling rather than a plain `pull_request` trigger.
+  push:
+    branches: ['**']
+
+# Superseded commits on the same branch stop wasting a runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+
+    services:
+      # Mirrors docker-compose.yml so CI and local runs agree. Tests connect to the
+      # `postgres` admin database and CREATE/DROP a disposable database per test file
+      # (tests/helpers/db.ts), so the role needs CREATEDB — the default superuser has it.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # No version pin here — action-setup reads package.json#packageManager (pnpm 10.9.0).
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      # Workspace install (pnpm-workspace.yaml covers "." and "mcp"); the MCP smoke
+      # tests import mcp/ sources directly, so its deps have to be present.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+        env:
+          # Admin connection. tests/helpers/db.ts derives each disposable database
+          # from this URL and applies drizzle/ migrations to it.
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          # buildApp() -> createAuth() refuses to construct without these, so every
+          # DB-backed test needs them. Throwaway values: the CI database is disposable
+          # and no token minted here outlives the job.
+          BETTER_AUTH_SECRET: ci-only-throwaway-secret-at-least-32-chars
+          BETTER_AUTH_URL: http://localhost:3000
+          # Deliberately NOT setting VERCEL: it would flip core/db/client.ts into the
+          # serverless pool (max 1, prepare false) and misrepresent local behaviour.
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # `pnpm build` is tsc --noEmit (see CLAUDE.md) and covers core/, server/,
+      # tests/, mcp/, scripts/, src/.
+      - name: Type-check
+        run: pnpm build
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # Bundle only. `pnpm vercel-build` would re-run tsc, which the typecheck job
+      # already owns; this proves the Vite production build itself succeeds.
+      - name: Build frontend
+        run: pnpm exec vite build

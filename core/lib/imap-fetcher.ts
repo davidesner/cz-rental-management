@@ -95,7 +95,21 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
     for (const uid of selected) {
       if (Date.now() > opts.deadline) break;
       const msg = await client.fetchOne(String(uid), { source: true }, { uid: true });
-      if (!msg || !msg.source) continue;
+      if (!msg || !msg.source) {
+        // The message vanished between search() and fetchOne — imapflow resolves
+        // `false` for "no such message", so it was almost certainly expunged by
+        // another client. Advancing past it is correct: refusing to would retry a
+        // deleted message on every run and wedge the integration forever.
+        //
+        // A TRANSIENT failure does not land here — it throws, and the throw exits
+        // before the cursor is saved, so those resume safely on their own.
+        //
+        // Logged because this branch is the one place a real message could be lost
+        // silently (a server returning no body for a message that still exists),
+        // and without a line here that loss would be invisible.
+        console.warn(`[imap] skipping uid ${uid} in ${cfg.folder}: no message body returned`);
+        continue;
+      }
       messages.push({ uid, source: msg.source });
     }
 
@@ -112,7 +126,7 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
   }
 };
 
-/** Verify credentials and report how many messages the cursor-less search sees. */
+/** Verify credentials and report the folder's total message count (mailbox.exists). */
 export async function probeConnection(
   cfg: ImapConfig,
 ): Promise<{ ok: true; mailboxExists: number } | { ok: false; error: string }> {

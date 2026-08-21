@@ -931,6 +931,7 @@ export async function syncIntegration(
 
       // One transaction per message: the staging row and its payment are
       // created together or not at all.
+      let insertedPaymentId: string | null = null;
       await db.transaction(async (tx) => {
         let paymentId: string | null = null;
         if (outcome.status === 'matched' && outcome.contractId) {
@@ -960,9 +961,13 @@ export async function syncIntegration(
           paymentId,
           receivedAt: parsed.receivedAt,
         });
-        created += 1;
-        if (paymentId) matched += 1;
+        insertedPaymentId = paymentId;
       });
+      // Counters advance only after the transaction COMMITS. Incrementing inside
+      // the callback would leave them overstated if it rolled back, and the
+      // counters are what the UI and the run log report.
+      created += 1;
+      if (insertedPaymentId) matched += 1;
     }
 
     // The cursor advances even when a message failed to parse — otherwise one
@@ -1268,7 +1273,7 @@ Create `core/services/bank-transaction.ts`:
 import { createId } from '@paralleldrive/cuid2';
 import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
-import { bankIntegration, bankTransaction, contract, payment, property, tenant } from '../db/schema.js';
+import { bankTransaction, contract, payment, property, tenant } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { parseFromTokens } from '../lib/kb-email-parser.js';
 import { buildDescription } from './bank-sync.js';
@@ -1432,12 +1437,6 @@ export async function reparseBankTransaction(db: DB, orgId: string, id: string):
     status: 'unmatched', statusReason: null,
   }).where(eq(bankTransaction.id, id));
   return getBankTransaction(db, orgId, id);
-}
-
-export async function integrationBelongsToOrg(db: DB, orgId: string, integrationId: string): Promise<boolean> {
-  const rows = await db.select({ id: bankIntegration.id }).from(bankIntegration)
-    .where(and(eq(bankIntegration.id, integrationId), eq(bankIntegration.orgId, orgId)));
-  return rows.length > 0;
 }
 ```
 

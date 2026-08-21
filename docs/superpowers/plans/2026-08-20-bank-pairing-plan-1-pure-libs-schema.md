@@ -892,6 +892,21 @@ function iso(y: string, m: string, d: string): string {
   return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
 }
 
+/**
+ * True when y/m/d is a real calendar date.
+ *
+ * DATE_CZ only asserts the SHAPE (1-2 digits, 1-2 digits, 4 digits), so
+ * "Splatnost: 32. 13. 2026" would otherwise pass as valueDate '2026-13-32' on
+ * an ok:true result. That string then reaches a Postgres `date` column and
+ * fails the INSERT — turning a parseable-but-wrong notification into an opaque
+ * database error instead of the clean parse_failed row the design promises.
+ */
+function isRealDate(y: number, m: number, d: number): boolean {
+  if (m < 1 || m > 12 || d < 1) return false;
+  // Day 0 of month m+1 is the last day of month m.
+  return d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
 interface StructureError { detail: string }
 
 /**
@@ -933,8 +948,16 @@ function validateStructure(tokens: string[]): { index: Map<string, number> } | S
   if (!hasCzDate) problems.push('no span matches the "Splatnost" date pattern');
   // The English mirror is what the cross-check reads; losing it silently would
   // disable a correctness guard rather than break anything visibly.
+  // Both halves of the English mirror are asserted, not just the amount. The
+  // mirror's whole job is to cross-check amount AND value date; if the English
+  // date span vanishes while the amount survives, the date cross-check below
+  // silently does not run (`if (enDateToken)`), so a drifted template would
+  // yield an unverified valueDate as a clean `ok: true`. valueDate is the field
+  // pairing depends on most — it becomes payment.paidAt.
   const hasEnAmount = tokens.some((t) => AMOUNT_EN.test(t));
   if (!hasEnAmount) problems.push('the English mirror block is missing its amount');
+  const hasEnDate = tokens.some((t) => DATE_EN.test(t));
+  if (!hasEnDate) problems.push('the English mirror block is missing its due date');
   if (problems.length > 0) return { detail: problems.join('; ') };
 
   return { index };
@@ -970,6 +993,9 @@ export function parseFromTokens(
 
   const czDateToken = tokens.find((t) => DATE_CZ.test(t))!;
   const czDate = DATE_CZ.exec(czDateToken)!;
+  if (!isRealDate(Number(czDate[3]), Number(czDate[2]), Number(czDate[1]))) {
+    return fail('missing_value_date', `implausible value date in "${czDateToken}"`);
+  }
   const valueDate = iso(czDate[3]!, czDate[2]!, czDate[1]!);
 
   // Cross-check against the English mirror: different formats, same facts.

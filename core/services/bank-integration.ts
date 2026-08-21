@@ -137,7 +137,16 @@ export async function deleteBankIntegration(db: DB, orgId: string, id: string): 
   await db.delete(bankIntegration).where(and(eq(bankIntegration.id, id), eq(bankIntegration.orgId, orgId)));
 }
 
-export async function loadImapConfig(db: DB, orgId: string, id: string, key: Buffer): Promise<ImapConfig> {
+/**
+ * Deliberately NOT exported. The returned `ImapConfig` carries the decrypted
+ * password in a field literally named `password`, so an exported version is one
+ * careless `import` away from a route handler serialising it into a response —
+ * which would defeat the write-only-password invariant this whole service is
+ * built around. `testBankIntegration` is the only caller; keep it that way, and
+ * if another module ever needs a live IMAP config, give it a function that
+ * consumes the config rather than one that returns it.
+ */
+async function loadImapConfig(db: DB, orgId: string, id: string, key: Buffer): Promise<ImapConfig> {
   const [row] = await db.select().from(bankIntegration)
     .where(and(eq(bankIntegration.id, id), eq(bankIntegration.orgId, orgId)));
   if (!row) throw new AppError('not_found', 'bankovní integrace nenalezena');

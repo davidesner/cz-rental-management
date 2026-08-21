@@ -80,6 +80,37 @@ describe('kb-email-parser', () => {
     expect(res.reason).toBe('cz_en_mismatch');
   });
 
+  it('rejects a mail whose English mirror is missing only its due date', async () => {
+    // The amount stays; only the due-date value disappears from the English
+    // span. Structure must catch this even though the amount check still
+    // passes — this is the gap the amount-only assertion left open.
+    const html = (await loadFixtureHtml()).replace('08-20-2026', '');
+    const res = await parse(makeEml(html));
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe('unexpected_structure');
+    expect(res.detail).toMatch(/due date/i);
+  });
+
+  describe('value date validation', () => {
+    it('rejects an impossible Splatnost date instead of persisting nonsense', async () => {
+      const html = (await loadFixtureHtml()).replace('20. 08. 2026', '32. 13. 2026');
+      const res = await parse(makeEml(html));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.reason).toBe('missing_value_date');
+    });
+
+    it('still accepts a real leap-day date (29 Feb on a leap year)', async () => {
+      const html = (await loadFixtureHtml())
+        .replace('20. 08. 2026', '29. 02. 2024')
+        .replace('08-20-2026', '02-29-2024');
+      const res = await parse(makeEml(html));
+      if (!res.ok) throw new Error(`expected ok, got ${res.reason}: ${res.detail}`);
+      expect(res.value.valueDate).toBe('2024-02-29');
+    });
+  });
+
   describe('structural validation', () => {
     it('rejects a renamed label and names the failed assertion', async () => {
       const html = (await loadFixtureHtml()).replace('Variabilní symbol', 'Variabilni symbol XX');

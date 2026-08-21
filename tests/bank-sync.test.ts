@@ -365,6 +365,42 @@ describe('bank-sync', () => {
       await c.close();
     });
 
+    it('a DB failure on one message does not stop the rest of the batch or freeze the cursor', async () => {
+      const c = await setup();
+      await addRule(c.db, c.orgId, c.contractId);
+      // A payment already holding the externalId m1's import will try to write,
+      // but for a DIFFERENT amount and date so the cross-channel duplicate guard
+      // does not catch it first. The payment insert therefore reaches the DB and
+      // violates payment_org_external_idx — the exact shape of the failure a
+      // delete-and-re-add of an integration produces, since payments survive it
+      // and bank_transaction rows do not.
+      await c.db.insert(payment).values({
+        id: createId(), orgId: c.orgId, contractId: c.contractId,
+        amount: 999_99, paidAt: '2020-01-01', source: 'bank', externalId: 'kbemail:m1',
+      });
+
+      const result = await syncIntegration(c.db, c.integrationId, deps([
+        { uid: 10, source: await notification('m1') },
+        { uid: 11, source: await notification('m2') },
+      ]), 'cron');
+
+      // The run reports the failure...
+      expect(result.status).toBe('error');
+      expect(result.failed).toBe(1);
+      expect(result.error).toContain('m1');
+      // ...but the LATER message still imported.
+      expect(result.created).toBe(1);
+      expect(result.matched).toBe(1);
+      const stored = await c.db.select().from(bankTransaction);
+      expect(stored.map(t => t.messageId)).toEqual(['m2']);
+
+      // And the cursor advanced past BOTH — otherwise the next run refetches m1,
+      // fails identically, and the integration is wedged forever.
+      const [integ] = await c.db.select().from(bankIntegration).where(eq(bankIntegration.id, c.integrationId));
+      expect(integ!.lastUid).toBe(11);
+      await c.close();
+    });
+
     it('skips an unrelated e-mail WITHOUT escalating to error', async () => {
       const c = await setup();
       const unrelated = makeEml('<html><body><p>Newsletter</p></body></html>', {

@@ -268,90 +268,118 @@ export async function syncIntegration(
     const rules = await loadCandidateRules(db, integ.orgId);
 
     for (const msg of messages) {
-      const parseResult = await parseKbPaymentNotification(msg.source, {
-        fromFilter: integ.fromFilter, subjectFilter: integ.subjectFilter,
-      });
+      // Identifies the offending message in the catch below, as soon as the
+      // parser gets far enough for us to know which message it was.
+      let messageId: string | null = null;
+      try {
+        const parseResult = await parseKbPaymentNotification(msg.source, {
+          fromFilter: integ.fromFilter, subjectFilter: integ.subjectFilter,
+        });
 
-      if (!parseResult.ok) {
-        // A stray newsletter is not a failure — storing it would fill the inbox
-        // with noise, and escalating the integration to `error` over it would
-        // cry wolf. Anything else IS a failure worth seeing.
-        if (parseResult.reason === 'not_kb_notification') continue;
+        if (!parseResult.ok) {
+          // A stray newsletter is not a failure — storing it would fill the inbox
+          // with noise, and escalating the integration to `error` over it would
+          // cry wolf. Anything else IS a failure worth seeing.
+          if (parseResult.reason === 'not_kb_notification') continue;
 
+          failed += 1;
+          error = `${parseResult.reason}: ${parseResult.detail}`;
+          // A genuine KB notification (it passed both the sender and subject
+          // filters) whose Message-ID header is missing or unparseable MUST still
+          // be persisted. Skipping the insert would leave it neither stored nor
+          // ever re-offered — the cursor advances below regardless — which is
+          // precisely the silent loss the parse_failed row exists to prevent.
+          // messageId is NOT NULL and uniquely indexed, so fall back to a
+          // synthetic key from the mailbox generation and uid, which identifies
+          // the same message stably within a uidValidity generation.
+          const failedMessageId = parseResult.messageId
+            ?? `imap:${nextCursor.uidValidity ?? 'unknown'}:${msg.uid}`;
+          messageId = failedMessageId;
+          // .returning() so a replayed failure (the row already exists, and
+          // onConflictDoNothing makes the insert a no-op) does not inflate the
+          // `created` counter the run log and UI report.
+          const inserted = await db.insert(bankTransaction).values({
+            id: createId(), orgId: integ.orgId, integrationId,
+            messageId: failedMessageId,
+            amount: 0, currency: 'CZK', valueDate: (parseResult.receivedAt ?? now()).toISOString().slice(0, 10),
+            status: 'parse_failed', statusReason: `${parseResult.reason}: ${parseResult.detail}`,
+            rawTokens: parseResult.tokens,
+            receivedAt: parseResult.receivedAt ?? now(),
+          }).onConflictDoNothing().returning({ id: bankTransaction.id });
+          if (inserted.length > 0) created += 1;
+          continue;
+        }
+
+        const parsed = parseResult.value;
+        messageId = parsed.messageId;
+        const existing = await db.select({ id: bankTransaction.id }).from(bankTransaction)
+          .where(and(eq(bankTransaction.orgId, integ.orgId), eq(bankTransaction.messageId, parsed.messageId)));
+        if (existing.length > 0) continue; // already imported
+
+        const outcome = await decide(db, integ.orgId, integ.accountNumber, parsed, rules);
+
+        // One transaction per message: the staging row and its payment are
+        // created together or not at all. Returned (not assigned to an outer let
+        // from inside the callback) so TypeScript actually tracks the value —
+        // see core/services/payment.ts#recordPaymentsBatch for the same shape.
+        const insertedPaymentId = await db.transaction(async (tx) => {
+          let paymentId: string | null = null;
+          if (outcome.status === 'matched' && outcome.contractId) {
+            paymentId = createId();
+            await tx.insert(payment).values({
+              id: paymentId, orgId: integ.orgId, contractId: outcome.contractId,
+              amount: parsed.amount, paidAt: parsed.valueDate,
+              counterparty: null,                       // KB sends no payer name
+              counterpartyAccount: parsed.fromAccount,
+              externalId: `kbemail:${parsed.messageId}`, // second idempotency guard
+              statementRef: parsed.sourceLink,
+              source: 'bank',
+              description: buildDescription(parsed),
+            });
+          }
+          await tx.insert(bankTransaction).values({
+            id: createId(), orgId: integ.orgId, integrationId,
+            messageId: parsed.messageId,
+            amount: parsed.amount, currency: parsed.currency, valueDate: parsed.valueDate,
+            fromAccount: parsed.fromAccount, toAccount: parsed.toAccount,
+            vs: parsed.vs, ks: parsed.ks, ss: parsed.ss,
+            messageForRecipient: parsed.messageForRecipient,
+            sourceLink: parsed.sourceLink, rawTokens: parsed.tokens,
+            status: outcome.status, statusReason: outcome.statusReason,
+            duplicateOfTransactionId: outcome.duplicateOf,
+            matchedBy: paymentId ? 'rule' : null,
+            paymentId,
+            receivedAt: parsed.receivedAt,
+          });
+          return paymentId;
+        });
+        // Counters advance only after the transaction COMMITS. Incrementing inside
+        // the callback would leave them overstated if it rolled back, and the
+        // counters are what the UI and the run log report.
+        created += 1;
+        if (insertedPaymentId) matched += 1;
+      } catch (e) {
+        // A DB failure on ONE message must not wedge the WHOLE integration.
+        // Without this, anything the per-message transaction throws escapes the
+        // loop into the outer catch, which (correctly) leaves the cursor
+        // unadvanced — so the next run refetches the same message, fails
+        // identically, and the integration never progresses again. Forever.
+        //
+        // That is not hypothetical. Delete an integration and re-add it: the
+        // payment rows survive (the money WAS received) still carrying their
+        // `kbemail:` externalIds, but the bank_transaction dedupe rows cascade
+        // away with the integration. The re-added integration refetches the
+        // same mail and the payment insert hits payment_org_external_idx — a
+        // unique violation on a message that will be refetched every run.
+        //
+        // Same reasoning as the parse-failure branch above: record the failure,
+        // let the cursor advance, and leave the message visible in the error
+        // rather than trading one lost message for a dead integration.
         failed += 1;
-        error = `${parseResult.reason}: ${parseResult.detail}`;
-        // A genuine KB notification (it passed both the sender and subject
-        // filters) whose Message-ID header is missing or unparseable MUST still
-        // be persisted. Skipping the insert would leave it neither stored nor
-        // ever re-offered — the cursor advances below regardless — which is
-        // precisely the silent loss the parse_failed row exists to prevent.
-        // messageId is NOT NULL and uniquely indexed, so fall back to a
-        // synthetic key from the mailbox generation and uid, which identifies
-        // the same message stably within a uidValidity generation.
-        const failedMessageId = parseResult.messageId
-          ?? `imap:${nextCursor.uidValidity ?? 'unknown'}:${msg.uid}`;
-        // .returning() so a replayed failure (the row already exists, and
-        // onConflictDoNothing makes the insert a no-op) does not inflate the
-        // `created` counter the run log and UI report.
-        const inserted = await db.insert(bankTransaction).values({
-          id: createId(), orgId: integ.orgId, integrationId,
-          messageId: failedMessageId,
-          amount: 0, currency: 'CZK', valueDate: (parseResult.receivedAt ?? now()).toISOString().slice(0, 10),
-          status: 'parse_failed', statusReason: `${parseResult.reason}: ${parseResult.detail}`,
-          rawTokens: parseResult.tokens,
-          receivedAt: parseResult.receivedAt ?? now(),
-        }).onConflictDoNothing().returning({ id: bankTransaction.id });
-        if (inserted.length > 0) created += 1;
+        const detail = e instanceof Error ? e.message : String(e);
+        error = `db_error (uid ${msg.uid}${messageId === null ? '' : `, ${messageId}`}): ${detail}`;
         continue;
       }
-
-      const parsed = parseResult.value;
-      const existing = await db.select({ id: bankTransaction.id }).from(bankTransaction)
-        .where(and(eq(bankTransaction.orgId, integ.orgId), eq(bankTransaction.messageId, parsed.messageId)));
-      if (existing.length > 0) continue; // already imported
-
-      const outcome = await decide(db, integ.orgId, integ.accountNumber, parsed, rules);
-
-      // One transaction per message: the staging row and its payment are
-      // created together or not at all. Returned (not assigned to an outer let
-      // from inside the callback) so TypeScript actually tracks the value —
-      // see core/services/payment.ts#recordPaymentsBatch for the same shape.
-      const insertedPaymentId = await db.transaction(async (tx) => {
-        let paymentId: string | null = null;
-        if (outcome.status === 'matched' && outcome.contractId) {
-          paymentId = createId();
-          await tx.insert(payment).values({
-            id: paymentId, orgId: integ.orgId, contractId: outcome.contractId,
-            amount: parsed.amount, paidAt: parsed.valueDate,
-            counterparty: null,                       // KB sends no payer name
-            counterpartyAccount: parsed.fromAccount,
-            externalId: `kbemail:${parsed.messageId}`, // second idempotency guard
-            statementRef: parsed.sourceLink,
-            source: 'bank',
-            description: buildDescription(parsed),
-          });
-        }
-        await tx.insert(bankTransaction).values({
-          id: createId(), orgId: integ.orgId, integrationId,
-          messageId: parsed.messageId,
-          amount: parsed.amount, currency: parsed.currency, valueDate: parsed.valueDate,
-          fromAccount: parsed.fromAccount, toAccount: parsed.toAccount,
-          vs: parsed.vs, ks: parsed.ks, ss: parsed.ss,
-          messageForRecipient: parsed.messageForRecipient,
-          sourceLink: parsed.sourceLink, rawTokens: parsed.tokens,
-          status: outcome.status, statusReason: outcome.statusReason,
-          duplicateOfTransactionId: outcome.duplicateOf,
-          matchedBy: paymentId ? 'rule' : null,
-          paymentId,
-          receivedAt: parsed.receivedAt,
-        });
-        return paymentId;
-      });
-      // Counters advance only after the transaction COMMITS. Incrementing inside
-      // the callback would leave them overstated if it rolled back, and the
-      // counters are what the UI and the run log report.
-      created += 1;
-      if (insertedPaymentId) matched += 1;
     }
 
     // The cursor advances even when a message failed to parse — otherwise one

@@ -27,3 +27,25 @@ export function failingImap(message: string) {
   const fetchMessages: FetchMessages = async () => { throw new Error(message); };
   return { fetchMessages };
 }
+
+/**
+ * Like `fakeImap`, but each mailbox has its OWN messages, keyed by imapUser.
+ *
+ * Needed for the cron path: syncAllActiveIntegrations passes one SyncDeps to
+ * every integration, so a single shared message list would hand every org the
+ * same mail and a multi-org test could not tell whose message landed where.
+ */
+export function fakeImapByUser(byUser: Record<string, Array<{ uid: number; source: Buffer | string }>>) {
+  const calls: Array<{ user: string }> = [];
+  const fetchMessages: FetchMessages = async (cfg, cursor, opts) => {
+    calls.push({ user: cfg.user });
+    const after = cursor.lastUid ?? 0;
+    const selected: RawMessage[] = (byUser[cfg.user] ?? [])
+      .filter((m) => m.uid > after)
+      .sort((a, b) => a.uid - b.uid)
+      .slice(0, opts.limit)
+      .map((m) => ({ uid: m.uid, source: Buffer.isBuffer(m.source) ? m.source : Buffer.from(m.source, 'utf8') }));
+    return { messages: selected, cursor: nextCursor(cursor, 1, selected), matchedCount: selected.length };
+  };
+  return { fetchMessages, calls };
+}

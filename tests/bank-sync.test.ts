@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 import { freshDb, type DB } from './helpers/db.js';
-import { fakeImap, failingImap } from './helpers/fake-imap.js';
+import { fakeImap, fakeImapByUser, failingImap } from './helpers/fake-imap.js';
 import { loadFixtureHtml, makeEml } from './helpers/kb-email.js';
 import { seal } from '../core/lib/crypto-box.js';
 import { syncIntegration, syncAllActiveIntegrations, buildDescription } from '../core/services/bank-sync.js';
@@ -48,6 +48,29 @@ async function addRule(db: DB, orgId: string, contractId: string, o: Record<stri
     counterpartyAccount: FROM_ACCOUNT, amountFrom: 2000, amountTo: 4000,
     ...o,
   });
+}
+
+/**
+ * A SECOND tenant of the app in the same database: its own org, property,
+ * tenant, contract and bank integration, reachable through its own imapUser.
+ */
+async function addOrg(db: DB, imapUser: string) {
+  const orgId = createId();
+  await db.insert(organization).values({ id: orgId, name: `O-${imapUser}` });
+  const propertyId = createId();
+  await db.insert(property).values({ id: propertyId, orgId, name: 'P' });
+  const tenantId = createId();
+  await db.insert(tenant).values({ id: tenantId, orgId, name: 'T' });
+  const contractId = createId();
+  await db.insert(contract).values({ id: contractId, orgId, propertyId, tenantId, startDate: '2024-09-01' });
+  const integrationId = createId();
+  await db.insert(bankIntegration).values({
+    id: integrationId, orgId, kind: 'kb_email', name: 'KB',
+    imapHost: 'imap.example.com', imapUser,
+    imapPasswordEnc: seal(PASSWORD, KEY),
+    accountNumber: TO_ACCOUNT,
+  });
+  return { orgId, contractId, integrationId };
 }
 
 /** A KB notification with a distinct Message-ID. Amount is 30,00 Kč = 3000 haléře. */
@@ -496,6 +519,56 @@ describe('bank-sync', () => {
       expect(results).toHaveLength(1);
       expect(results[0]!.integrationId).toBe(c.integrationId);
       await c.close();
+    });
+
+    // syncAllActiveIntegrations is the ONE place in the codebase where orgId does
+    // not come from ctx: the cron has no session, so it iterates every active
+    // integration across all orgs and passes each integration's OWN orgId down.
+    // The spec calls that "a deliberate, isolated exception to the multi-tenant
+    // rule [that] needs a comment saying so at the call site, plus a test", and
+    // the comment was there without the test. Every other test here is
+    // single-org, and the cron-route test asserts results === [] — zero
+    // integrations — so it pins the auth gate and nothing about the iteration.
+    //
+    // Note the rules in both orgs are identically wide: if loadCandidateRules
+    // were NOT org-scoped, each transaction would match two contracts, come out
+    // 'ambiguous', and create no payment at all.
+    it('keeps two orgs separate — each payment lands in its own org', async () => {
+      const a = await setup();                                  // imapUser u@example.com
+      await addRule(a.db, a.orgId, a.contractId);
+      const b = await addOrg(a.db, 'b@example.com');
+      await addRule(a.db, b.orgId, b.contractId);
+
+      const results = await syncAllActiveIntegrations(a.db, {
+        ...fakeImapByUser({
+          'u@example.com': [{ uid: 10, source: await notification('a1') }],
+          'b@example.com': [{ uid: 10, source: await notification('b1') }],
+        }),
+        key: KEY,
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.status === 'ok' && r.matched === 1)).toBe(true);
+
+      const payments = await a.db.select().from(payment);
+      expect(payments).toHaveLength(2);
+      const byOrg = new Map(payments.map(p => [p.orgId, p]));
+      expect(byOrg.get(a.orgId)!.contractId).toBe(a.contractId);
+      expect(byOrg.get(b.orgId)!.contractId).toBe(b.contractId);
+
+      // Each staging row stayed in its own org, and org A's rules never got a
+      // shot at org B's transaction (or it would be ambiguous, not matched).
+      const txs = await a.db.select().from(bankTransaction);
+      expect(txs).toHaveLength(2);
+      const txA = txs.find(t => t.messageId === 'a1')!;
+      const txB = txs.find(t => t.messageId === 'b1')!;
+      expect(txA.orgId).toBe(a.orgId);
+      expect(txB.orgId).toBe(b.orgId);
+      expect(txA.status).toBe('matched');
+      expect(txB.status).toBe('matched');
+      expect(txA.paymentId).toBe(byOrg.get(a.orgId)!.id);
+      expect(txB.paymentId).toBe(byOrg.get(b.orgId)!.id);
+      await a.close();
     });
 
     it('one failing integration does not stop the others', async () => {

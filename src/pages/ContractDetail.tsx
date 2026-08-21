@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { PairingCard } from './contract/PairingCard';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -1605,6 +1606,9 @@ export function ContractDetailPage() {
                 );
               })()}
           </Card>
+
+          {/* Sekce Párování plateb */}
+          {id && <PairingCard contractId={id} expectedMonthlyTotal={monthlyTotal} />}
 
           {/* Sekce Historie smlouvy */}
           <Card>

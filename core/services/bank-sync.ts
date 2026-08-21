@@ -230,20 +230,28 @@ export async function syncIntegration(
 
         failed += 1;
         error = `${parseResult.reason}: ${parseResult.detail}`;
-        if (parseResult.messageId) {
-          // .returning() so a replayed failure (the row already exists, and
-          // onConflictDoNothing makes the insert a no-op) does not inflate the
-          // `created` counter the run log and UI report.
-          const inserted = await db.insert(bankTransaction).values({
-            id: createId(), orgId: integ.orgId, integrationId,
-            messageId: parseResult.messageId,
-            amount: 0, currency: 'CZK', valueDate: (parseResult.receivedAt ?? now()).toISOString().slice(0, 10),
-            status: 'parse_failed', statusReason: `${parseResult.reason}: ${parseResult.detail}`,
-            rawTokens: parseResult.tokens,
-            receivedAt: parseResult.receivedAt ?? now(),
-          }).onConflictDoNothing().returning({ id: bankTransaction.id });
-          if (inserted.length > 0) created += 1;
-        }
+        // A genuine KB notification (it passed both the sender and subject
+        // filters) whose Message-ID header is missing or unparseable MUST still
+        // be persisted. Skipping the insert would leave it neither stored nor
+        // ever re-offered — the cursor advances below regardless — which is
+        // precisely the silent loss the parse_failed row exists to prevent.
+        // messageId is NOT NULL and uniquely indexed, so fall back to a
+        // synthetic key from the mailbox generation and uid, which identifies
+        // the same message stably within a uidValidity generation.
+        const failedMessageId = parseResult.messageId
+          ?? `imap:${nextCursor.uidValidity ?? 'unknown'}:${msg.uid}`;
+        // .returning() so a replayed failure (the row already exists, and
+        // onConflictDoNothing makes the insert a no-op) does not inflate the
+        // `created` counter the run log and UI report.
+        const inserted = await db.insert(bankTransaction).values({
+          id: createId(), orgId: integ.orgId, integrationId,
+          messageId: failedMessageId,
+          amount: 0, currency: 'CZK', valueDate: (parseResult.receivedAt ?? now()).toISOString().slice(0, 10),
+          status: 'parse_failed', statusReason: `${parseResult.reason}: ${parseResult.detail}`,
+          rawTokens: parseResult.tokens,
+          receivedAt: parseResult.receivedAt ?? now(),
+        }).onConflictDoNothing().returning({ id: bankTransaction.id });
+        if (inserted.length > 0) created += 1;
         continue;
       }
 
@@ -255,9 +263,10 @@ export async function syncIntegration(
       const outcome = await decide(db, integ.orgId, integ.accountNumber, parsed, rules);
 
       // One transaction per message: the staging row and its payment are
-      // created together or not at all.
-      let insertedPaymentId: string | null = null;
-      await db.transaction(async (tx) => {
+      // created together or not at all. Returned (not assigned to an outer let
+      // from inside the callback) so TypeScript actually tracks the value —
+      // see core/services/payment.ts#recordPaymentsBatch for the same shape.
+      const insertedPaymentId = await db.transaction(async (tx) => {
         let paymentId: string | null = null;
         if (outcome.status === 'matched' && outcome.contractId) {
           paymentId = createId();
@@ -286,7 +295,7 @@ export async function syncIntegration(
           paymentId,
           receivedAt: parsed.receivedAt,
         });
-        insertedPaymentId = paymentId;
+        return paymentId;
       });
       // Counters advance only after the transaction COMMITS. Incrementing inside
       // the callback would leave them overstated if it rolled back, and the
@@ -314,8 +323,15 @@ export async function syncIntegration(
     return { runId, integrationId, fetched, created, matched, failed, status: failed > 0 ? 'error' : 'ok', error };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    // Deliberately does NOT stamp lastSyncAt. That column doubles as the
+    // date-search floor (`sinceFallback`) used whenever the UID cursor is
+    // unusable, so advancing it on a FAILED run strands anything
+    // fetched-but-unprocessed and truncates the 90-day first-run backfill to
+    // "today" — and the likeliest first failure is a wrong Gmail app password.
+    // lastSyncAt means "floor below which everything is accounted for"; only a
+    // run that completed its batch may move it.
     await db.update(bankIntegration).set({
-      lastSyncAt: now(), lastSyncStatus: 'error', lastSyncError: message,
+      lastSyncStatus: 'error', lastSyncError: message,
     }).where(eq(bankIntegration.id, integrationId));
     await db.update(bankSyncRun).set({
       finishedAt: now(), status: 'error', fetched, created, matched, failed, error: message,
@@ -327,15 +343,25 @@ export async function syncIntegration(
 /**
  * Every active integration across ALL orgs — the cron path.
  *
- * One integration's failure must not stop the rest, so syncIntegration's own
- * error handling is relied on and results are collected rather than thrown.
+ * `syncIntegration` can still throw: the integration-not-found guard, the
+ * initial `bankSyncRun` insert, and the catch block's own two `db.update`s all
+ * sit outside its own try/catch. Any of those would otherwise kill this loop
+ * and skip every later integration across every org, so each call is wrapped
+ * here too and turned into an error-shaped result instead.
  */
 export async function syncAllActiveIntegrations(db: DB, deps: SyncDeps): Promise<SyncResult[]> {
   const rows = await db.select({ id: bankIntegration.id }).from(bankIntegration)
     .where(eq(bankIntegration.active, true));
   const results: SyncResult[] = [];
   for (const row of rows) {
-    results.push(await syncIntegration(db, row.id, deps, 'cron'));
+    try {
+      results.push(await syncIntegration(db, row.id, deps, 'cron'));
+    } catch (e) {
+      results.push({
+        runId: '', integrationId: row.id, fetched: 0, created: 0, matched: 0, failed: 0,
+        status: 'error', error: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
   return results;
 }

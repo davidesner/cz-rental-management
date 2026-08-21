@@ -4,9 +4,9 @@ import { eq } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 import { freshDb, type DB } from './helpers/db.js';
 import { fakeImap, failingImap } from './helpers/fake-imap.js';
-import { loadFixtureHtml, makeEml, setFieldValue } from './helpers/kb-email.js';
+import { loadFixtureHtml, makeEml } from './helpers/kb-email.js';
 import { seal } from '../core/lib/crypto-box.js';
-import { syncIntegration, syncAllActiveIntegrations } from '../core/services/bank-sync.js';
+import { syncIntegration, syncAllActiveIntegrations, buildDescription } from '../core/services/bank-sync.js';
 import {
   organization, property, tenant, contract, payment,
   bankIntegration, bankTransaction, paymentMatchingRule, bankSyncRun,
@@ -268,6 +268,36 @@ describe('bank-sync', () => {
       await c.close();
     });
 
+    it('persists a notification with no Message-ID header instead of losing it silently', async () => {
+      const c = await setup();
+      // Passes the sender + subject filters (a genuine KB notification) but has
+      // no Message-ID header at all — built inline rather than via makeEml,
+      // since makeEml always writes a Message-ID line (an empty override still
+      // renders an empty header value, not an absent one).
+      const html = await loadFixtureHtml();
+      const headers = [
+        'From: Komerční banka <servis@kbinfo.cz>',
+        'To: landlord@example.com',
+        'Subject: Servisní zpráva: Přijali jsme platbu na Váš účet',
+        'Date: Thu, 20 Aug 2026 10:52:24 +0000',
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset="UTF-8"',
+        'Content-Transfer-Encoding: 8bit',
+      ].join('\r\n');
+      const noMessageId = Buffer.from(`${headers}\r\n\r\n${html}`, 'utf8');
+
+      const result = await syncIntegration(c.db, c.integrationId, deps([{ uid: 10, source: noMessageId }]), 'cron');
+
+      expect(result.failed).toBe(1);
+      // Persisted, not lost: the cursor advances past uid 10 regardless (see
+      // the test above), so a skipped insert here would mean this message is
+      // neither stored nor ever re-offered.
+      const [tx] = await c.db.select().from(bankTransaction);
+      expect(tx!.status).toBe('parse_failed');
+      expect(tx!.messageId).toMatch(/^imap:/);
+      await c.close();
+    });
+
     it('does not inflate the created counter when a parse failure is replayed', async () => {
       const c = await setup();
       const drifted = await notification('m1', (html) => html.replace('Variabilní symbol', 'Neznámé pole'));
@@ -312,6 +342,11 @@ describe('bank-sync', () => {
       const [integ] = await c.db.select().from(bankIntegration).where(eq(bankIntegration.id, c.integrationId));
       expect(integ!.lastSyncStatus).toBe('error');
       expect(integ!.lastSyncError).toContain('AUTHENTICATIONFAILED');
+      // lastSyncAt doubles as the SINCE search floor for the next run. Stamping
+      // it on a FAILED run would strand fetched-but-unprocessed mail outside
+      // that window and truncate the 90-day first-run backfill to "today" —
+      // so a failed run must leave it untouched.
+      expect(integ!.lastSyncAt).toBeNull();
       const [run] = await c.db.select().from(bankSyncRun);
       expect(run!.status).toBe('error');
       expect(run!.finishedAt).not.toBeNull();
@@ -372,6 +407,32 @@ describe('bank-sync', () => {
       expect(results.filter(r => r.status === 'error')).toHaveLength(1);
       expect(results.filter(r => r.status === 'ok')).toHaveLength(1);
       await c.close();
+    });
+  });
+
+  describe('buildDescription', () => {
+    it('prefers messageForRecipient when present', () => {
+      expect(buildDescription({ messageForRecipient: 'Nájem srpen 2026', vs: '123', ks: '0308', ss: '456' }))
+        .toBe('Nájem srpen 2026');
+    });
+
+    it('falls back to VS · KS · SS when there is no message for recipient', () => {
+      expect(buildDescription({ messageForRecipient: null, vs: '123', ks: '0308', ss: '456' }))
+        .toBe('VS 123 · KS 0308 · SS 456');
+    });
+
+    it('omits absent symbols from the fallback rather than rendering them blank', () => {
+      expect(buildDescription({ messageForRecipient: null, vs: '123', ks: null, ss: null }))
+        .toBe('VS 123');
+    });
+
+    it('treats an empty-string message the same as absent', () => {
+      expect(buildDescription({ messageForRecipient: '', vs: null, ks: '0308', ss: null }))
+        .toBe('KS 0308');
+    });
+
+    it('returns null when there is nothing to describe at all', () => {
+      expect(buildDescription({ messageForRecipient: null, vs: null, ks: null, ss: null })).toBeNull();
     });
   });
 });

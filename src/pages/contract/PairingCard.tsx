@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '@/lib/api';
+import { korunToHalerOrNull, parseKorun, toKorunInput } from '@/lib/money';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -30,25 +31,12 @@ interface RuleResponse {
 
 const ANY = 'cokoliv';
 
+const AMOUNT_HELP = 'Částka musí být číslo v korunách, např. 35000 nebo 35000,50. '
+  + 'Pro „cokoliv" nech pole prázdné.';
+
 function fmtKc(halere: number | null): string {
   if (halere === null) return '—';
   return `${(halere / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kč`;
-}
-
-/** Haléře → an editable korun string, e.g. 3500000 → "35000,00". */
-function toKorunInput(halere: number | null): string {
-  if (halere === null) return '';
-  return (halere / 100).toFixed(2).replace('.', ',');
-}
-
-/** Korun string → haléře. Integer arithmetic; never a float amount. */
-function toHaler(input: string): number | null {
-  const trimmed = input.trim();
-  if (trimmed === '') return null;
-  const normalised = trimmed.replace(/\s/g, '').replace(',', '.');
-  const value = Number.parseFloat(normalised);
-  if (Number.isNaN(value)) return null;
-  return Math.round(value * 100);
 }
 
 function HealthField({ health }: { health: PairingHealth }) {
@@ -113,14 +101,22 @@ function PairingDialog({ contractId, rule, expectedMonthlyTotal, onClose, onSave
   const [err, setErr] = useState<string | null>(null);
   const blank = (s: string) => (s.trim() === '' ? null : s.trim());
 
+  // An empty bound legitimately means "cokoliv" and goes to the API as null. An
+  // UNPARSEABLE one must never take the same path: the API cannot tell the two
+  // apart, so a typo in „Částka od" would silently widen the rule from a band to
+  // every payment in the org.
+  const amountFrom = parseKorun(form.amountFrom);
+  const amountTo = parseKorun(form.amountTo);
+  const badAmount = amountFrom.kind === 'invalid' || amountTo.kind === 'invalid';
+
   const save = useMutation({
     mutationFn: () => api.put<{ rule: PaymentRule }>(`/api/contracts/${contractId}/payment-rule`, {
       counterpartyAccount: blank(form.counterpartyAccount),
       vs: blank(form.vs),
       ks: blank(form.ks),
       ss: blank(form.ss),
-      amountFrom: toHaler(form.amountFrom),
-      amountTo: toHaler(form.amountTo),
+      amountFrom: korunToHalerOrNull(amountFrom),
+      amountTo: korunToHalerOrNull(amountTo),
       active: form.active,
     }),
     onSuccess: () => { onSaved(); onClose(); },
@@ -180,6 +176,9 @@ function PairingDialog({ contractId, rule, expectedMonthlyTotal, onClose, onSave
             <Input value={form.amountTo} onChange={e => set('amountTo')(e.target.value)} />
           </div>
         </div>
+        {badAmount && (
+          <p className="text-sm text-destructive">{AMOUNT_HELP}</p>
+        )}
         {suggested && !rule && (
           <p className="text-xs text-muted-foreground">
             Předvyplněno z aktuálního měsíčního předpisu ({fmtKc(expectedMonthlyTotal)}) ±10 %.
@@ -205,7 +204,14 @@ function PairingDialog({ contractId, rule, expectedMonthlyTotal, onClose, onSave
           </div>
           <div className="space-x-2">
             <Button variant="outline" onClick={onClose}>Zrušit</Button>
-            <Button disabled={save.isPending} onClick={() => { setErr(null); save.mutate(); }}>
+            <Button
+              disabled={save.isPending || badAmount}
+              onClick={() => {
+                setErr(null);
+                if (badAmount) { setErr(AMOUNT_HELP); return; }
+                save.mutate();
+              }}
+            >
               {save.isPending ? 'Ukládám…' : 'Uložit'}
             </Button>
           </div>

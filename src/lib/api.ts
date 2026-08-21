@@ -24,3 +24,23 @@ export const api = {
   patch: <T>(p: string, b: unknown) => request<T>('PATCH', p, b),
   delete: <T>(p: string) => request<T>('DELETE', p),
 };
+
+/**
+ * The message to show a user for a failed request.
+ *
+ * `ApiError.message` is only ever the string `API <status>` — the server's real
+ * message lives in `body.error.message` (see server/middleware/errors.ts, which
+ * serialises an AppError as `{ error: { kind, message, details } }`). So the
+ * common `e instanceof Error ? e.message : String(e)` idiom renders "API 422"
+ * and throws away the actual explanation.
+ */
+export function apiErrorMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    const body = e.body as { error?: { message?: string } } | undefined;
+    if (typeof body?.error?.message === 'string' && body.error.message !== '') {
+      return body.error.message;
+    }
+    return `Chyba ${e.status}`;
+  }
+  return e instanceof Error ? e.message : String(e);
+}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, apiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -100,8 +100,14 @@ function PairingDialog({ contractId, rule, expectedMonthlyTotal, onClose, onSave
     vs: rule?.vs ?? '',
     ks: rule?.ks ?? '',
     ss: rule?.ss ?? '',
-    amountFrom: toKorunInput(rule?.amountFrom ?? suggested?.from ?? null),
-    amountTo: toKorunInput(rule?.amountTo ?? suggested?.to ?? null),
+    // Gated on `rule` existing, NOT on the field being null. `rule?.amountFrom
+    // ?? suggested?.from` would populate an EXISTING rule's deliberately-unset
+    // bound with a computed suggestion — and since the suggestion is
+    // indistinguishable from a real value in the input, saving without touching
+    // it silently narrows the rule from "any amount" to a band, changing which
+    // payments match.
+    amountFrom: rule ? toKorunInput(rule.amountFrom) : toKorunInput(suggested?.from ?? null),
+    amountTo: rule ? toKorunInput(rule.amountTo) : toKorunInput(suggested?.to ?? null),
     active: rule?.active ?? true,
   });
   const [err, setErr] = useState<string | null>(null);
@@ -118,13 +124,13 @@ function PairingDialog({ contractId, rule, expectedMonthlyTotal, onClose, onSave
       active: form.active,
     }),
     onSuccess: () => { onSaved(); onClose(); },
-    onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setErr(apiErrorMessage(e)),
   });
 
   const remove = useMutation({
     mutationFn: () => api.delete<void>(`/api/contracts/${contractId}/payment-rule`),
     onSuccess: () => { onSaved(); onClose(); },
-    onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setErr(apiErrorMessage(e)),
   });
 
   const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }));
@@ -155,12 +161,12 @@ function PairingDialog({ contractId, rule, expectedMonthlyTotal, onClose, onSave
             <Input value={form.vs} onChange={e => set('vs')(e.target.value)} />
           </div>
           <div>
-            <Label>Konstantní symbol</Label>
-            <Input value={form.ks} onChange={e => set('ks')(e.target.value)} />
-          </div>
-          <div>
             <Label>Specifický symbol</Label>
             <Input value={form.ss} onChange={e => set('ss')(e.target.value)} />
+          </div>
+          <div>
+            <Label>Konstantní symbol</Label>
+            <Input value={form.ks} onChange={e => set('ks')(e.target.value)} />
           </div>
         </div>
 
@@ -252,11 +258,11 @@ export function PairingCard({ contractId, expectedMonthlyTotal }: { contractId: 
           <HealthField health={health} />
           <div>
             <span className="text-muted-foreground text-sm">Částka od</span>
-            <p className="font-medium">{rule ? fmtKc(rule.amountFrom) : '—'}</p>
+            <p className="font-medium">{!rule ? '—' : rule.amountFrom === null ? ANY : fmtKc(rule.amountFrom)}</p>
           </div>
           <div>
             <span className="text-muted-foreground text-sm">Částka do</span>
-            <p className="font-medium">{rule ? fmtKc(rule.amountTo) : '—'}</p>
+            <p className="font-medium">{!rule ? '—' : rule.amountTo === null ? ANY : fmtKc(rule.amountTo)}</p>
           </div>
         </div>
 

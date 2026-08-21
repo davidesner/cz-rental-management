@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
 import { bankIntegration, contract, paymentMatchingRule } from '../db/schema.js';
 import { AppError } from '../errors.js';
+import { normalizeAccount } from '../lib/account-number.js';
 import { validateRuleCriteria } from '../lib/payment-pairing.js';
 
 export interface PaymentRuleRow {
@@ -120,8 +121,22 @@ export async function upsertPaymentRule(
   await assertContract(db, orgId, contractId, allowedPropertyIds);
 
   // Normalize blank strings to null before validation.
+  const account = blankToNull(input.counterpartyAccount);
   const criteria = {
-    counterpartyAccount: blankToNull(input.counterpartyAccount),
+    // Stored CANONICAL, not as typed. Matching semantics do not change —
+    // accountsEqual already normalizes both sides — but the prefix is
+    // significant (123-294153028/0300 and 294153028/0300 are DIFFERENT
+    // accounts) and getting it wrong is the single most likely way to
+    // misconfigure pairing. Storing the canonical form means the card and the
+    // edit dialog both show the value that will actually be compared, so a
+    // user who typed a prefixless account against a prefixed one sees it
+    // immediately, on the very next read.
+    //
+    // Server-side rather than in the browser on purpose: @core/* is in
+    // tsconfig.json but NOT in vite.config.ts's aliases, so importing
+    // core/lib/account-number.ts from src/ typechecks and then fails
+    // `vite build`.
+    counterpartyAccount: account === null ? null : normalizeAccount(account),
     vs: blankToNull(input.vs),
     ks: blankToNull(input.ks),
     ss: blankToNull(input.ss),

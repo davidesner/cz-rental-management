@@ -80,6 +80,32 @@ describe('upsertPaymentRule with blank-to-null normalization', () => {
     await client.close();
   });
 
+  it('stores a messy-but-valid account in canonical form', async () => {
+    const { db, client, orgId, propertyId, contractId } = await seed();
+    const rule = await upsertPaymentRule(
+      db,
+      orgId,
+      contractId,
+      [propertyId],
+      { counterpartyAccount: '  000123-0001234567/0100  ' },
+    );
+    // The form the matcher actually compares, so the card and the edit dialog
+    // show the user what pairing will really use — the prefix is significant and
+    // typing it wrong is the most likely way to misconfigure this.
+    expect(rule.counterpartyAccount).toBe('123-1234567/0100');
+    await client.close();
+  });
+
+  it('leaves an unparseable account alone rather than discarding it', async () => {
+    const { db, client, orgId, propertyId, contractId } = await seed();
+    const rule = await upsertPaymentRule(
+      db, orgId, contractId, [propertyId],
+      { counterpartyAccount: '  CZ6508000000192000145399  ' },
+    );
+    expect(rule.counterpartyAccount).toBe('CZ6508000000192000145399');
+    await client.close();
+  });
+
   it('still rejects vs when submitted as all zeros', async () => {
     const { db, client, orgId, propertyId, contractId } = await seed();
     const promise = upsertPaymentRule(

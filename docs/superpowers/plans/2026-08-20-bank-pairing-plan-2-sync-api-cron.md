@@ -185,11 +185,14 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
     const uidValidity = Number(mailbox.uidValidity);
     const range = nextSearchRange(cursor, uidValidity, opts.sinceFallback);
 
-    const uids = range.kind === 'uid'
+    const found = range.kind === 'uid'
       ? await client.search({ uid: range.range }, { uid: true })
       : await client.search({ since: range.since }, { uid: true });
 
-    const all = (uids ?? []).slice().sort((a, b) => a - b);
+    // imapflow's search() resolves `false` — not null/undefined — when nothing
+    // matches, so `?? []` would pass `false` straight through and throw on
+    // .slice(). Array.isArray is the only guard that covers it.
+    const all = (Array.isArray(found) ? found : []).slice().sort((a, b) => a - b);
     // Oldest first, capped. The cursor advances only over what we actually
     // processed, so a capped run resumes rather than skips.
     const selected = all.slice(0, opts.limit);

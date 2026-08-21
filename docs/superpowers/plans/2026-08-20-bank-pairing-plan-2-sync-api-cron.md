@@ -430,8 +430,13 @@ describe('bank-sync', () => {
     const msg = { uid: 10, source: await notification('m1') };
 
     await syncIntegration(c.db, c.integrationId, deps([msg]), 'manual');
-    // Fresh fake so the message is offered again despite the advanced cursor
-    const second = await syncIntegration(c.db, c.integrationId, { ...fakeImap([{ ...msg, uid: 10 }]), key: KEY }, 'cron');
+    // Offer the SAME Message-ID again at a HIGHER uid. This matters: fakeImap
+    // honours the cursor, so re-offering uid 10 would be withheld by the fake and
+    // the test would pass without the (orgId, messageId) dedupe existing at all.
+    // A higher uid gets past the cursor, so the only thing that can stop a second
+    // payment is the dedupe this test is named after.
+    const second = await syncIntegration(c.db, c.integrationId,
+      { ...fakeImap([{ uid: 11, source: await notification('m1') }]), key: KEY }, 'cron');
 
     expect(second.created).toBe(0);
     expect(await c.db.select().from(bankTransaction)).toHaveLength(1);
@@ -912,15 +917,18 @@ export async function syncIntegration(
         failed += 1;
         error = `${parseResult.reason}: ${parseResult.detail}`;
         if (parseResult.messageId) {
-          await db.insert(bankTransaction).values({
+          // .returning() so a replayed failure (the row already exists, and
+          // onConflictDoNothing makes the insert a no-op) does not inflate the
+          // `created` counter the run log and UI report.
+          const inserted = await db.insert(bankTransaction).values({
             id: createId(), orgId: integ.orgId, integrationId,
             messageId: parseResult.messageId,
             amount: 0, currency: 'CZK', valueDate: (parseResult.receivedAt ?? now()).toISOString().slice(0, 10),
             status: 'parse_failed', statusReason: `${parseResult.reason}: ${parseResult.detail}`,
             rawTokens: parseResult.tokens,
             receivedAt: parseResult.receivedAt ?? now(),
-          }).onConflictDoNothing();
-          created += 1;
+          }).onConflictDoNothing().returning({ id: bankTransaction.id });
+          if (inserted.length > 0) created += 1;
         }
         continue;
       }

@@ -231,15 +231,18 @@ export async function syncIntegration(
         failed += 1;
         error = `${parseResult.reason}: ${parseResult.detail}`;
         if (parseResult.messageId) {
-          await db.insert(bankTransaction).values({
+          // .returning() so a replayed failure (the row already exists, and
+          // onConflictDoNothing makes the insert a no-op) does not inflate the
+          // `created` counter the run log and UI report.
+          const inserted = await db.insert(bankTransaction).values({
             id: createId(), orgId: integ.orgId, integrationId,
             messageId: parseResult.messageId,
             amount: 0, currency: 'CZK', valueDate: (parseResult.receivedAt ?? now()).toISOString().slice(0, 10),
             status: 'parse_failed', statusReason: `${parseResult.reason}: ${parseResult.detail}`,
             rawTokens: parseResult.tokens,
             receivedAt: parseResult.receivedAt ?? now(),
-          }).onConflictDoNothing();
-          created += 1;
+          }).onConflictDoNothing().returning({ id: bankTransaction.id });
+          if (inserted.length > 0) created += 1;
         }
         continue;
       }

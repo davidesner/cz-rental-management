@@ -112,9 +112,18 @@ describe('bank-sync', () => {
     const msg = { uid: 10, source: await notification('m1') };
 
     await syncIntegration(c.db, c.integrationId, deps([msg]), 'manual');
-    // Fresh fake so the message is offered again despite the advanced cursor
-    const second = await syncIntegration(c.db, c.integrationId, { ...fakeImap([{ ...msg, uid: 10 }]), key: KEY }, 'cron');
+    // Offer the SAME Message-ID again at a HIGHER uid. This matters: fakeImap
+    // honours the cursor, so re-offering uid 10 would be withheld by the fake and
+    // the test would pass without the (orgId, messageId) dedupe existing at all.
+    // A higher uid gets past the cursor, so the only thing that can stop a second
+    // payment is the dedupe this test is named after.
+    const second = await syncIntegration(c.db, c.integrationId,
+      { ...fakeImap([{ uid: 11, source: await notification('m1') }]), key: KEY }, 'cron');
 
+    // A clean skip, not a swallowed error: without the dedupe, this insert
+    // would hit the payment(orgId, externalId) unique index and the run would
+    // report 'error' even though the rolled-back row counts look identical.
+    expect(second.status).toBe('ok');
     expect(second.created).toBe(0);
     expect(await c.db.select().from(bankTransaction)).toHaveLength(1);
     expect(await c.db.select().from(payment)).toHaveLength(1);
@@ -256,6 +265,23 @@ describe('bank-sync', () => {
       // The cursor still advanced — one bad message must not wedge the
       // integration forever.
       expect(integ!.lastUid).toBe(10);
+      await c.close();
+    });
+
+    it('does not inflate the created counter when a parse failure is replayed', async () => {
+      const c = await setup();
+      const drifted = await notification('m1', (html) => html.replace('Variabilní symbol', 'Neznámé pole'));
+      await syncIntegration(c.db, c.integrationId, deps([{ uid: 10, source: drifted }]), 'cron');
+
+      // Same Message-ID, higher uid — e.g. a uidValidity reset re-offering an
+      // already-stored parse_failed row. The insert becomes a no-op via
+      // onConflictDoNothing; `created` must reflect that, not the attempt.
+      const second = await syncIntegration(c.db, c.integrationId,
+        { ...fakeImap([{ uid: 11, source: drifted }]), key: KEY }, 'cron');
+
+      expect(second.created).toBe(0);
+      expect(second.failed).toBe(1);
+      expect(await c.db.select().from(bankTransaction)).toHaveLength(1);
       await c.close();
     });
 

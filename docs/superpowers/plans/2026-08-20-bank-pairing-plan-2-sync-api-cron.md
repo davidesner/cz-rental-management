@@ -2547,11 +2547,14 @@ addBankTools(server, client);
 
 - [ ] **Step 5: Extend the smoke test**
 
-In `tests/mcp-tools-smoke.test.ts`, add the seven new tool names to whatever list the existing test asserts on. Read the file first to match its shape:
+`tests/mcp-tools-smoke.test.ts` does **not** assert on a list of tool names — it imports each tool's exported function and calls it against a real app through a `RentalApiClient` built on an API token. So extend it the same way, with real calls rather than name assertions:
 
-```bash
-sed -n '1,60p' tests/mcp-tools-smoke.test.ts
-```
+- `bankIntegrationsList` — returns `[]` for a fresh org.
+- `bankTransactionsList` — returns `[]`, and with `{ pending: true }` too.
+- `paymentRuleSet` then `paymentRuleGet` on a seeded contract — a genuine round-trip, asserting the criteria come back and `health.state` is `'nenastaveno'` (no integration exists in the smoke fixture).
+- `bankIntegrationsSetupUrl` — asserts the URL ends in `/settings?tab=bank&action=new`.
+
+Deliberately **not** smoke-tested, because MCP cannot create the prerequisite rows and seeding them adds no coverage of the tool layer: `bankIntegrationsSync`, `bankTransactionsAssign`, `bankTransactionsIgnore`. Those are covered by Task 11's route tests, which is the layer where the behaviour actually lives.
 
 - [ ] **Step 6: Run the suite, typecheck, commit**
 

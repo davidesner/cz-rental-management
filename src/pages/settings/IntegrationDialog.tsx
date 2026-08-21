@@ -71,7 +71,11 @@ export function IntegrationDialog({ integration, onClose, onSaved }: Props) {
     onError: (e: unknown) => setErr(apiErrorMessage(e)),
   });
 
-  const canSave = form.name !== '' && form.imapHost !== '' && form.imapUser !== ''
+  // imapPort is validated because `Number('')` is 0, and a cleared field would
+  // otherwise persist port 0 — a plausible-looking value that can never connect.
+  const portNum = Number(form.imapPort);
+  const portValid = Number.isInteger(portNum) && portNum > 0 && portNum <= 65535;
+  const canSave = form.name !== '' && form.imapHost !== '' && form.imapUser !== '' && portValid
     && (editing || form.imapPassword !== '');
 
   return (

@@ -70,7 +70,10 @@ export function TransactionInbox() {
     queryKey: ['bank-transactions', 'pending'],
     queryFn: () => api.get<{ bankTransactions: BankTransaction[] }>('/api/bank-transactions?pending=1'),
   });
-  const { data: contractsData } = useQuery({
+  // isError is destructured, not ignored: without it a failed contracts fetch
+  // renders an EMPTY "Přiřadit k pronájmu…" dropdown, which looks identical to
+  // "this org has no contracts yet".
+  const { data: contractsData, isError: contractsError } = useQuery({
     queryKey: ['contracts'],
     queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts'),
   });
@@ -190,10 +193,14 @@ export function TransactionInbox() {
                           přiřaď ji ručně — jinak ignoruj.
                         </p>
                       )}
+                      {contractsError && (
+                        <p className="text-xs text-destructive text-right">Nepodařilo se načíst pronájmy.</p>
+                      )}
                       <div className="flex gap-2 justify-end">
                         <select
                           className={SELECT_CLS}
                           value={choice[t.id] ?? ''}
+                          disabled={contractsError}
                           onChange={e => setChoice(c => ({ ...c, [t.id]: e.target.value }))}
                         >
                           <option value="">Přiřadit k pronájmu…</option>
@@ -203,7 +210,7 @@ export function TransactionInbox() {
                         </select>
                         <Button
                           size="sm"
-                          disabled={busy || !choice[t.id]}
+                          disabled={busy || contractsError || !choice[t.id]}
                           onClick={() => { setErr(null); assign.mutate({ id: t.id, contractId: choice[t.id]! }); }}
                         >
                           {t.status === 'suspected_duplicate' ? 'Není duplikát' : 'Přiřadit'}

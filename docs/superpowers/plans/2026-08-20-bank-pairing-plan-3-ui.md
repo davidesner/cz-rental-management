@@ -905,7 +905,34 @@ export const api = {
   patch: <T>(p: string, b: unknown) => request<T>('PATCH', p, b),
   delete: <T>(p: string) => request<T>('DELETE', p),
 };
+
+/**
+ * The message to show a user for a failed request.
+ *
+ * `ApiError.message` is only ever the string `API <status>` — the server's real
+ * message lives in `body.error.message` (see server/middleware/errors.ts, which
+ * serialises an AppError as `{ error: { kind, message, details } }`). So the
+ * common `e instanceof Error ? e.message : String(e)` idiom renders "API 422"
+ * and throws away the actual explanation. That matters here specifically:
+ * validateRuleCriteria's Czech messages were written to be read by the user,
+ * and without this helper none of them ever reach the screen.
+ */
+export function apiErrorMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    const body = e.body as { error?: { message?: string } } | undefined;
+    if (typeof body?.error?.message === 'string' && body.error.message !== '') {
+      return body.error.message;
+    }
+    return `Chyba ${e.status}`;
+  }
+  return e instanceof Error ? e.message : String(e);
+}
 ```
+
+Every `onError` handler in this plan's UI must use `apiErrorMessage(e)` rather than
+`e instanceof Error ? e.message : String(e)`. The repo has 18 pre-existing call sites
+using the old idiom; retrofitting those is **out of scope** for this feature, but no new
+one should be added.
 
 - [ ] **Step 2: Write the card and its dialog**
 
@@ -1014,8 +1041,14 @@ function PairingDialog({ contractId, rule, expectedMonthlyTotal, onClose, onSave
     vs: rule?.vs ?? '',
     ks: rule?.ks ?? '',
     ss: rule?.ss ?? '',
-    amountFrom: toKorunInput(rule?.amountFrom ?? suggested?.from ?? null),
-    amountTo: toKorunInput(rule?.amountTo ?? suggested?.to ?? null),
+    // Gated on `rule` existing, NOT on the field being null. `rule?.amountFrom
+    // ?? suggested?.from` would populate an EXISTING rule's deliberately-unset
+    // bound with a computed suggestion — and since the suggestion is
+    // indistinguishable from a real value in the input, saving without touching
+    // it silently narrows the rule from "any amount" to a band, changing which
+    // payments match.
+    amountFrom: rule ? toKorunInput(rule.amountFrom) : toKorunInput(suggested?.from ?? null),
+    amountTo: rule ? toKorunInput(rule.amountTo) : toKorunInput(suggested?.to ?? null),
     active: rule?.active ?? true,
   });
   const [err, setErr] = useState<string | null>(null);
@@ -1068,13 +1101,16 @@ function PairingDialog({ contractId, rule, expectedMonthlyTotal, onClose, onSave
             <Label>Variabilní symbol</Label>
             <Input value={form.vs} onChange={e => set('vs')(e.target.value)} />
           </div>
-          <div>
-            <Label>Konstantní symbol</Label>
-            <Input value={form.ks} onChange={e => set('ks')(e.target.value)} />
-          </div>
+          {/* Specifický before Konstantní, matching the read-only card's
+              mockup-mandated order — the same data should not be ordered two
+              different ways depending on whether you are reading or editing. */}
           <div>
             <Label>Specifický symbol</Label>
             <Input value={form.ss} onChange={e => set('ss')(e.target.value)} />
+          </div>
+          <div>
+            <Label>Konstantní symbol</Label>
+            <Input value={form.ks} onChange={e => set('ks')(e.target.value)} />
           </div>
         </div>
 
@@ -1166,11 +1202,14 @@ export function PairingCard({ contractId, expectedMonthlyTotal }: { contractId: 
           <HealthField health={health} />
           <div>
             <span className="text-muted-foreground text-sm">Částka od</span>
-            <p className="font-medium">{rule ? fmtKc(rule.amountFrom) : '—'}</p>
+            {/* `cokoliv` for an unset bound, like every other criterion — an em
+                dash reads as "missing", but a null bound means "any amount
+                matches", which is a different statement. */}
+            <p className="font-medium">{!rule ? '—' : rule.amountFrom === null ? ANY : fmtKc(rule.amountFrom)}</p>
           </div>
           <div>
             <span className="text-muted-foreground text-sm">Částka do</span>
-            <p className="font-medium">{rule ? fmtKc(rule.amountTo) : '—'}</p>
+            <p className="font-medium">{!rule ? '—' : rule.amountTo === null ? ANY : fmtKc(rule.amountTo)}</p>
           </div>
         </div>
 

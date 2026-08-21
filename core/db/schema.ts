@@ -330,6 +330,15 @@ export const paymentMatchingRule = pgTable('payment_matching_rule', {
   contractUnique: uniqueIndex('payment_matching_rule_contract_idx').on(t.contractId),
 }));
 
+// A short run log so a cron you cannot watch stays debuggable.
+//
+// Deliberately has NO orgId column, unlike the other bank_* tables: it is
+// org-scoped only TRANSITIVELY, via integrationId -> bank_integration.orgId.
+// That is safe because integrationId is NOT NULL and cascades, so org deletion
+// still reaps runs, and because nothing reads this table through the API — the
+// sync writes it and a human reads it directly. If a run-history endpoint is
+// ever added, it MUST join through bank_integration to scope by org; there is
+// no orgId here to filter on.
 export const bankSyncRun = pgTable('bank_sync_run', {
   id: text('id').primaryKey(),
   integrationId: text('integration_id').notNull().references(() => bankIntegration.id, { onDelete: 'cascade' }),

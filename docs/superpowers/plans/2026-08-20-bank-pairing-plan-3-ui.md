@@ -278,7 +278,11 @@ export function IntegrationDialog({ integration, onClose, onSaved }: Props) {
     onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
   });
 
-  const canSave = form.name !== '' && form.imapHost !== '' && form.imapUser !== ''
+  // imapPort is validated because `Number('')` is 0, and a cleared field would
+  // otherwise persist port 0 — a plausible-looking value that can never connect.
+  const portNum = Number(form.imapPort);
+  const portValid = Number.isInteger(portNum) && portNum > 0 && portNum <= 65535;
+  const canSave = form.name !== '' && form.imapHost !== '' && form.imapUser !== '' && portValid
     && (editing || form.imapPassword !== '');
 
   return (
@@ -689,7 +693,11 @@ export function TransactionInbox() {
     queryKey: ['bank-transactions', 'pending'],
     queryFn: () => api.get<{ bankTransactions: BankTransaction[] }>('/api/bank-transactions?pending=1'),
   });
-  const { data: contractsData } = useQuery({
+  // isError is destructured, not ignored: without it a failed contracts fetch
+  // renders an EMPTY "Přiřadit k pronájmu…" dropdown, which looks identical to
+  // "this org has no contracts yet". A user trying to resolve a pending payment
+  // would have no way to tell the difference.
+  const { data: contractsData, isError: contractsError } = useQuery({
     queryKey: ['contracts'],
     queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts'),
   });

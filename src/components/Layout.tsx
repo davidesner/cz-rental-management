@@ -37,7 +37,7 @@ export function ProtectedLayout() {
           <Link className="hover:underline" to="/properties">Nemovitosti</Link>
           <Link className="hover:underline" to="/tenants">Nájemci</Link>
           <Link className="hover:underline" to="/contracts">Pronájmy</Link>
-          <Link className="hover:underline" to="/settings/api-tokens">API tokeny</Link>
+          <Link className="hover:underline" to="/settings">Nastavení</Link>
         </nav>
         <div className="pt-6 mt-6 border-t text-xs text-muted-foreground">
           <div>{me?.user.email ?? ' '}</div>

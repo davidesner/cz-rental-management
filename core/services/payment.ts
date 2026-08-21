@@ -83,10 +83,13 @@ async function verifyContractInOrgIfSet(db: DB, orgId: string, contractId: strin
  *   `payment.counterpartyAccount` is nullable and is routinely null on a
  *   hand-entered row. Three parameters that are always present beat four that
  *   sometimes are.
- * - Nor is the variable symbol, because `payment` has no vs/ks/ss columns at
- *   all — those live on `bank_transaction`. Contract + amount + date is what
- *   this table can support; nobody should read this and assume the symbol is
- *   being compared.
+ * - Nor are the bank symbols (vs/ks/ss), even though `payment` now has those
+ *   columns: they are deliberately NOT part of the match key because they are
+ *   nullable. A payment recorded from a channel that did not supply a symbol
+ *   would have `vs` null, and a later notification carrying `vs = '2026008'`
+ *   would produce a different key and slip past the guard. Symbols are selected
+ *   only to enrich the conflict message (see "differing vs does not stop the
+ *   duplicate guard" test in payment-duplicates.test.ts).
  */
 export async function findPaymentByFingerprint(
   db: DB, orgId: string, contractId: string, amount: number, paidAt: string,
@@ -117,7 +120,7 @@ function duplicateMessage(hit: { id: string; source: string; vs: string | null }
   return `na tomto pronájmu už je zapsaná platba ${(input.amount / 100).toLocaleString('cs-CZ')} Kč`
     + ` k datu ${input.paidAt} (${hit.id}, zdroj ${hit.source}${vs}) — shoda podle pronájmu, částky a data,`
     + ' ne podle externalId, takže jde o jiný záznam o stejných penězích.'
-    + ' Pokud je to skutečně druhý samostatný převod, zapiš ho s allowDuplicate.';
+    + ' Pokud je to skutečně druhý samostatný převod, je třeba jej zaznamenat explicitně.';
 }
 
 export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: string[] | null, input: PaymentInput): Promise<PaymentRow> {

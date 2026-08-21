@@ -122,11 +122,9 @@ export async function findDuplicate(db: DB, orgId: string, fp: Fingerprint): Pro
  * So: any payment on this contract for this amount on this date, whatever its
  * source and whatever its externalId, is treated as "already recorded".
  *
- * This only protects the e-mail channel from payments that ALREADY exist. The
- * reverse order — a statement import running after the sync created a payment —
- * is not fixed here: that is `recordPayment`'s territory, pre-existing code
- * every flow depends on, and a workflow decision rather than a bug in this
- * feature.
+ * This guards the e-mail channel with `suspected_duplicate` status; the reverse
+ * direction is closed by `recordPayment`, which refuses the same money from any
+ * channel regardless of source or externalId, so both channels are protected.
  */
 export async function findExistingPayment(
   db: DB, orgId: string, contractId: string, amount: number, paidAt: string,

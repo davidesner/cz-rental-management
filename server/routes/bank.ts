@@ -43,7 +43,12 @@ const RuleBody = z.object({
   active: z.boolean().optional(),
 });
 
-const AssignBody = z.object({ contractId: z.string().min(1) });
+const AssignBody = z.object({
+  contractId: z.string().min(1),
+  // The human override for duplicate detection: the inbox's „Není duplikát —
+  // spárovat" click. Optional, so a careless assign is still refused.
+  confirmDuplicate: z.boolean().optional(),
+});
 
 const StatusFilter = z.enum(['unmatched', 'matched', 'ambiguous', 'suspected_duplicate', 'ignored', 'parse_failed']).optional();
 
@@ -131,8 +136,12 @@ export function bankRoutes() {
 
   r.post('/bank-transactions/:id/assign', async (c) => {
     const ctx = getCtx(c); requireOrg(ctx); requireOwner(ctx);
-    const { contractId } = AssignBody.parse(await c.req.json());
-    return c.json({ bankTransaction: await assignBankTransaction(c.get('db'), ctx.orgId, c.req.param('id'), contractId) });
+    const { contractId, confirmDuplicate } = AssignBody.parse(await c.req.json());
+    return c.json({
+      bankTransaction: await assignBankTransaction(
+        c.get('db'), ctx.orgId, c.req.param('id'), contractId, confirmDuplicate ?? false,
+      ),
+    });
   });
 
   r.post('/bank-transactions/:id/ignore', async (c) => {

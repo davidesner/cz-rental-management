@@ -260,6 +260,33 @@ describe('bank-sync', () => {
       await c.close();
     });
 
+    // Held-not-discarded only works if the hold can be RELEASED. Duplicate
+    // detection lives in recordPayment now, so without an explicit override it
+    // would refuse the very click whose whole purpose is to say "I looked, this
+    // is a separate transfer".
+    it('releases a parked suspected_duplicate on assign with confirmDuplicate', async () => {
+      const c = await setup();
+      await addRule(c.db, c.orgId, c.contractId);
+      await syncIntegration(c.db, c.integrationId, deps([{ uid: 10, source: await notification('m1') }]), 'manual');
+      await syncIntegration(c.db, c.integrationId,
+        { ...fakeImap([{ uid: 11, source: await notification('m2') }]), key: KEY }, 'cron');
+      const parked = (await c.db.select().from(bankTransaction).where(eq(bankTransaction.messageId, 'm2')))[0]!;
+      expect(parked.status).toBe('suspected_duplicate');
+
+      // Without the override, a careless assign is still caught.
+      await expect(assignBankTransaction(c.db, c.orgId, parked.id, c.contractId))
+        .rejects.toMatchObject({ kind: 'conflict' });
+      expect(await c.db.select().from(payment)).toHaveLength(1);
+
+      // With it — the „Není duplikát — spárovat" click — it goes through.
+      const released = await assignBankTransaction(c.db, c.orgId, parked.id, c.contractId, true);
+      expect(released.status).toBe('matched');
+      expect(released.matchedBy).toBe('manual');
+      expect(released.paymentId).not.toBeNull();
+      expect(await c.db.select().from(payment)).toHaveLength(2);
+      await c.close();
+    });
+
     it('does not flag a different amount as a duplicate', async () => {
       const c = await setup();
       await addRule(c.db, c.orgId, c.contractId, { amountFrom: 1000, amountTo: 5000 });

@@ -8,6 +8,7 @@ import { open } from '../lib/crypto-box.js';
 import { accountsEqual } from '../lib/account-number.js';
 import { parseKbPaymentNotification, type ParsedNotification } from '../lib/kb-email-parser.js';
 import { matchTransaction, type MatchingRule } from '../lib/payment-pairing.js';
+import { findPaymentByFingerprint } from './payment.js';
 import type { FetchMessages, ImapConfig, ImapCursor } from '../lib/imap-fetcher.js';
 
 /** Bounded so a run always fits the serverless budget and always makes progress. */
@@ -130,13 +131,11 @@ export async function findDuplicate(db: DB, orgId: string, fp: Fingerprint): Pro
 export async function findExistingPayment(
   db: DB, orgId: string, contractId: string, amount: number, paidAt: string,
 ): Promise<string | null> {
-  const [row] = await db.select({ id: payment.id }).from(payment).where(and(
-    eq(payment.orgId, orgId),
-    eq(payment.contractId, contractId),
-    eq(payment.amount, amount),
-    eq(payment.paidAt, paidAt),
-  ));
-  return row?.id ?? null;
+  // Delegates rather than re-querying: the fingerprint is a definition of when
+  // two records are the same money, and two copies of that definition would
+  // drift. recordPayment enforces the same one on every write path.
+  const hit = await findPaymentByFingerprint(db, orgId, contractId, amount, paidAt);
+  return hit?.id ?? null;
 }
 
 interface Outcome {

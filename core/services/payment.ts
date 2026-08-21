@@ -15,6 +15,12 @@ export interface PaymentInput {
   source: 'bank' | 'manual';
   description?: string | null;
   note?: string | null;
+  /**
+   * Force creation of a payment that duplicate detection would otherwise
+   * refuse. Only ever set after a human has confirmed this really is a second,
+   * separate transfer — never as a way to make an error go away.
+   */
+  allowDuplicate?: boolean;
 }
 
 export interface PaymentRow {
@@ -45,6 +51,61 @@ async function verifyContractInOrgIfSet(db: DB, orgId: string, contractId: strin
   }
 }
 
+/**
+ * Is this same money already recorded on this contract?
+ *
+ * The fingerprint is orgId + contractId + amount + paidAt, and it is
+ * deliberately NOT externalId — the two answer different questions:
+ *
+ * - Same `externalId` means "the same source record, retried". Idempotent
+ *   success is right; the caller learns nothing from an error.
+ * - Same fingerprint with a DIFFERENT `externalId` means a different source
+ *   record claims the same money — two channels disagreeing about whether this
+ *   transfer has been accounted for. There is no default the service can pick
+ *   that is safe, which is why the single-write path throws.
+ *
+ * Why exactly these three columns:
+ *
+ * - `contractId` must be non-null. An unassigned payment has no contract to
+ *   fingerprint against, so those are never treated as duplicates.
+ * - The counterparty account is NOT in the key, even though it would narrow it:
+ *   `payment.counterpartyAccount` is nullable and is routinely null on a
+ *   hand-entered row. Three parameters that are always present beat four that
+ *   sometimes are.
+ * - Nor is the variable symbol, because `payment` has no vs/ks/ss columns at
+ *   all — those live on `bank_transaction`. Contract + amount + date is what
+ *   this table can support; nobody should read this and assume the symbol is
+ *   being compared.
+ */
+export async function findPaymentByFingerprint(
+  db: DB, orgId: string, contractId: string, amount: number, paidAt: string,
+): Promise<{ id: string; source: 'bank' | 'manual' } | null> {
+  const [row] = await db.select({ id: payment.id, source: payment.source }).from(payment).where(and(
+    eq(payment.orgId, orgId),
+    eq(payment.contractId, contractId),
+    eq(payment.amount, amount),
+    eq(payment.paidAt, paidAt),
+  ));
+  return row ?? null;
+}
+
+async function findDuplicateFor(db: DB, orgId: string, input: PaymentInput) {
+  if (input.allowDuplicate) return null;
+  if (!input.contractId) return null;
+  return findPaymentByFingerprint(db, orgId, input.contractId, input.amount, input.paidAt);
+}
+
+/**
+ * Says WHICH case this is, so the asymmetry with the externalId branch reads as
+ * deliberate at the call site rather than as an inconsistency.
+ */
+function duplicateMessage(hit: { id: string; source: string }, input: PaymentInput): string {
+  return `na tomto pronájmu už je zapsaná platba ${(input.amount / 100).toLocaleString('cs-CZ')} Kč`
+    + ` k datu ${input.paidAt} (${hit.id}, zdroj ${hit.source}) — shoda podle pronájmu, částky a data,`
+    + ' ne podle externalId, takže jde o jiný záznam o stejných penězích.'
+    + ' Pokud je to skutečně druhý samostatný převod, zapiš ho s allowDuplicate.';
+}
+
 export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: string[] | null, input: PaymentInput): Promise<PaymentRow> {
   await verifyContractInOrgIfSet(db, orgId, input.contractId, allowedPropertyIds);
   // Idempotency on externalId
@@ -59,6 +120,12 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
     // contract") when it fails, same as any other read of this row.
     if (existing) return getPayment(db, orgId, existing.id, allowedPropertyIds);
   }
+  // NOT the branch above. That one is a retry of the same source record and
+  // succeeds idempotently; this one is a DIFFERENT record claiming the same
+  // money, and a single deliberate write deserves to be told there is a
+  // decision to make rather than have one channel silently win.
+  const duplicate = await findDuplicateFor(db, orgId, input);
+  if (duplicate) throw new AppError('conflict', duplicateMessage(duplicate, input));
   const id = createId();
   await db.insert(payment).values({
     id, orgId,
@@ -81,7 +148,17 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
 
 export const PAYMENT_BATCH_MAX = 500;
 
-export async function recordPaymentsBatch(db: DB, orgId: string, allowedPropertyIds: string[] | null, inputs: PaymentInput[]): Promise<{ created: PaymentRow[]; existing: PaymentRow[] }> {
+/**
+ * `existing` and `duplicates` are NOT the same thing and must stay apart:
+ * `existing` means "same externalId — you already sent me this record", while
+ * `duplicates` means "a DIFFERENT record already accounts for this money".
+ * Conflating them would lose exactly the information the caller needs.
+ *
+ * Unlike recordPayment, a fingerprint match here does NOT throw. The whole batch
+ * is one transaction, so a per-item throw would roll back every sibling and make
+ * a statement import all-or-nothing on its noisiest row. Skip and report.
+ */
+export async function recordPaymentsBatch(db: DB, orgId: string, allowedPropertyIds: string[] | null, inputs: PaymentInput[]): Promise<{ created: PaymentRow[]; existing: PaymentRow[]; duplicates: PaymentRow[] }> {
   if (inputs.length > PAYMENT_BATCH_MAX) {
     throw new AppError('bad_request', `batch size ${inputs.length} exceeds max ${PAYMENT_BATCH_MAX}`);
   }
@@ -94,6 +171,9 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
     // extra query for the whole call instead of N.
     const createdIds: string[] = [];
     const existingIds: string[] = [];
+    // The ids of the payments that ALREADY cover this money, same shape as
+    // existingIds: what the caller needs is the row that blocked them.
+    const duplicateIds: string[] = [];
     for (const input of inputs) {
       await verifyContractInOrgIfSet(tx, orgId, input.contractId, allowedPropertyIds);
       if (input.externalId) {
@@ -102,6 +182,13 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
           existingIds.push(found.id);
           continue;
         }
+      }
+      // Reads inside the same transaction, so two identical inputs in ONE batch
+      // are caught as well: the first insert is visible to the second's lookup.
+      const duplicate = await findDuplicateFor(tx, orgId, input);
+      if (duplicate) {
+        duplicateIds.push(duplicate.id);
+        continue;
       }
       const id = createId();
       await tx.insert(payment).values({
@@ -119,7 +206,9 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
       });
       createdIds.push(id);
     }
-    if (createdIds.length === 0 && existingIds.length === 0) return { created: [], existing: [] };
+    if (createdIds.length === 0 && existingIds.length === 0 && duplicateIds.length === 0) {
+      return { created: [], existing: [], duplicates: [] };
+    }
     // Access for createdIds was already verified above via
     // verifyContractInOrgIfSet against the caller-supplied contractId that
     // was actually inserted, so those rows are safe as-is. existingIds rows
@@ -135,7 +224,7 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
       .leftJoin(contract, and(eq(contract.id, payment.contractId), eq(contract.orgId, payment.orgId)))
       .leftJoin(property, eq(property.id, contract.propertyId))
       .leftJoin(tenant, eq(tenant.id, contract.tenantId))
-      .where(inArray(payment.id, [...createdIds, ...existingIds]));
+      .where(inArray(payment.id, [...createdIds, ...existingIds, ...duplicateIds]));
     const byId = new Map(rows.map(r => [r.id, r]));
     if (allowedPropertyIds !== null) {
       for (const id of existingIds) {
@@ -150,7 +239,11 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
       const { contractPropertyId: _ignored, ...row } = byId.get(id)!;
       return row;
     };
-    return { created: createdIds.map(strip), existing: existingIds.map(strip) };
+    // duplicateIds needs no extra access check, unlike existingIds: the
+    // fingerprint includes input.contractId, which verifyContractInOrgIfSet
+    // already validated for this caller, so the row found is on the caller's own
+    // verified contract by construction.
+    return { created: createdIds.map(strip), existing: existingIds.map(strip), duplicates: duplicateIds.map(strip) };
   });
 }
 
@@ -243,7 +336,7 @@ export async function assignPaymentToContract(db: DB, orgId: string, id: string,
   return getPayment(db, orgId, id, allowedPropertyIds);
 }
 
-export async function updatePayment(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, patch: Partial<Omit<PaymentInput, 'externalId'>>): Promise<PaymentRow> {
+export async function updatePayment(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, patch: Partial<Omit<PaymentInput, 'externalId' | 'allowDuplicate'>>): Promise<PaymentRow> {
   await getPayment(db, orgId, id, allowedPropertyIds);
   if (patch.contractId !== undefined) await verifyContractInOrgIfSet(db, orgId, patch.contractId, allowedPropertyIds);
   const cleaned: Record<string, unknown> = {};

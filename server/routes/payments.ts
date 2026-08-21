@@ -18,6 +18,9 @@ const PaymentBody = z.object({
   source: z.enum(['bank', 'manual']),
   description: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
+  // Only ever sent after a human confirmed this really is a second, separate
+  // transfer — see recordPayment's duplicate detection.
+  allowDuplicate: z.boolean().optional(),
 });
 
 const UpdatePaymentBody = z.object({

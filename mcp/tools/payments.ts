@@ -15,6 +15,10 @@ const PaymentBodySchema = z.object({
   source: z.enum(['bank', 'manual']).describe('Payment source'),
   description: z.string().nullable().optional().describe('Payment description from bank'),
   note: z.string().nullable().optional().describe('Internal note'),
+  allowDuplicate: z.boolean().optional().describe(
+    'Force creation of a payment that duplicate detection would refuse (same contract + amount + date). '
+    + 'Set this ONLY after confirming with the user that it really is a second, separate transfer — '
+    + 'never to make an error go away.'),
 });
 
 const ListPaymentsInput = z.object({
@@ -77,7 +81,7 @@ export async function recordPayment(client: RentalApiClient, args: z.infer<typeo
 }
 
 export async function recordPaymentsBatch(client: RentalApiClient, args: z.infer<typeof RecordPaymentsBatchInput>) {
-  const result = await client.post<{ created: unknown[]; existing: unknown[] }>('/api/payments/batch', args.payments);
+  const result = await client.post<{ created: unknown[]; existing: unknown[]; duplicates: unknown[] }>('/api/payments/batch', args.payments);
   return result;
 }
 
@@ -115,14 +119,21 @@ export function addPaymentTools(server: FastMCP, client: RentalApiClient) {
 
   server.addTool({
     name: 'payments_record',
-    description: 'Record a single payment.',
+    description: 'Record a single payment. Refused with a conflict if a payment for the same contract, amount and date '
+      + 'already exists — that means a DIFFERENT record already accounts for this money (matching on externalId is a '
+      + 'separate, idempotent case that succeeds). Report the conflict to the user; only retry with allowDuplicate once '
+      + 'they confirm it is a genuinely separate transfer.',
     parameters: RecordPaymentInput,
     execute: async (args) => JSON.stringify(await recordPayment(client, args), null, 2),
   });
 
   server.addTool({
     name: 'payments_record_batch',
-    description: 'Record multiple payments at once. Idempotent: payments with matching externalId are skipped and returned in the "existing" array.',
+    description: 'Record multiple payments at once. Never aborts the batch: payments with a matching externalId are '
+      + 'skipped and returned in "existing" (the same record, re-sent), and payments whose contract + amount + date '
+      + 'already have a payment are skipped and returned in "duplicates" (a DIFFERENT record accounting for the same '
+      + 'money). Show the user anything in "duplicates" rather than re-sending it; use allowDuplicate per payment only '
+      + 'once they confirm it is a genuinely separate transfer.',
     parameters: RecordPaymentsBatchInput,
     execute: async (args) => JSON.stringify(await recordPaymentsBatch(client, args), null, 2),
   });

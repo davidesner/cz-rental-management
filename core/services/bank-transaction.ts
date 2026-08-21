@@ -1,10 +1,10 @@
-import { createId } from '@paralleldrive/cuid2';
 import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
 import { bankTransaction, contract, payment, property, tenant } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { parseFromTokens } from '../lib/kb-email-parser.js';
-import { buildDescription, findExistingPayment } from './bank-sync.js';
+import { buildDescription } from './bank-sync.js';
+import { recordPayment } from './payment.js';
 
 export interface BankTransactionRow {
   id: string;
@@ -100,10 +100,20 @@ export async function getBankTransaction(db: DB, orgId: string, id: string): Pro
  * Create the payment for a transaction and link it.
  *
  * Also the confirmation path for a suspected duplicate — "Není duplikát —
- * spárovat" is just a manual assignment, so it needs no separate endpoint.
+ * spárovat" is just a manual assignment, so it needs no separate endpoint. That
+ * is what `confirmDuplicate` is for: duplicate detection lives in
+ * recordPayment now, and without an explicit override it would refuse the very
+ * click whose entire purpose is to say "I looked, it is a separate transfer".
+ * A careless assign still gets caught, because the override has to be asked for.
+ *
+ * The write goes THROUGH recordPayment rather than inserting directly, so there
+ * is one write path and one duplicate guard that cannot drift apart. It costs a
+ * couple of extra queries inside the transaction (the contract re-check and the
+ * joined re-fetch) and gains recordPayment's externalId idempotency: a replayed
+ * assign now links the existing payment instead of hitting the unique index.
  */
 export async function assignBankTransaction(
-  db: DB, orgId: string, id: string, contractId: string,
+  db: DB, orgId: string, id: string, contractId: string, confirmDuplicate = false,
 ): Promise<BankTransactionRow> {
   const row = await getRaw(db, orgId, id);
   if (row.paymentId !== null) throw new AppError('conflict', 'transakce už je spárovaná s platbou');
@@ -125,30 +135,23 @@ export async function assignBankTransaction(
     .where(and(eq(contract.id, contractId), eq(contract.orgId, orgId)));
   if (!c) throw new AppError('not_found', 'pronájem nenalezen');
 
-  // The same cross-channel guard the sync applies (see findExistingPayment) —
-  // a manual assign must not bypass it, or the "spárovat" button becomes the
-  // way to double-count a transfer the statement import already recorded.
-  // Refused loudly rather than re-parked: the user is explicitly asking for
-  // THIS transaction and deserves to be told why it will not happen.
-  const clash = await findExistingPayment(db, orgId, contractId, row.amount, row.valueDate);
-  if (clash !== null) {
-    throw new AppError('conflict',
-      `na tomto pronájmu už existuje platba ${(row.amount / 100).toLocaleString('cs-CZ')} Kč `
-      + `k datu ${row.valueDate} (${clash}) — pravděpodobně stejná platba zadaná jinou cestou`);
-  }
-
   await db.transaction(async (tx) => {
-    const paymentId = createId();
-    await tx.insert(payment).values({
-      id: paymentId, orgId, contractId,
+    // allowedPropertyIds is null because every route into here is requireOwner,
+    // and the contract was checked against the org just above. recordPayment
+    // throws AppError('conflict') naming the existing payment when the
+    // fingerprint matches and confirmDuplicate was not asked for — that throw
+    // rolls the transaction back, so nothing is half-written.
+    const created = await recordPayment(tx, orgId, null, {
+      contractId,
       amount: row.amount, paidAt: row.valueDate,
       counterparty: null, counterpartyAccount: row.fromAccount,
       externalId: `kbemail:${row.messageId}`,
       statementRef: row.sourceLink, source: 'bank',
       description: buildDescription(row), // row satisfies DescribableTransaction
+      allowDuplicate: confirmDuplicate,
     });
     await tx.update(bankTransaction)
-      .set({ paymentId, status: 'matched', matchedBy: 'manual', statusReason: null })
+      .set({ paymentId: created.id, status: 'matched', matchedBy: 'manual', statusReason: null })
       .where(eq(bankTransaction.id, id));
   });
   return getBankTransaction(db, orgId, id);

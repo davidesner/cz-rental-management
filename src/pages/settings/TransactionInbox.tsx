@@ -85,8 +85,8 @@ export function TransactionInbox() {
   const onError = (e: unknown) => setErr(apiErrorMessage(e));
 
   const assign = useMutation({
-    mutationFn: ({ id, contractId }: { id: string; contractId: string }) =>
-      api.post<unknown>(`/api/bank-transactions/${id}/assign`, { contractId }),
+    mutationFn: ({ id, contractId, confirmDuplicate }: { id: string; contractId: string; confirmDuplicate: boolean }) =>
+      api.post<unknown>(`/api/bank-transactions/${id}/assign`, { contractId, confirmDuplicate }),
     onSuccess: invalidate, onError,
   });
   const ignore = useMutation({
@@ -211,7 +211,19 @@ export function TransactionInbox() {
                         <Button
                           size="sm"
                           disabled={busy || contractsError || !choice[t.id]}
-                          onClick={() => { setErr(null); assign.mutate({ id: t.id, contractId: choice[t.id]! }); }}
+                          onClick={() => {
+                            setErr(null);
+                            // On a suspected_duplicate this button IS the human
+                            // override: the user has looked at the parked row and
+                            // is saying it is a separate transfer. Anywhere else,
+                            // no override — duplicate detection should still
+                            // refuse a careless pairing.
+                            assign.mutate({
+                              id: t.id,
+                              contractId: choice[t.id]!,
+                              confirmDuplicate: t.status === 'suspected_duplicate',
+                            });
+                          }}
                         >
                           {t.status === 'suspected_duplicate' ? 'Není duplikát' : 'Přiřadit'}
                         </Button>

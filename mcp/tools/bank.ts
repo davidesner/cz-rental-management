@@ -18,6 +18,9 @@ const ListTransactionsInput = z.object({
 const AssignTransactionInput = z.object({
   id: z.string().describe('Bank transaction ID'),
   contractId: z.string().describe('Contract to pair the transaction with; creates the payment'),
+  confirmDuplicate: z.boolean().optional().describe(
+    'Proceed even though a payment for this contract, amount and date already exists. '
+    + 'Set this ONLY when the user has confirmed this is a genuinely separate transfer.'),
 });
 
 const TransactionId = z.object({ id: z.string().describe('Bank transaction ID') });
@@ -63,7 +66,8 @@ export async function bankTransactionsList(client: RentalApiClient, args: z.infe
 }
 
 export async function bankTransactionsAssign(client: RentalApiClient, args: z.infer<typeof AssignTransactionInput>) {
-  const data = await client.post<{ bankTransaction: unknown }>(`/api/bank-transactions/${args.id}/assign`, { contractId: args.contractId });
+  const data = await client.post<{ bankTransaction: unknown }>(`/api/bank-transactions/${args.id}/assign`,
+    { contractId: args.contractId, confirmDuplicate: args.confirmDuplicate });
   return data.bankTransaction;
 }
 
@@ -113,7 +117,7 @@ export function addBankTools(server: FastMCP, client: RentalApiClient) {
 
   server.addTool({
     name: 'bank_transactions_assign',
-    description: 'Pair a bank transaction to a contract, creating the payment. Also the way to confirm a suspected_duplicate is genuinely a separate payment. Refused for a transaction in any currency other than CZK (its amount is in that currency\'s minor units, not haléře) and for one whose amount and date already have a payment on that contract, whatever imported it.',
+    description: 'Pair a bank transaction to a contract, creating the payment. Also the way to confirm a suspected_duplicate is genuinely a separate payment — that needs confirmDuplicate, since a transaction whose contract, amount and date already have a payment is otherwise refused. Also refused for a transaction in any currency other than CZK, whose amount is in that currency\'s minor units rather than haléře.',
     parameters: AssignTransactionInput,
     execute: async (args) => JSON.stringify(await bankTransactionsAssign(client, args), null, 2),
   });

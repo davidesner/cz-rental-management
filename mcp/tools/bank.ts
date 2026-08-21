@@ -113,7 +113,7 @@ export function addBankTools(server: FastMCP, client: RentalApiClient) {
 
   server.addTool({
     name: 'bank_transactions_assign',
-    description: 'Pair a bank transaction to a contract, creating the payment. Also the way to confirm a suspected_duplicate is genuinely a separate payment.',
+    description: 'Pair a bank transaction to a contract, creating the payment. Also the way to confirm a suspected_duplicate is genuinely a separate payment. Refused for a transaction in any currency other than CZK (its amount is in that currency\'s minor units, not haléře) and for one whose amount and date already have a payment on that contract, whatever imported it.',
     parameters: AssignTransactionInput,
     execute: async (args) => JSON.stringify(await bankTransactionsAssign(client, args), null, 2),
   });

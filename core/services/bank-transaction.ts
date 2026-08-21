@@ -108,6 +108,18 @@ export async function assignBankTransaction(
   const row = await getRaw(db, orgId, id);
   if (row.paymentId !== null) throw new AppError('conflict', 'transakce už je spárovaná s platbou');
   if (row.status === 'parse_failed') throw new AppError('bad_request', 'nelze spárovat transakci, kterou se nepodařilo zpracovat');
+  // payment.amount is CZK haléře, full stop. row.amount for a EUR notification
+  // holds euro CENTS, so assigning it would turn €40,00 into 40,00 Kč silently.
+  // Reachable in two MCP calls: bank_transactions_list accepts status 'ignored'
+  // and an agent told "pair up the unpaired transactions" gets there.
+  //
+  // Note that 'foreign_account' stays assignable on purpose — the owner's
+  // configured accountNumber may simply be wrong, and overriding it is a
+  // legitimate thing to want. Only the CURRENCY is unfixable by an assign.
+  if (row.currency !== 'CZK') {
+    throw new AppError('bad_request',
+      `transakce je v ${row.currency}, ne v CZK — částku v jiné měně nelze zapsat jako platbu v korunách`);
+  }
 
   const [c] = await db.select().from(contract)
     .where(and(eq(contract.id, contractId), eq(contract.orgId, orgId)));

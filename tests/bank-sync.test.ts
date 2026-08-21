@@ -196,6 +196,25 @@ describe('bank-sync', () => {
     await c.close();
   });
 
+  // row.amount for a EUR notification holds euro CENTS. payment.amount is CZK
+  // haléře, so assigning one would silently turn 30,00 EUR into 30,00 Kč — and
+  // an ignored/unsupported_currency row is otherwise perfectly assignable, via
+  // two MCP calls or one click in the inbox.
+  it('refuses to assign a transaction that is not in CZK', async () => {
+    const c = await setup();
+    const eur = await notification('m1', (html) => html
+      .replace(/30,00(&nbsp;| )Kč/, '30,00$1EUR')
+      .replace('30.00 CZK', '30.00 EUR'));
+    await syncIntegration(c.db, c.integrationId, deps([{ uid: 10, source: eur }]), 'manual');
+    const [tx] = await c.db.select().from(bankTransaction);
+    expect(tx!.currency).toBe('EUR');
+
+    await expect(assignBankTransaction(c.db, c.orgId, tx!.id, c.contractId))
+      .rejects.toMatchObject({ kind: 'bad_request' });
+    expect(await c.db.select().from(payment)).toHaveLength(0);
+    await c.close();
+  });
+
   describe('the resend guard', () => {
     it('holds a re-sent notification as suspected_duplicate and creates no second payment', async () => {
       const c = await setup();

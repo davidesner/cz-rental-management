@@ -115,7 +115,12 @@ export function bankRoutes() {
   // ── Transactions (owner-only) ─────────────────────────────────────────────
   r.get('/bank-transactions', async (c) => {
     const ctx = getCtx(c); requireOrg(ctx); requireOwner(ctx);
-    const status = StatusFilter.parse(c.req.query('status'));
+    // safeParse, not parse: this is a QUERY param, which is a thing a user can
+    // edit in the address bar, and a ZodError here becomes an HTTP 500. An
+    // unrecognised value means "no filter" rather than a server error. (The
+    // global ZodError -> 400 mapping is a separate change.)
+    const parsedStatus = StatusFilter.safeParse(c.req.query('status'));
+    const status = parsedStatus.success ? parsedStatus.data : undefined;
     const pending = c.req.query('pending') === '1';
     return c.json({
       bankTransactions: await listBankTransactions(c.get('db'), ctx.orgId, {

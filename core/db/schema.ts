@@ -1,4 +1,4 @@
-import { bigint, boolean, date, integer, jsonb, pgTable, text, timestamp, primaryKey, uniqueIndex, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { bigint, boolean, date, index, integer, jsonb, pgTable, text, timestamp, primaryKey, uniqueIndex, type AnyPgColumn } from 'drizzle-orm/pg-core';
 
 // ----- better-auth tables (names match better-auth defaults) -----
 
@@ -309,6 +309,12 @@ export const bankTransaction = pgTable('bank_transaction', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   orgMessage: uniqueIndex('bank_transaction_org_message_idx').on(t.orgId, t.messageId),
+  // Both FKs above are ON DELETE SET NULL, and Postgres does not index the
+  // referencing side for you: without these, every DELETE FROM payment (and
+  // every delete of a bank_transaction) sequentially scans this whole table to
+  // find the rows it has to null out.
+  paymentRef: index('bank_transaction_payment_idx').on(t.paymentId),
+  duplicateRef: index('bank_transaction_duplicate_of_idx').on(t.duplicateOfTransactionId),
 }));
 
 export const paymentMatchingRule = pgTable('payment_matching_rule', {
@@ -350,7 +356,9 @@ export const bankSyncRun = pgTable('bank_sync_run', {
   created: integer('created').notNull().default(0),
   matched: integer('matched').notNull().default(0),
   failed: integer('failed').notNull().default(0),
-  // On a structural parse failure this holds the raw HTML, capped — the one
-  // case where the tokens alone are not enough to diagnose the drift.
+  // The last failure seen in the run, as `${reason}: ${detail}` — the parser's
+  // reason code plus its own explanation, or `db_error (uid …, <Message-ID>)`
+  // for a message whose staging insert threw. NOT the raw HTML: the diagnostic
+  // snapshot is bank_transaction.rawTokens, which is what reparse reads.
   error: text('error'),
 });

@@ -1,5 +1,5 @@
 import { createId } from '@paralleldrive/cuid2';
-import { and, eq, isNotNull, ne } from 'drizzle-orm';
+import { and, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
 import {
   bankIntegration, bankSyncRun, bankTransaction, contract, payment, paymentMatchingRule,
@@ -429,7 +429,14 @@ export async function syncIntegration(
  */
 export async function syncAllActiveIntegrations(db: DB, deps: SyncDeps): Promise<SyncResult[]> {
   const rows = await db.select({ id: bankIntegration.id }).from(bankIntegration)
-    .where(eq(bankIntegration.active, true));
+    .where(eq(bankIntegration.active, true))
+    // Least-recently-synced first, never-synced ahead of everything. Each
+    // integration gets its own fresh 45 s budget under maxDuration=60, so with
+    // three integrations the third is simply never reached — and with no
+    // ordering at all, "never reached" means the SAME one starved on every
+    // tick. This makes the queue fair instead: whatever missed out is first
+    // next time.
+    .orderBy(sql`${bankIntegration.lastSyncAt} asc nulls first`);
   const results: SyncResult[] = [];
   for (const row of rows) {
     try {

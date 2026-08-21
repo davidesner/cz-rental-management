@@ -246,6 +246,21 @@ describe('bank transaction routes', () => {
     await client.close();
   });
 
+  // A query param is a thing a user can edit in the address bar, and this branch
+  // introduces the repo's first query-param parse. A ZodError here used to reach
+  // errorMiddleware's generic branch as an HTTP 500.
+  it('treats an unrecognised ?status as no filter instead of a 500', async () => {
+    const { client, app, cookie } = await withTransaction();
+    const res = await app.request('/api/bank-transactions?status=nonsense', { headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect((await res.json() as any).bankTransactions).toHaveLength(1);
+
+    // A recognised one still filters.
+    const filtered = await app.request('/api/bank-transactions?status=matched', { headers: { cookie } });
+    expect((await filtered.json() as any).bankTransactions).toHaveLength(0);
+    await client.close();
+  });
+
   it('ignores a transaction', async () => {
     const { client, app, cookie, txId } = await withTransaction();
     const res = await app.request(`/api/bank-transactions/${txId}/ignore`, { method: 'POST', headers: json(cookie), body: '{}' });

@@ -1,0 +1,2 @@
+CREATE INDEX "bank_transaction_payment_idx" ON "bank_transaction" USING btree ("payment_id");--> statement-breakpoint
+CREATE INDEX "bank_transaction_duplicate_of_idx" ON "bank_transaction" USING btree ("duplicate_of_transaction_id");

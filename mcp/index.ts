@@ -15,6 +15,7 @@ import { addCostStatementTools } from './tools/cost-statements.js';
 import { addReconciliationTools } from './tools/reconciliations.js';
 import { addRentReductionTools } from './tools/rent-reductions.js';
 import { addPaymentBreakdownTools } from './tools/payment-breakdown.js';
+import { addBankTools } from './tools/bank.js';
 
 const apiUrl = process.env['RENTAL_API_URL'] ?? 'http://localhost:3000';
 const apiToken = process.env['RENTAL_API_TOKEN'];
@@ -26,7 +27,7 @@ if (!apiToken) {
 const client = new RentalApiClient(apiUrl, apiToken);
 const server = new FastMCP({
   name: 'rental-management',
-  version: '0.1.0',
+  version: '0.2.0',
 });
 
 addMeTools(server, client);
@@ -42,5 +43,6 @@ addCostStatementTools(server, client);
 addReconciliationTools(server, client);
 addRentReductionTools(server, client);
 addPaymentBreakdownTools(server, client);
+addBankTools(server, client);
 
 server.start({ transportType: 'stdio' });

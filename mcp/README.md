@@ -42,6 +42,7 @@ One file per resource under `dist/tools/`:
 - `property_tariffs`, `rent_reductions`
 - `payments`, `payment_breakdown`
 - `cost_statements`, `reconciliations`
+- `bank_integrations`, `bank_transactions`, `payment_rule`
 
 Each resource exposes idempotent list/get/create/update/delete tools where applicable.
 

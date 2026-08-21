@@ -105,6 +105,40 @@ export async function findDuplicate(db: DB, orgId: string, fp: Fingerprint): Pro
   return same?.id ?? null;
 }
 
+/**
+ * The CROSS-CHANNEL guard.
+ *
+ * `findDuplicate` above only sees money that arrived through THIS feature. The
+ * annual-reconciliation workflow imports the same transfers from the other
+ * direction — `record_payments` off a bank statement, with a SHA hash as
+ * `externalId` — and `recordPayment`'s idempotency is keyed on `externalId`
+ * equality alone. `kbemail:<messageId>` and a statement hash never collide, so
+ * the unique (orgId, externalId) index never fires and the same transfer would
+ * become TWO payment rows: reconciliation then reads both and reports the tenant
+ * hugely overpaid. Two ways in: the 90-day first-run backfill over months the
+ * user already entered by hand, and steady state with both channels live.
+ *
+ * So: any payment on this contract for this amount on this date, whatever its
+ * source and whatever its externalId, is treated as "already recorded".
+ *
+ * This only protects the e-mail channel from payments that ALREADY exist. The
+ * reverse order — a statement import running after the sync created a payment —
+ * is not fixed here: that is `recordPayment`'s territory, pre-existing code
+ * every flow depends on, and a workflow decision rather than a bug in this
+ * feature.
+ */
+export async function findExistingPayment(
+  db: DB, orgId: string, contractId: string, amount: number, paidAt: string,
+): Promise<string | null> {
+  const [row] = await db.select({ id: payment.id }).from(payment).where(and(
+    eq(payment.orgId, orgId),
+    eq(payment.contractId, contractId),
+    eq(payment.amount, amount),
+    eq(payment.paidAt, paidAt),
+  ));
+  return row?.id ?? null;
+}
+
 interface Outcome {
   status: 'matched' | 'unmatched' | 'ambiguous' | 'suspected_duplicate' | 'ignored';
   statusReason: string | null;
@@ -152,6 +186,22 @@ async function decide(
     // confirms it from the inbox, which creates the payment as a manual assign.
     return { status: 'suspected_duplicate', statusReason: 'shodná platba už je spárovaná', contractId: null, duplicateOf };
   }
+
+  // Held, not discarded, for the same reason as above: two identical transfers
+  // on one day are possible, so we park rather than drop. The difference is
+  // that this one catches a payment the OTHER import channel already wrote.
+  const existingPaymentId = await findExistingPayment(
+    db, orgId, match.contractId, parsed.amount, parsed.valueDate,
+  );
+  if (existingPaymentId !== null) {
+    return {
+      status: 'suspected_duplicate',
+      statusReason: `platba na tuto částku a datum už na tomto pronájmu existuje (${existingPaymentId})`,
+      contractId: null,
+      duplicateOf: null,
+    };
+  }
+
   return { status: 'matched', statusReason: null, contractId: match.contractId, duplicateOf: null };
 }
 

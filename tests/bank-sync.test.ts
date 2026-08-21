@@ -7,6 +7,7 @@ import { fakeImap, failingImap } from './helpers/fake-imap.js';
 import { loadFixtureHtml, makeEml } from './helpers/kb-email.js';
 import { seal } from '../core/lib/crypto-box.js';
 import { syncIntegration, syncAllActiveIntegrations, buildDescription } from '../core/services/bank-sync.js';
+import { assignBankTransaction } from '../core/services/bank-transaction.js';
 import {
   organization, property, tenant, contract, payment,
   bankIntegration, bankTransaction, paymentMatchingRule, bankSyncRun,
@@ -230,6 +231,55 @@ describe('bank-sync', () => {
       const tx = (await c.db.select().from(bankTransaction).where(eq(bankTransaction.messageId, 'm2')))[0];
       expect(tx!.status).toBe('matched');
       expect(await c.db.select().from(payment)).toHaveLength(2);
+      await c.close();
+    });
+
+    // The annual-reconciliation workflow imports the same transfers from a bank
+    // statement with a SHA hash as externalId, so `kbemail:<messageId>` never
+    // collides with it and recordPayment's externalId-equality idempotency never
+    // fires. Without this guard the 90-day backfill (or simply both channels
+    // running) writes the SAME transfer twice and reconciliation reports a huge
+    // overpayment.
+    it('parks a transfer a MANUALLY-ENTERED payment already covers, whatever its externalId', async () => {
+      const c = await setup();
+      await addRule(c.db, c.orgId, c.contractId);
+      // Exactly what `record_payments` off a statement would have written: same
+      // contract, same amount, same date — different source, different externalId.
+      await c.db.insert(payment).values({
+        id: createId(), orgId: c.orgId, contractId: c.contractId,
+        amount: 3000, paidAt: '2026-08-20', source: 'bank',
+        externalId: 'sha256:deadbeef',
+      });
+
+      const result = await syncIntegration(c.db, c.integrationId, deps([{ uid: 10, source: await notification('m1') }]), 'cron');
+
+      expect(result.created).toBe(1);   // the record exists...
+      expect(result.matched).toBe(0);   // ...but no SECOND payment was made
+      expect(await c.db.select().from(payment)).toHaveLength(1);
+
+      const [tx] = await c.db.select().from(bankTransaction);
+      expect(tx!.status).toBe('suspected_duplicate');
+      expect(tx!.paymentId).toBeNull();
+      expect(tx!.statusReason).toContain('už na tomto pronájmu existuje');
+      await c.close();
+    });
+
+    it('refuses a MANUAL assign of a transfer an existing payment already covers', async () => {
+      const c = await setup();
+      await addRule(c.db, c.orgId, c.contractId);
+      await c.db.insert(payment).values({
+        id: createId(), orgId: c.orgId, contractId: c.contractId,
+        amount: 3000, paidAt: '2026-08-20', source: 'bank',
+        externalId: 'sha256:deadbeef',
+      });
+      await syncIntegration(c.db, c.integrationId, deps([{ uid: 10, source: await notification('m1') }]), 'cron');
+      const [tx] = await c.db.select().from(bankTransaction);
+
+      // The inbox's "Není duplikát — spárovat" must not become the way to
+      // double-count: refused loudly, and still no second payment.
+      await expect(assignBankTransaction(c.db, c.orgId, tx!.id, c.contractId))
+        .rejects.toMatchObject({ kind: 'conflict' });
+      expect(await c.db.select().from(payment)).toHaveLength(1);
       await c.close();
     });
 

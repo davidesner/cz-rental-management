@@ -4,7 +4,7 @@ import type { DB } from '../db/client.js';
 import { bankTransaction, contract, payment, property, tenant } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { parseFromTokens } from '../lib/kb-email-parser.js';
-import { buildDescription } from './bank-sync.js';
+import { buildDescription, findExistingPayment } from './bank-sync.js';
 
 export interface BankTransactionRow {
   id: string;
@@ -112,6 +112,18 @@ export async function assignBankTransaction(
   const [c] = await db.select().from(contract)
     .where(and(eq(contract.id, contractId), eq(contract.orgId, orgId)));
   if (!c) throw new AppError('not_found', 'pronájem nenalezen');
+
+  // The same cross-channel guard the sync applies (see findExistingPayment) —
+  // a manual assign must not bypass it, or the "spárovat" button becomes the
+  // way to double-count a transfer the statement import already recorded.
+  // Refused loudly rather than re-parked: the user is explicitly asking for
+  // THIS transaction and deserves to be told why it will not happen.
+  const clash = await findExistingPayment(db, orgId, contractId, row.amount, row.valueDate);
+  if (clash !== null) {
+    throw new AppError('conflict',
+      `na tomto pronájmu už existuje platba ${(row.amount / 100).toLocaleString('cs-CZ')} Kč `
+      + `k datu ${row.valueDate} (${clash}) — pravděpodobně stejná platba zadaná jinou cestou`);
+  }
 
   await db.transaction(async (tx) => {
     const paymentId = createId();

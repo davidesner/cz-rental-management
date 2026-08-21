@@ -2403,7 +2403,7 @@ production integrations — expected, not a bug."
 
 **Interfaces:**
 - Consumes: `RantalApiClient` — check the exact exported name in `mcp/client.ts` before writing (it is `RentalApiClient` in the existing tools).
-- Produces: the seven tools from the spec's MCP table.
+- Produces: the eight tools listed in the table below (the spec's original seven, plus `bank_integrations_setup_url`, added during the design review).
 
 - [ ] **Step 1: Read the existing registration to match it**
 

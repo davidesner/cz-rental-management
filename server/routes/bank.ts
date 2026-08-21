@@ -3,7 +3,6 @@ import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { getCtx } from '../middleware/auth.js';
 import { requireOrg } from '../../core/auth/context.js';
-import { AppError } from '../../core/errors.js';
 import { loadKey } from '../../core/lib/crypto-box.js';
 import { fetchMessagesOverImap } from '../../core/lib/imap-fetcher.js';
 import {
@@ -49,12 +48,17 @@ const AssignBody = z.object({ contractId: z.string().min(1) });
 const StatusFilter = z.enum(['unmatched', 'matched', 'ambiguous', 'suspected_duplicate', 'ignored', 'parse_failed']).optional();
 
 function bankKey(): Buffer {
-  try {
-    return loadKey(process.env['BANK_SECRET_KEY']);
-  } catch (e) {
-    // A misconfigured deployment must say so, not surface as a mystery 500.
-    throw new AppError('bad_request', e instanceof Error ? e.message : 'BANK_SECRET_KEY is invalid');
-  }
+  // Deliberately NOT wrapped in an AppError. A missing or malformed
+  // BANK_SECRET_KEY is a SERVER misconfiguration, and AppError('bad_request')
+  // maps to HTTP 400 — which tells the client their request was malformed when
+  // the deployment is the thing that is broken. core/errors.ts has no
+  // 'internal' kind, so letting the plain Error propagate is the correct
+  // choice: it reaches errorMiddleware's generic branch, which console.error's
+  // the cause for the operator and returns a 500 that leaks nothing to the
+  // caller. cronRoutes() already calls loadKey bare for the identical failure,
+  // so this also makes the two entry points report it the same way instead of
+  // 400-here / 500-there during a real misconfiguration incident.
+  return loadKey(process.env['BANK_SECRET_KEY']);
 }
 
 export function bankRoutes() {

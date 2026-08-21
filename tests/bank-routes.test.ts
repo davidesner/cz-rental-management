@@ -62,8 +62,20 @@ describe('bank integration routes', () => {
   });
 
   it('rejects a restricted member from the integration and inbox endpoints', async () => {
-    const { db, client, app, cookie, property } = await bootstrap();
-    await app.request('/api/bank-integrations', { method: 'POST', headers: json(cookie), body: JSON.stringify(INTEGRATION) });
+    const { db, client, app, cookie, property, contract } = await bootstrap();
+    const integration = (await (await app.request('/api/bank-integrations', { method: 'POST', headers: json(cookie), body: JSON.stringify(INTEGRATION) })).json() as any).bankIntegration;
+
+    // A pending transaction, seeded directly like withTransaction() below —
+    // needed to exercise the assign/ignore gates, the two most dangerous
+    // routes (assign creates a payment; ignore is irreversible).
+    const txId = createId();
+    await db.insert(bankTransaction).values({
+      id: txId, orgId: integration.orgId,
+      integrationId: integration.id, messageId: 'm1',
+      amount: 3_800_000, currency: 'CZK', valueDate: '2026-08-20',
+      fromAccount: '294153028/0300', toAccount: '321-9876543210/0100',
+      status: 'unmatched', receivedAt: new Date(),
+    });
 
     // A member scoped to the one property
     const { userId } = await registerUser(app, 'member@example.com', 'password123', 'Member');
@@ -82,8 +94,25 @@ describe('bank integration routes', () => {
     // databaseHooks made them owner), which would trivially pass requireOwner
     // against an empty org instead of actually exercising the restriction. See
     // tests/property-access.test.ts and tests/payments.test.ts for the same pattern.
-    expect((await app.request('/api/bank-integrations', { headers: { cookie: memberCookie, 'x-org-id': org!.orgId } })).status).toBe(403);
-    expect((await app.request('/api/bank-transactions', { headers: { cookie: memberCookie, 'x-org-id': org!.orgId } })).status).toBe(403);
+    const memberHeaders = { cookie: memberCookie, 'x-org-id': org!.orgId };
+    expect((await app.request('/api/bank-integrations', { headers: memberHeaders })).status).toBe(403);
+    expect((await app.request('/api/bank-transactions', { headers: memberHeaders })).status).toBe(403);
+
+    expect((await app.request(`/api/bank-transactions/${txId}/assign`, {
+      method: 'POST', headers: { ...memberHeaders, 'content-type': 'application/json' }, body: JSON.stringify({ contractId: contract.id }),
+    })).status).toBe(403);
+    expect((await app.request(`/api/bank-transactions/${txId}/ignore`, {
+      method: 'POST', headers: memberHeaders,
+    })).status).toBe(403);
+
+    // /sync and /test are gated before any network call: requireOwner throws
+    // before getBankIntegration or bankKey() are ever reached.
+    expect((await app.request(`/api/bank-integrations/${integration.id}/sync`, {
+      method: 'POST', headers: memberHeaders,
+    })).status).toBe(403);
+    expect((await app.request(`/api/bank-integrations/${integration.id}/test`, {
+      method: 'POST', headers: memberHeaders,
+    })).status).toBe(403);
     await client.close();
   });
 
@@ -96,6 +125,13 @@ describe('bank integration routes', () => {
 
     const res = await app.request(`/api/bank-integrations/${mine.id}`, { headers: { cookie: other.cookie } });
     expect(res.status).toBe(404);
+
+    // /sync and /test resolve ownership BEFORE touching IMAP — for another
+    // org's integration this must 404 without ever reaching the network.
+    const sync = await app.request(`/api/bank-integrations/${mine.id}/sync`, { method: 'POST', headers: { cookie: other.cookie } });
+    expect(sync.status).toBe(404);
+    const test = await app.request(`/api/bank-integrations/${mine.id}/test`, { method: 'POST', headers: { cookie: other.cookie } });
+    expect(test.status).toBe(404);
     await client.close();
   });
 });

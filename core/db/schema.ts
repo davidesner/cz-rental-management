@@ -1,4 +1,4 @@
-import { bigint, boolean, date, integer, pgTable, text, timestamp, primaryKey, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, date, integer, jsonb, pgTable, text, timestamp, primaryKey, uniqueIndex, type AnyPgColumn } from 'drizzle-orm/pg-core';
 
 // ----- better-auth tables (names match better-auth defaults) -----
 
@@ -238,3 +238,110 @@ export const rentReduction = pgTable('rent_reduction', {
 }, (t) => ({
   contractMonth: uniqueIndex('rent_reduction_contract_month_idx').on(t.contractId, t.forMonth),
 }));
+
+// ----- bank integration + payment pairing -----
+
+export const bankIntegration = pgTable('bank_integration', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  // Discriminator with exactly one value today. A second bank is a new parser
+  // file plus a case — deliberately not a plugin framework.
+  kind: text('kind', { enum: ['kb_email'] }).notNull(),
+  name: text('name').notNull(),
+  imapHost: text('imap_host').notNull(),
+  imapPort: integer('imap_port').notNull().default(993),
+  imapUser: text('imap_user').notNull(),
+  // AES-256-GCM ciphertext from core/lib/crypto-box.ts. NEVER returned by the API.
+  imapPasswordEnc: text('imap_password_enc').notNull(),
+  imapFolder: text('imap_folder').notNull().default('INBOX'),
+  fromFilter: text('from_filter').notNull().default('servis@kbinfo.cz'),
+  subjectFilter: text('subject_filter').notNull().default('Přijali jsme platbu'),
+  // Which of the user's OWN accounts this mailbox reports on. When set,
+  // notifications addressed elsewhere are ignored rather than imported.
+  accountNumber: text('account_number'),
+  active: boolean('active').notNull().default(true),
+  // IMAP incremental cursor. UIDs are only meaningful within one uidValidity
+  // generation; when the server reports a different one, the cursor is rebuilt
+  // from a date-based search.
+  uidValidity: bigint('uid_validity', { mode: 'number' }),
+  lastUid: bigint('last_uid', { mode: 'number' }),
+  lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+  lastSyncStatus: text('last_sync_status', { enum: ['ok', 'error'] }),
+  lastSyncError: text('last_sync_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const bankTransaction = pgTable('bank_transaction', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  integrationId: text('integration_id').notNull().references(() => bankIntegration.id, { onDelete: 'cascade' }),
+  // The e-mail's Message-ID. KB gives us no transaction id, so this is the
+  // idempotency key for "have we already imported this notification".
+  messageId: text('message_id').notNull(),
+  amount: integer('amount_haler').notNull(),
+  currency: text('currency').notNull(),
+  valueDate: date('value_date', { mode: 'string' }).notNull(),
+  fromAccount: text('from_account'),
+  toAccount: text('to_account'),
+  vs: text('vs'),
+  ks: text('ks'),
+  ss: text('ss'),
+  messageForRecipient: text('message_for_recipient'),
+  // The "Zobrazit online" href. Stored for reference and NEVER fetched by us:
+  // it is a click-tracker, so following it registers a click and it may be
+  // single-use.
+  sourceLink: text('source_link'),
+  // The ordered <span> token array (~1 KB), enough to re-parse after a parser
+  // fix without keeping 90 KB of HTML per message.
+  rawTokens: jsonb('raw_tokens').$type<string[]>(),
+  status: text('status', {
+    enum: ['unmatched', 'matched', 'ambiguous', 'suspected_duplicate', 'ignored', 'parse_failed'],
+  }).notNull(),
+  statusReason: text('status_reason'),
+  duplicateOfTransactionId: text('duplicate_of_transaction_id')
+    .references((): AnyPgColumn => bankTransaction.id, { onDelete: 'set null' }),
+  matchedBy: text('matched_by', { enum: ['rule', 'manual'] }),
+  // ON DELETE SET NULL, not cascade: `paymentId IS NULL` is the source of truth
+  // for "needs attention", so deleting a payment must return the transaction to
+  // the inbox rather than delete the audit record with it.
+  paymentId: text('payment_id').references(() => payment.id, { onDelete: 'set null' }),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  orgMessage: uniqueIndex('bank_transaction_org_message_idx').on(t.orgId, t.messageId),
+}));
+
+export const paymentMatchingRule = pgTable('payment_matching_rule', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  contractId: text('contract_id').notNull().references(() => contract.id, { onDelete: 'cascade' }),
+  // null on any criterion means "cokoliv". A rule with every criterion null is
+  // rejected in core/lib/payment-pairing.ts#validateRuleCriteria, not here.
+  counterpartyAccount: text('counterparty_account'),
+  vs: text('vs'),
+  ks: text('ks'),
+  ss: text('ss'),
+  amountFrom: integer('amount_from_haler'),
+  amountTo: integer('amount_to_haler'),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  contractUnique: uniqueIndex('payment_matching_rule_contract_idx').on(t.contractId),
+}));
+
+export const bankSyncRun = pgTable('bank_sync_run', {
+  id: text('id').primaryKey(),
+  integrationId: text('integration_id').notNull().references(() => bankIntegration.id, { onDelete: 'cascade' }),
+  trigger: text('trigger', { enum: ['cron', 'manual'] }).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  status: text('status', { enum: ['ok', 'error'] }).notNull(),
+  fetched: integer('fetched').notNull().default(0),
+  created: integer('created').notNull().default(0),
+  matched: integer('matched').notNull().default(0),
+  failed: integer('failed').notNull().default(0),
+  // On a structural parse failure this holds the raw HTML, capped — the one
+  // case where the tokens alone are not enough to diagnose the drift.
+  error: text('error'),
+});

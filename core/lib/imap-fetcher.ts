@@ -45,16 +45,54 @@ export type SearchRange =
   | { kind: 'uid'; range: string }
   | { kind: 'since'; since: Date };
 
+/**
+ * Is a stored cursor meaningful against the mailbox the server just opened?
+ *
+ * UIDs are only unique within one uidValidity generation, so a cursor from a
+ * previous generation says nothing about this one. Hoisted out so
+ * `nextSearchRange` (what to search) and `nextCursor` (what to persist) cannot
+ * drift apart — they are the same predicate and disagreeing about it is what
+ * caused the bug `nextCursor` documents.
+ */
+export function cursorUsable(cursor: ImapCursor, serverUidValidity: number): boolean {
+  return cursor.uidValidity !== null
+    && cursor.lastUid !== null
+    && cursor.uidValidity === serverUidValidity;
+}
+
 export function nextSearchRange(
   cursor: ImapCursor,
   serverUidValidity: number,
   sinceFallback: Date | null,
 ): SearchRange {
-  const usable = cursor.uidValidity !== null
-    && cursor.lastUid !== null
-    && cursor.uidValidity === serverUidValidity;
-  if (usable) return { kind: 'uid', range: `${cursor.lastUid! + 1}:*` };
+  if (cursorUsable(cursor, serverUidValidity)) return { kind: 'uid', range: `${cursor.lastUid! + 1}:*` };
   return { kind: 'since', since: sinceFallback ?? new Date(0) };
+}
+
+/**
+ * The cursor to persist after a fetch.
+ *
+ * The high-water mark may only be carried forward WITHIN the same uidValidity
+ * generation. Pairing the server's NEW uidValidity with the OLD generation's
+ * lastUid produces a cursor that `nextSearchRange` then calls usable forever,
+ * searching `oldLastUid+1:*` in a mailbox whose UIDs restarted low — so every
+ * message at or below the old high-water mark becomes permanently invisible.
+ * Silent, unrecoverable, money-bearing loss.
+ *
+ * And the precondition is the NORMAL case, not an exotic one: it needs only a
+ * mailbox rebuild plus a run that fetched nothing, and `sinceFallback` is
+ * yesterday while rent notifications are monthly. So on a rebuild, a quiet day
+ * is enough. Dropping to null instead makes the next run redo the date search,
+ * which idempotency on messageId already makes harmless.
+ */
+export function nextCursor(
+  cursor: ImapCursor,
+  serverUidValidity: number,
+  messages: RawMessage[],
+): ImapCursor {
+  const carried = cursorUsable(cursor, serverUidValidity) ? cursor.lastUid : null;
+  const lastUid = messages.length > 0 ? messages[messages.length - 1]!.uid : carried;
+  return { uidValidity: serverUidValidity, lastUid };
 }
 
 function clientFor(cfg: ImapConfig): ImapFlow {
@@ -113,10 +151,9 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
       messages.push({ uid, source: msg.source });
     }
 
-    const highest = messages.length > 0 ? messages[messages.length - 1]!.uid : cursor.lastUid;
     return {
       messages,
-      cursor: { uidValidity, lastUid: highest },
+      cursor: nextCursor(cursor, uidValidity, messages),
       matchedCount: all.length,
     };
   } finally {

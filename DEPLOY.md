@@ -260,3 +260,54 @@ Publish workflow: `cd mcp && pnpm build && npm publish --access public`. Source/
 - **App refuses to boot with `BETTER_AUTH_SECRET must be set...`** — env var missing or shorter than 32 chars. Generate with `openssl rand -base64 32`.
 - **App refuses to boot with `BETTER_AUTH_TRUSTED_ORIGINS must be set...`** — set the env var to your prod origin(s), comma-separated.
 - **CORS / origin rejected when calling auth API** — origin not in `BETTER_AUTH_TRUSTED_ORIGINS`. Add it and redeploy.
+
+## Bankovní integrace (sběr plateb z e-mailů)
+
+### Env vars
+
+| Var | Kde | Jak vyrobit |
+|---|---|---|
+| `BANK_SECRET_KEY` | Vercel project env (all environments) + `.env` lokálně | `openssl rand -base64 32` |
+| `CRON_SECRET` | Vercel project env (production) | `openssl rand -hex 32` |
+
+`BANK_SECRET_KEY` **musí být stejný ve všech prostředích, která čtou stejnou DB.**
+Preview deploymenty mají vlastní Neon branch, takže tam může být jiný — ale integrace
+naklonované z produkčních dat pak nepůjdou dešifrovat a sync skončí chybou
+„cannot decrypt IMAP password". To je očekávané, ne bug.
+
+### Cron
+
+`vercel.json` → `crons` volá `GET /api/cron/bank-sync` denně v 05:00 UTC. Vercel přidá
+hlavičku `Authorization: Bearer $CRON_SECRET` automaticky, jakmile env var na projektu
+existuje. **Hobby plán běží 1×/den** v přibližném čase; kratší interval potřebuje Pro
+(pak stačí změnit `schedule`).
+
+Cron běží **jen na production deploymentu**, ne na preview.
+
+### Ruční spuštění
+
+- UI: `/settings` → Bankovní integrace → *Synchronizovat*
+- API: `POST /api/bank-integrations/:id/sync` (session nebo API token, owner)
+- Cron endpoint ručně:
+  ```bash
+  curl -H "Authorization: Bearer $CRON_SECRET" https://<app>/api/cron/bank-sync
+  ```
+
+### Gmail
+
+IMAP na Gmailu nepřijme běžné heslo — je potřeba **App Password**, což vyžaduje
+zapnuté 2FA na Google účtu. Host `imap.gmail.com`, port 993.
+
+### Když sync selže
+
+`Stav` na integraci zčervená a `lastSyncError` řekne proč. Tři typické případy:
+
+| Chyba | Co to znamená |
+|---|---|
+| `AUTHENTICATIONFAILED` | špatné heslo, nebo běžné heslo místo App Password |
+| `cannot decrypt IMAP password` | `BANK_SECRET_KEY` se změnil nebo chybí |
+| `unexpected_structure: …` | KB změnila šablonu e-mailu — potřeba upravit parser |
+
+U posledního případu zůstane zpráva v inboxu jako `parse_failed` se seznamem
+neplatných předpokladů a uloženými `rawTokens`; po opravě parseru jde spustit
+*Znovu zpracovat* bez dalšího IMAP dotazu.

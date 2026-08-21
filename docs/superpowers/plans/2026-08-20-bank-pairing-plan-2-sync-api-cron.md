@@ -916,20 +916,28 @@ export async function syncIntegration(
 
         failed += 1;
         error = `${parseResult.reason}: ${parseResult.detail}`;
-        if (parseResult.messageId) {
-          // .returning() so a replayed failure (the row already exists, and
-          // onConflictDoNothing makes the insert a no-op) does not inflate the
-          // `created` counter the run log and UI report.
-          const inserted = await db.insert(bankTransaction).values({
-            id: createId(), orgId: integ.orgId, integrationId,
-            messageId: parseResult.messageId,
-            amount: 0, currency: 'CZK', valueDate: (parseResult.receivedAt ?? now()).toISOString().slice(0, 10),
-            status: 'parse_failed', statusReason: `${parseResult.reason}: ${parseResult.detail}`,
-            rawTokens: parseResult.tokens,
-            receivedAt: parseResult.receivedAt ?? now(),
-          }).onConflictDoNothing().returning({ id: bankTransaction.id });
-          if (inserted.length > 0) created += 1;
-        }
+        // A genuine KB notification (it passed both the sender and subject
+        // filters) whose Message-ID header is missing or unparseable MUST still
+        // be persisted. Skipping the insert would leave it neither stored nor
+        // ever re-offered — the cursor advances below regardless — which is
+        // precisely the silent loss the parse_failed row exists to prevent.
+        // messageId is NOT NULL and uniquely indexed, so fall back to a
+        // synthetic key from the mailbox generation and uid, which identifies
+        // the same message stably within a uidValidity generation.
+        const failedMessageId = parseResult.messageId
+          ?? `imap:${nextCursor.uidValidity ?? 'unknown'}:${msg.uid}`;
+        // .returning() so a replayed failure (the row already exists, and
+        // onConflictDoNothing makes the insert a no-op) does not inflate the
+        // `created` counter the run log and UI report.
+        const inserted = await db.insert(bankTransaction).values({
+          id: createId(), orgId: integ.orgId, integrationId,
+          messageId: failedMessageId,
+          amount: 0, currency: 'CZK', valueDate: (parseResult.receivedAt ?? now()).toISOString().slice(0, 10),
+          status: 'parse_failed', statusReason: `${parseResult.reason}: ${parseResult.detail}`,
+          rawTokens: parseResult.tokens,
+          receivedAt: parseResult.receivedAt ?? now(),
+        }).onConflictDoNothing().returning({ id: bankTransaction.id });
+        if (inserted.length > 0) created += 1;
         continue;
       }
 
@@ -1000,8 +1008,18 @@ export async function syncIntegration(
     return { runId, integrationId, fetched, created, matched, failed, status: failed > 0 ? 'error' : 'ok', error };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    // Deliberately does NOT stamp lastSyncAt. That column doubles as the
+    // date-search floor (`sinceFallback`) used whenever the UID cursor is
+    // unusable, so advancing it on a FAILED run has two silent consequences:
+    // anything fetched-but-unprocessed in this run falls outside the next
+    // run's SINCE window and is never offered again, and the 90-day first-run
+    // backfill is truncated to "today". The likeliest first failure is a wrong
+    // Gmail app password — stamping it here would mean that after fixing the
+    // password the user only ever sees mail from the day of the fix, with no
+    // error to explain the gap. lastSyncAt means "floor below which everything
+    // is accounted for"; only a run that completed its batch may move it.
     await db.update(bankIntegration).set({
-      lastSyncAt: now(), lastSyncStatus: 'error', lastSyncError: message,
+      lastSyncStatus: 'error', lastSyncError: message,
     }).where(eq(bankIntegration.id, integrationId));
     await db.update(bankSyncRun).set({
       finishedAt: now(), status: 'error', fetched, created, matched, failed, error: message,

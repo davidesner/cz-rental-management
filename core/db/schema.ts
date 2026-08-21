@@ -178,7 +178,23 @@ export const payment = pgTable('payment', {
   amount: integer('amount_haler').notNull(),
   paidAt: date('paid_at', { mode: 'string' }).notNull(),
   counterparty: text('counterparty'),
+  // The fields a payment_matching_rule filters on, kept together. Populated by
+  // the e-mail sync (from the parsed notification) and by a manual assign (from
+  // the bank_transaction row); a statement import MAY supply them.
+  //
+  // They live here as well as on bank_transaction because a statement-imported
+  // payment has NO bank_transaction row to join to — the reconciliation skill's
+  // record_payments writes straight to this table. Without these columns the
+  // symbols are simply unknowable for those rows, and the two import channels
+  // cannot be compared on equal terms.
+  //
+  // NOT part of duplicate detection — see findPaymentByFingerprint in
+  // core/services/payment.ts for why adding sometimes-null fields to that key
+  // would make the guard fire LESS often.
   counterpartyAccount: text('counterparty_account'),
+  vs: text('vs'),
+  ks: text('ks'),
+  ss: text('ss'),
   externalId: text('external_id'),
   statementRef: text('statement_ref'),
   source: text('source', { enum: ['bank', 'manual'] }).notNull(),

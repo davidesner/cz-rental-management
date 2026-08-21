@@ -145,6 +145,7 @@ export async function assignBankTransaction(
       contractId,
       amount: row.amount, paidAt: row.valueDate,
       counterparty: null, counterpartyAccount: row.fromAccount,
+      vs: row.vs, ks: row.ks, ss: row.ss,
       externalId: `kbemail:${row.messageId}`,
       statementRef: row.sourceLink, source: 'bank',
       description: buildDescription(row), // row satisfies DescribableTransaction

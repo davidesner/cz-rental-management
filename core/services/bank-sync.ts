@@ -330,6 +330,10 @@ export async function syncIntegration(
               amount: parsed.amount, paidAt: parsed.valueDate,
               counterparty: null,                       // KB sends no payer name
               counterpartyAccount: parsed.fromAccount,
+              // The same symbols the rule matched on, carried onto the payment so
+              // a statement-imported row and an e-mail-imported row can be
+              // compared on equal terms later.
+              vs: parsed.vs, ks: parsed.ks, ss: parsed.ss,
               externalId: `kbemail:${parsed.messageId}`, // second idempotency guard
               statementRef: parsed.sourceLink,
               source: 'bank',

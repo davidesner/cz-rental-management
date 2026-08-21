@@ -10,6 +10,14 @@ export interface PaymentInput {
   paidAt: string;
   counterparty?: string | null;
   counterpartyAccount?: string | null;
+  /**
+   * The bank symbols a payment_matching_rule filters on. Optional everywhere:
+   * a hand-entered payment has none, and every caller predating these columns
+   * keeps working by omitting them.
+   */
+  vs?: string | null;
+  ks?: string | null;
+  ss?: string | null;
   externalId?: string | null;
   statementRef?: string | null;
   source: 'bank' | 'manual';
@@ -31,6 +39,9 @@ export interface PaymentRow {
   paidAt: string;
   counterparty: string | null;
   counterpartyAccount: string | null;
+  vs: string | null;
+  ks: string | null;
+  ss: string | null;
   externalId: string | null;
   statementRef: string | null;
   source: 'bank' | 'manual';
@@ -79,8 +90,10 @@ async function verifyContractInOrgIfSet(db: DB, orgId: string, contractId: strin
  */
 export async function findPaymentByFingerprint(
   db: DB, orgId: string, contractId: string, amount: number, paidAt: string,
-): Promise<{ id: string; source: 'bank' | 'manual' } | null> {
-  const [row] = await db.select({ id: payment.id, source: payment.source }).from(payment).where(and(
+): Promise<{ id: string; source: 'bank' | 'manual'; vs: string | null } | null> {
+  // `vs` is selected for the conflict MESSAGE only, never for the match: report
+  // everything you know, match on what is always present.
+  const [row] = await db.select({ id: payment.id, source: payment.source, vs: payment.vs }).from(payment).where(and(
     eq(payment.orgId, orgId),
     eq(payment.contractId, contractId),
     eq(payment.amount, amount),
@@ -99,9 +112,10 @@ async function findDuplicateFor(db: DB, orgId: string, input: PaymentInput) {
  * Says WHICH case this is, so the asymmetry with the externalId branch reads as
  * deliberate at the call site rather than as an inconsistency.
  */
-function duplicateMessage(hit: { id: string; source: string }, input: PaymentInput): string {
+function duplicateMessage(hit: { id: string; source: string; vs: string | null }, input: PaymentInput): string {
+  const vs = hit.vs === null ? '' : `, VS ${hit.vs}`;
   return `na tomto pronájmu už je zapsaná platba ${(input.amount / 100).toLocaleString('cs-CZ')} Kč`
-    + ` k datu ${input.paidAt} (${hit.id}, zdroj ${hit.source}) — shoda podle pronájmu, částky a data,`
+    + ` k datu ${input.paidAt} (${hit.id}, zdroj ${hit.source}${vs}) — shoda podle pronájmu, částky a data,`
     + ' ne podle externalId, takže jde o jiný záznam o stejných penězích.'
     + ' Pokud je to skutečně druhý samostatný převod, zapiš ho s allowDuplicate.';
 }
@@ -134,6 +148,9 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
     paidAt: input.paidAt,
     counterparty: input.counterparty ?? null,
     counterpartyAccount: input.counterpartyAccount ?? null,
+    vs: input.vs ?? null,
+    ks: input.ks ?? null,
+    ss: input.ss ?? null,
     externalId: input.externalId ?? null,
     statementRef: input.statementRef ?? null,
     source: input.source,
@@ -198,6 +215,9 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
         paidAt: input.paidAt,
         counterparty: input.counterparty ?? null,
         counterpartyAccount: input.counterpartyAccount ?? null,
+        vs: input.vs ?? null,
+        ks: input.ks ?? null,
+        ss: input.ss ?? null,
         externalId: input.externalId ?? null,
         statementRef: input.statementRef ?? null,
         source: input.source,
@@ -265,6 +285,9 @@ const paymentSelect = {
   paidAt: payment.paidAt,
   counterparty: payment.counterparty,
   counterpartyAccount: payment.counterpartyAccount,
+  vs: payment.vs,
+  ks: payment.ks,
+  ss: payment.ss,
   externalId: payment.externalId,
   statementRef: payment.statementRef,
   source: payment.source,
@@ -340,7 +363,7 @@ export async function updatePayment(db: DB, orgId: string, id: string, allowedPr
   await getPayment(db, orgId, id, allowedPropertyIds);
   if (patch.contractId !== undefined) await verifyContractInOrgIfSet(db, orgId, patch.contractId, allowedPropertyIds);
   const cleaned: Record<string, unknown> = {};
-  for (const key of ['contractId', 'amount', 'paidAt', 'counterparty', 'counterpartyAccount', 'statementRef', 'description', 'note'] as const) {
+  for (const key of ['contractId', 'amount', 'paidAt', 'counterparty', 'counterpartyAccount', 'vs', 'ks', 'ss', 'statementRef', 'description', 'note'] as const) {
     if ((patch as any)[key] !== undefined) cleaned[key] = (patch as any)[key];
   }
   if (Object.keys(cleaned).length === 0) return getPayment(db, orgId, id, allowedPropertyIds);

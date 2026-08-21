@@ -8,12 +8,16 @@ import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
+import { formatSymbols } from '@/lib/symbols';
 
 interface Payment {
   id: string;
   paidAt: string;
   amount: number;
   counterparty: string | null;
+  vs: string | null;
+  ks: string | null;
+  ss: string | null;
   contractId: string | null;
   source: string;
   externalId: string | null;
@@ -114,7 +118,14 @@ export function PaymentsPage() {
                 <TableRow key={p.id}>
                   <TableCell>{p.paidAt}</TableCell>
                   <TableCell>{fmtKc(p.amount)}</TableCell>
-                  <TableCell>{p.counterparty ?? '—'}</TableCell>
+                  {/* Symbols ride along under Protistrana instead of taking a
+                      seventh column — this table is already six wide. */}
+                  <TableCell>
+                    <div>{p.counterparty ?? '—'}</div>
+                    {formatSymbols(p) && (
+                      <div className="text-xs text-muted-foreground">{formatSymbols(p)}</div>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {p.contractId ? `${p.propertyName ?? '—'} / ${p.tenantName ?? '—'}` : '—'}
                   </TableCell>

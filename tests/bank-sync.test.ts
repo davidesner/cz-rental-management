@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 import { freshDb, type DB } from './helpers/db.js';
 import { fakeImap, fakeImapByUser, failingImap } from './helpers/fake-imap.js';
-import { loadFixtureHtml, makeEml } from './helpers/kb-email.js';
+import { loadFixtureHtml, makeEml, setFieldValue } from './helpers/kb-email.js';
 import { seal } from '../core/lib/crypto-box.js';
 import { syncIntegration, syncAllActiveIntegrations, buildDescription } from '../core/services/bank-sync.js';
 import { assignBankTransaction } from '../core/services/bank-transaction.js';
@@ -235,6 +235,44 @@ describe('bank-sync', () => {
     await expect(assignBankTransaction(c.db, c.orgId, tx!.id, c.contractId))
       .rejects.toMatchObject({ kind: 'bad_request' });
     expect(await c.db.select().from(payment)).toHaveLength(0);
+    await c.close();
+  });
+
+  // Item 9: payment.vs/ks/ss exist so a statement-imported row and an
+  // e-mail-imported row carry the same information. Both write paths must fill
+  // them, or the columns are decorative.
+  // The base fixture's symbol fields are EMPTY, so a notification built from it
+  // would assert null === null and prove nothing. Populate them first.
+  const withSymbols = (messageId: string) => notification(messageId, (html) => {
+    html = setFieldValue(html, 'Variabilní symbol', '2026008');
+    html = setFieldValue(html, 'Konstantní symbol', '0308');
+    return setFieldValue(html, 'Specifický symbol', '77');
+  });
+
+  it('carries the notification symbols onto the payment it creates', async () => {
+    const c = await setup();
+    await addRule(c.db, c.orgId, c.contractId);
+    await syncIntegration(c.db, c.integrationId, deps([{ uid: 10, source: await withSymbols('m1') }]), 'manual');
+
+    const [tx] = await c.db.select().from(bankTransaction);
+    const [p] = await c.db.select().from(payment);
+    expect([tx!.vs, tx!.ks, tx!.ss]).toEqual(['2026008', '0308', '77']);
+    expect([p!.vs, p!.ks, p!.ss]).toEqual([tx!.vs, tx!.ks, tx!.ss]);
+    await c.close();
+  });
+
+  it('carries the transaction symbols onto a MANUALLY assigned payment', async () => {
+    const c = await setup();
+    // No rule, so the row parks as unmatched and the only way through is assign.
+    await syncIntegration(c.db, c.integrationId, deps([{ uid: 10, source: await withSymbols('m1') }]), 'manual');
+    const [tx] = await c.db.select().from(bankTransaction);
+    expect(tx!.paymentId).toBeNull();
+    expect(tx!.vs).toBe('2026008');
+
+    await assignBankTransaction(c.db, c.orgId, tx!.id, c.contractId);
+
+    const [p] = await c.db.select().from(payment);
+    expect([p!.vs, p!.ks, p!.ss]).toEqual([tx!.vs, tx!.ks, tx!.ss]);
     await c.close();
   });
 

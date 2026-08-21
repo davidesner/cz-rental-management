@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatSymbols } from '@/lib/symbols';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -111,6 +112,9 @@ interface Payment {
   amount: number;
   counterparty: string | null;
   counterpartyAccount: string | null;
+  vs: string | null;
+  ks: string | null;
+  ss: string | null;
   contractId: string | null;
   source: string;
   externalId: string | null;
@@ -1680,7 +1684,13 @@ export function ContractDetailPage() {
                           <TableCell>{p.paidAt}</TableCell>
                           <TableCell>{fmtKc(p.amount)}</TableCell>
                           <TableCell>{p.counterparty ?? '—'}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{p.counterpartyAccount ?? '—'}</TableCell>
+                          {/* Folded into the account cell, which is already the
+                              bank-identifiers cell, rather than widening a
+                              seven-column table to ten. */}
+                          <TableCell className="text-xs text-muted-foreground">
+                            <div>{p.counterpartyAccount ?? '—'}</div>
+                            {formatSymbols(p) && <div>{formatSymbols(p)}</div>}
+                          </TableCell>
                           <TableCell>{p.source}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{p.externalId ?? '—'}</TableCell>
                           <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={p.note ?? undefined}>

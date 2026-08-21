@@ -108,6 +108,65 @@ describe('payment duplicate detection', () => {
     await client.close();
   });
 
+  // Item 9: the symbols are stored on `payment` too, not only on
+  // `bank_transaction`, because a statement-imported payment has no
+  // bank_transaction row to join to.
+  describe('pairing symbols round-trip', () => {
+    it('stores and returns vs/ks/ss', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seed();
+      const p = await recordPayment(db, orgId, [propertyId], {
+        contractId, ...MONEY, externalId: 'a', vs: '2026008', ks: '0308', ss: '77',
+      });
+
+      expect(p.vs).toBe('2026008');
+      expect(p.ks).toBe('0308');
+      expect(p.ss).toBe('77');
+
+      const [stored] = await db.select().from(payment);
+      expect([stored!.vs, stored!.ks, stored!.ss]).toEqual(['2026008', '0308', '77']);
+      await client.close();
+    });
+
+    it('defaults them to null when a caller omits them entirely', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seed();
+      // Every caller predating these columns looks exactly like this.
+      const p = await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'a' });
+      expect([p.vs, p.ks, p.ss]).toEqual([null, null, null]);
+      await client.close();
+    });
+
+    it('carries them through a batch import', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seed();
+      const r = await recordPaymentsBatch(db, orgId, [propertyId], [
+        { contractId, ...MONEY, externalId: 'a', vs: '2026008' },
+      ]);
+      expect(r.created[0]!.vs).toBe('2026008');
+      await client.close();
+    });
+
+    // Reported, never matched on: the fingerprint stays contract + amount + date.
+    it('names the existing payment\'s VS in the conflict message', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seed();
+      await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'a', vs: '2026008' });
+
+      await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'b' })
+        .then(() => { throw new Error('expected a conflict'); })
+        .catch((e: Error) => expect(e.message).toContain('VS 2026008'));
+      await client.close();
+    });
+
+    it('does not let a DIFFERING vs stop the duplicate guard', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seed();
+      await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'a', vs: '111' });
+      // Same money, different symbol. The symbols are not part of the
+      // fingerprint, so this is still refused — that is the intended behaviour,
+      // since a bank can and does restate a symbol.
+      await expect(recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'b', vs: '222' }))
+        .rejects.toMatchObject({ kind: 'conflict' });
+      await client.close();
+    });
+  });
+
   describe('recordPaymentsBatch', () => {
     it('reports a duplicate in `duplicates` and still imports the rest of the batch', async () => {
       const { db, client, orgId, propertyId, contractId } = await seed();

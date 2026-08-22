@@ -77,16 +77,17 @@ export function PaymentsPage() {
   // Assign dialog
   const [assignPayment, setAssignPayment] = useState<Payment | null>(null);
   const [assignContractId, setAssignContractId] = useState('');
-  const [assignErr, setAssignErr] = useState<string | null>(null);
+  const [assignErr, setAssignErr] = useState<unknown>(null);
 
   const assignMutation = useMutation({
-    mutationFn: () => api.patch<{ payment: Payment }>(`/api/payments/${assignPayment!.id}/assign`, { contractId: assignContractId }),
+    mutationFn: (vars?: { allowDuplicate?: boolean }) => api.patch<{ payment: Payment }>(`/api/payments/${assignPayment!.id}/assign`, { contractId: assignContractId, allowDuplicate: vars?.allowDuplicate }),
     onSuccess: () => {
       setAssignPayment(null);
       setAssignContractId('');
+      setAssignErr(null);
       qc.invalidateQueries({ queryKey: ['payments'] });
     },
-    onError: (e: unknown) => setAssignErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setAssignErr(e),
   });
 
   return (
@@ -141,7 +142,7 @@ export function PaymentsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => { setAssignErr(null); setAssignContractId(p.contractId ?? ''); setAssignPayment(p); }}
+                      onClick={() => { setAssignPayment(p); setAssignContractId(p.contractId ?? ''); setAssignErr(null); }}
                     >
                       Přiřadit
                     </Button>
@@ -225,16 +226,20 @@ export function PaymentsPage() {
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={assignContractId}
-                onChange={e => setAssignContractId(e.target.value)}
+                onChange={e => { setAssignContractId(e.target.value); setAssignErr(null); }}
               >
                 <option value="">Vyber smlouvu…</option>
                 {contracts.map(c => <option key={c.id} value={c.id}>{contractLabel(c)}</option>)}
               </select>
             </div>
-            {assignErr && <p className="text-sm text-destructive">{assignErr}</p>}
+            <DuplicatePaymentError
+              error={assignErr}
+              pending={assignMutation.isPending}
+              onForce={() => assignMutation.mutate({ allowDuplicate: true })}
+            />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setAssignPayment(null)}>Zrušit</Button>
-              <Button onClick={() => assignMutation.mutate()} disabled={!assignContractId || assignMutation.isPending}>Přiřadit</Button>
+              <Button variant="outline" onClick={() => setAssignPayment(null)} disabled={assignMutation.isPending}>Zrušit</Button>
+              <Button onClick={() => assignMutation.mutate({})} disabled={!assignContractId || assignMutation.isPending}>Přiřadit</Button>
             </div>
           </Card>
         </div>

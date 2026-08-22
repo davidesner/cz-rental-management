@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
+import { DuplicatePaymentError } from '@/components/DuplicatePaymentError';
 import { formatSymbols } from '@/lib/symbols';
 
 interface Payment {
@@ -48,23 +49,29 @@ export function PaymentsPage() {
   // New payment dialog
   const [newOpen, setNewOpen] = useState(false);
   const [newForm, setNewForm] = useState({ contractId: '', amount: '', paidAt: '', counterparty: '', source: 'manual', externalId: '' });
-  const [newErr, setNewErr] = useState<string | null>(null);
+  const [newErr, setNewErr] = useState<unknown>(null);
+  // Every field edit clears newErr (see setNewField below) — a corrected
+  // amount can never silently carry forward a stale "yes, duplicate" decision
+  // from a previous submission of this dialog.
+  const setNewField = (patch: Partial<typeof newForm>) => { setNewForm(f => ({ ...f, ...patch })); setNewErr(null); };
 
   const createPayment = useMutation({
-    mutationFn: () => api.post<{ payment: Payment }>('/api/payments', {
+    mutationFn: (vars?: { allowDuplicate?: boolean }) => api.post<{ payment: Payment }>('/api/payments', {
       contractId: newForm.contractId || null,
       amount: Math.round(parseFloat(newForm.amount) * 100),
       paidAt: newForm.paidAt,
       counterparty: newForm.counterparty || null,
       source: newForm.source,
       externalId: newForm.externalId || null,
+      allowDuplicate: vars?.allowDuplicate,
     }),
     onSuccess: () => {
       setNewOpen(false);
       setNewForm({ contractId: '', amount: '', paidAt: '', counterparty: '', source: 'manual', externalId: '' });
+      setNewErr(null);
       qc.invalidateQueries({ queryKey: ['payments'] });
     },
-    onError: (e: unknown) => setNewErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setNewErr(e),
   });
 
   // Assign dialog
@@ -156,7 +163,7 @@ export function PaymentsPage() {
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={newForm.contractId}
-                onChange={e => setNewForm({ ...newForm, contractId: e.target.value })}
+                onChange={e => setNewField({ contractId: e.target.value })}
               >
                 <option value="">Žádná</option>
                 {contracts.map(c => <option key={c.id} value={c.id}>{contractLabel(c)}</option>)}
@@ -164,22 +171,22 @@ export function PaymentsPage() {
             </div>
             <div>
               <Label>Částka (Kč)</Label>
-              <Input type="text" placeholder="0.00" value={newForm.amount} onChange={e => setNewForm({ ...newForm, amount: e.target.value })} />
+              <Input type="text" placeholder="0.00" value={newForm.amount} onChange={e => setNewField({ amount: e.target.value })} />
             </div>
             <div>
               <Label>Zaplaceno dne</Label>
-              <Input type="date" value={newForm.paidAt} onChange={e => setNewForm({ ...newForm, paidAt: e.target.value })} />
+              <Input type="date" value={newForm.paidAt} onChange={e => setNewField({ paidAt: e.target.value })} />
             </div>
             <div>
               <Label>Protistrana</Label>
-              <Input value={newForm.counterparty} onChange={e => setNewForm({ ...newForm, counterparty: e.target.value })} />
+              <Input value={newForm.counterparty} onChange={e => setNewField({ counterparty: e.target.value })} />
             </div>
             <div>
               <Label>Zdroj</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={newForm.source}
-                onChange={e => setNewForm({ ...newForm, source: e.target.value })}
+                onChange={e => setNewField({ source: e.target.value })}
               >
                 <option value="manual">Ručně</option>
                 <option value="bank">Banka</option>
@@ -187,13 +194,17 @@ export function PaymentsPage() {
             </div>
             <div>
               <Label>Externí ID (volitelné)</Label>
-              <Input value={newForm.externalId} onChange={e => setNewForm({ ...newForm, externalId: e.target.value })} />
+              <Input value={newForm.externalId} onChange={e => setNewField({ externalId: e.target.value })} />
             </div>
-            {newErr && <p className="text-sm text-destructive">{newErr}</p>}
+            <DuplicatePaymentError
+              error={newErr}
+              pending={createPayment.isPending}
+              onForce={() => createPayment.mutate({ allowDuplicate: true })}
+            />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setNewOpen(false)}>Zrušit</Button>
               <Button
-                onClick={() => createPayment.mutate()}
+                onClick={() => createPayment.mutate({})}
                 disabled={!newForm.amount || !newForm.paidAt || createPayment.isPending}
               >
                 Vytvořit

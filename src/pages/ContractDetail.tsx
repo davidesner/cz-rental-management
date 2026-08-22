@@ -12,6 +12,7 @@ import { formatSymbols } from '@/lib/symbols';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { DuplicatePaymentError } from '@/components/DuplicatePaymentError';
 import { PairingCard } from './contract/PairingCard';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -591,10 +592,14 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
     description: '',
     note: '',
   });
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<unknown>(null);
+  // Every field edit clears err (see setField below) — a corrected amount can
+  // never silently carry forward a stale "yes, duplicate" decision from a
+  // previous submission of this dialog.
+  const setField = (patch: Partial<typeof form>) => { setForm(f => ({ ...f, ...patch })); setErr(null); };
 
   const create = useMutation({
-    mutationFn: () => api.post<{ payment: Payment }>('/api/payments', {
+    mutationFn: (vars?: { allowDuplicate?: boolean }) => api.post<{ payment: Payment }>('/api/payments', {
       contractId: fixedContractId,
       amount: Math.round(parseFloat(form.amount.replace(',', '.')) * 100),
       paidAt: form.paidAt,
@@ -604,9 +609,10 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
       externalId: form.externalId || null,
       description: form.description || null,
       note: form.note || null,
+      allowDuplicate: vars?.allowDuplicate,
     }),
     onSuccess: () => { onCreated(); onClose(); },
-    onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setErr(e),
   });
 
   return (
@@ -615,26 +621,26 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
         <h2 className="text-xl font-semibold">Nová platba</h2>
         <div>
           <Label>Částka (Kč)</Label>
-          <Input type="text" placeholder="0.00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+          <Input type="text" placeholder="0.00" value={form.amount} onChange={e => setField({ amount: e.target.value })} />
         </div>
         <div>
           <Label>Zaplaceno dne</Label>
-          <Input type="date" value={form.paidAt} onChange={e => setForm({ ...form, paidAt: e.target.value })} />
+          <Input type="date" value={form.paidAt} onChange={e => setField({ paidAt: e.target.value })} />
         </div>
         <div>
           <Label>Protistrana (volitelné)</Label>
-          <Input value={form.counterparty} onChange={e => setForm({ ...form, counterparty: e.target.value })} />
+          <Input value={form.counterparty} onChange={e => setField({ counterparty: e.target.value })} />
         </div>
         <div>
           <Label>Číslo účtu protistrany (volitelné)</Label>
-          <Input value={form.counterpartyAccount} onChange={e => setForm({ ...form, counterpartyAccount: e.target.value })} />
+          <Input value={form.counterpartyAccount} onChange={e => setField({ counterpartyAccount: e.target.value })} />
         </div>
         <div>
           <Label>Zdroj</Label>
           <select
             className={SELECT_CLS}
             value={form.source}
-            onChange={e => setForm({ ...form, source: e.target.value as 'manual' | 'bank' })}
+            onChange={e => setField({ source: e.target.value as 'manual' | 'bank' })}
           >
             <option value="manual">Ručně</option>
             <option value="bank">Banka</option>
@@ -642,21 +648,25 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
         </div>
         <div>
           <Label>Externí ID (volitelné)</Label>
-          <Input value={form.externalId} onChange={e => setForm({ ...form, externalId: e.target.value })} />
+          <Input value={form.externalId} onChange={e => setField({ externalId: e.target.value })} />
         </div>
         <div>
           <Label>Popis (volitelné)</Label>
-          <Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+          <Input value={form.description} onChange={e => setField({ description: e.target.value })} />
         </div>
         <div>
           <Label>Poznámka (volitelné)</Label>
-          <Input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
+          <Input value={form.note} onChange={e => setField({ note: e.target.value })} />
         </div>
-        {err && <p className="text-sm text-destructive">{err}</p>}
+        <DuplicatePaymentError
+          error={err}
+          pending={create.isPending}
+          onForce={() => create.mutate({ allowDuplicate: true })}
+        />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Zrušit</Button>
           <Button
-            onClick={() => create.mutate()}
+            onClick={() => create.mutate({})}
             disabled={!form.amount || !form.paidAt || create.isPending}
           >
             Vytvořit

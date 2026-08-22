@@ -44,6 +44,10 @@ const RecordPaymentsBatchInput = z.object({
 const AssignPaymentInput = z.object({
   id: z.string().describe('Payment ID'),
   contractId: z.string().nullable().describe('Contract ID to assign to, or null to unassign'),
+  allowDuplicate: z.boolean().optional().describe(
+    'Force assigning this payment onto a contract that already has a payment with the same amount and date. '
+    + 'Set this ONLY after confirming with the user that it really is a second, separate transfer — '
+    + 'never to make an error go away.'),
 });
 
 const UpdatePaymentInput = z.object({
@@ -59,6 +63,10 @@ const UpdatePaymentInput = z.object({
   statementRef: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
+  allowDuplicate: z.boolean().optional().describe(
+    'Force an edit (amount/date/contract) that would otherwise collide with an existing payment on the same '
+    + 'contract, amount and date. Set this ONLY after confirming with the user that it really is a second, '
+    + 'separate transfer — never to make an error go away.'),
 });
 
 const DeletePaymentInput = z.object({
@@ -92,8 +100,8 @@ export async function recordPaymentsBatch(client: RentalApiClient, args: z.infer
 }
 
 export async function assignPayment(client: RentalApiClient, args: z.infer<typeof AssignPaymentInput>) {
-  const { id, contractId } = args;
-  const data = await client.patch<{ payment: unknown }>(`/api/payments/${id}/assign`, { contractId });
+  const { id, contractId, allowDuplicate } = args;
+  const data = await client.patch<{ payment: unknown }>(`/api/payments/${id}/assign`, { contractId, allowDuplicate });
   return data.payment;
 }
 
@@ -146,14 +154,18 @@ export function addPaymentTools(server: FastMCP, client: RentalApiClient) {
 
   server.addTool({
     name: 'payments_assign',
-    description: 'Assign or unassign a payment to/from a contract.',
+    description: 'Assign or unassign a payment to/from a contract. Assigning (not unassigning) is refused with a '
+      + 'conflict if the target contract already has a payment with this amount and date. Report the conflict to '
+      + 'the user; only retry with allowDuplicate once they confirm it is a genuinely separate transfer.',
     parameters: AssignPaymentInput,
     execute: async (args) => JSON.stringify(await assignPayment(client, args), null, 2),
   });
 
   server.addTool({
     name: 'payments_update',
-    description: 'Update payment fields (amount, date, counterparty, note, etc.).',
+    description: 'Update payment fields (amount, date, counterparty, note, etc.). Changing contractId/amount/paidAt '
+      + 'into a combination that collides with another existing payment is refused with a conflict. Report the '
+      + 'conflict to the user; only retry with allowDuplicate once they confirm it is a genuinely separate transfer.',
     parameters: UpdatePaymentInput,
     execute: async (args) => JSON.stringify(await updatePayment(client, args), null, 2),
   });

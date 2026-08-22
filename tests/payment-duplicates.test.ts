@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createId } from '@paralleldrive/cuid2';
 import { freshDb } from './helpers/db.js';
 import { organization, property, tenant, contract, payment } from '../core/db/schema.js';
-import { recordPayment, recordPaymentsBatch } from '../core/services/payment.js';
+import { recordPayment, recordPaymentsBatch, assignPaymentToContract, updatePayment } from '../core/services/payment.js';
 
 async function seed() {
   const { db, client } = await freshDb();
@@ -15,6 +15,21 @@ async function seed() {
   const contractId = createId();
   await db.insert(contract).values({ id: contractId, orgId, propertyId, tenantId, startDate: '2024-09-01' });
   return { db, client, orgId, propertyId, contractId };
+}
+
+// Second contract on the same property, for the assign-onto-a-collision tests —
+// assignPaymentToContract checks the TARGET contract's existing payments, so
+// exercising it needs a payment sitting unassigned (or on a third contract)
+// plus a second contract that already holds the colliding money.
+async function seedTwoContracts() {
+  const base = await seed();
+  const tenantId2 = createId();
+  await base.db.insert(tenant).values({ id: tenantId2, orgId: base.orgId, name: 'T2' });
+  const contractId2 = createId();
+  await base.db.insert(contract).values({
+    id: contractId2, orgId: base.orgId, propertyId: base.propertyId, tenantId: tenantId2, startDate: '2024-09-01',
+  });
+  return { ...base, contractId2 };
 }
 
 const MONEY = { amount: 3_850_000, paidAt: '2026-08-20', source: 'bank' as const };
@@ -232,6 +247,101 @@ describe('payment duplicate detection', () => {
 
       expect(result.created).toHaveLength(1);
       expect(result.duplicates).toHaveLength(0);
+      await client.close();
+    });
+  });
+
+  // Gap 2: the guard is insert-only no more. assignPaymentToContract and
+  // updatePayment mutate an EXISTING row, so the fingerprint search must
+  // exclude that row itself — otherwise every edit would collide with its own
+  // fingerprint and the app would refuse every edit.
+  describe('assignPaymentToContract duplicate detection', () => {
+    it('refuses assigning an unassigned payment onto a contract that already has the same amount/date, and succeeds with the override', async () => {
+      const { db, client, orgId, propertyId, contractId, contractId2 } = await seedTwoContracts();
+      // contractId2 already has this money.
+      await recordPayment(db, orgId, [propertyId], { contractId: contractId2, ...MONEY, externalId: 'a' });
+      // An unassigned payment with the same amount/date.
+      const incoming = await recordPayment(db, orgId, [propertyId], { contractId: null, ...MONEY, externalId: 'b' });
+
+      await expect(assignPaymentToContract(db, orgId, incoming.id, [propertyId], contractId2))
+        .rejects.toMatchObject({ kind: 'conflict' });
+
+      const assigned = await assignPaymentToContract(db, orgId, incoming.id, [propertyId], contractId2, true);
+      expect(assigned.contractId).toBe(contractId2);
+      await client.close();
+    });
+
+    it('never refuses unassigning (contractId: null)', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seedTwoContracts();
+      const p = await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'a' });
+
+      const unassigned = await assignPaymentToContract(db, orgId, p.id, [propertyId], null);
+      expect(unassigned.contractId).toBeNull();
+      await client.close();
+    });
+
+    it('does not self-conflict when reassigning a payment to the contract it is already on', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seedTwoContracts();
+      const p = await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'a' });
+
+      // Same contract, same amount/date as itself — must exclude its own row.
+      const again = await assignPaymentToContract(db, orgId, p.id, [propertyId], contractId);
+      expect(again.contractId).toBe(contractId);
+      await client.close();
+    });
+  });
+
+  describe('updatePayment duplicate detection', () => {
+    it('refuses editing amount into a collision, but not editing only note', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seedTwoContracts();
+      await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, amount: 5_000_00, externalId: 'a' });
+      const p = await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, amount: 3_000_00, externalId: 'b' });
+
+      // Editing only note/description must not pay for a query and must not fail.
+      const noted = await updatePayment(db, orgId, p.id, [propertyId], { note: 'poznámka' });
+      expect(noted.note).toBe('poznámka');
+
+      await expect(updatePayment(db, orgId, p.id, [propertyId], { amount: 5_000_00 }))
+        .rejects.toMatchObject({ kind: 'conflict' });
+
+      const forced = await updatePayment(db, orgId, p.id, [propertyId], { amount: 5_000_00, allowDuplicate: true });
+      expect(forced.amount).toBe(5_000_00);
+      await client.close();
+    });
+
+    it('refuses editing paidAt into a collision', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seedTwoContracts();
+      await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, paidAt: '2026-08-01', externalId: 'a' });
+      const p = await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, paidAt: '2026-08-02', externalId: 'b' });
+
+      await expect(updatePayment(db, orgId, p.id, [propertyId], { paidAt: '2026-08-01' }))
+        .rejects.toMatchObject({ kind: 'conflict' });
+      await client.close();
+    });
+
+    it('skips the check when the merged contractId is null (unassigned payment)', async () => {
+      const { db, client, orgId, propertyId } = await seedTwoContracts();
+      const p = await recordPayment(db, orgId, [propertyId], { contractId: null, ...MONEY, externalId: 'a' });
+      await recordPayment(db, orgId, [propertyId], { contractId: null, ...MONEY, externalId: 'b' });
+
+      // Editing amount on an unassigned payment: no contract to fingerprint
+      // against, so this must not throw even though another unassigned row
+      // shares the same amount/date.
+      const edited = await updatePayment(db, orgId, p.id, [propertyId], { amount: MONEY.amount });
+      expect(edited.id).toBe(p.id);
+      await client.close();
+    });
+
+    // THE self-exclusion regression test: without `excludeId`, this no-op patch
+    // would find the row's OWN fingerprint and refuse itself, making every edit
+    // impossible. If `excludeId` is ever dropped from findPaymentByFingerprint
+    // (or not threaded through here), this test fails.
+    it('does not self-conflict on a no-op patch setting amount to the value it already has', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seedTwoContracts();
+      const p = await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'a' });
+
+      const result = await updatePayment(db, orgId, p.id, [propertyId], { amount: MONEY.amount });
+      expect(result.amount).toBe(MONEY.amount);
       await client.close();
     });
   });

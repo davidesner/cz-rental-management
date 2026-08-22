@@ -1,5 +1,5 @@
 import { createId } from '@paralleldrive/cuid2';
-import { and, eq, isNull, gte, lte, desc, inArray } from 'drizzle-orm';
+import { and, eq, isNull, ne, gte, lte, desc, inArray } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
 import { payment, contract, property, tenant } from '../db/schema.js';
 import { AppError } from '../errors.js';
@@ -90,9 +90,15 @@ async function verifyContractInOrgIfSet(db: DB, orgId: string, contractId: strin
  *   would produce a different key and slip past the guard. Symbols are selected
  *   only to enrich the conflict message (see "differing vs does not stop the
  *   duplicate guard" test in payment-duplicates.test.ts).
+ *
+ * `excludeId` exists for the mutate paths (`assignPaymentToContract`,
+ * `updatePayment`): they change a row that ALREADY EXISTS, so without excluding
+ * it, every such row would collide with its own fingerprint and the app would
+ * refuse every edit. The insert path (`recordPayment` / `recordPaymentsBatch`)
+ * never passes it — there is no existing row to exclude yet.
  */
 export async function findPaymentByFingerprint(
-  db: DB, orgId: string, contractId: string, amount: number, paidAt: string,
+  db: DB, orgId: string, contractId: string, amount: number, paidAt: string, excludeId?: string,
 ): Promise<{ id: string; source: 'bank' | 'manual'; vs: string | null } | null> {
   // `vs` is selected for the conflict MESSAGE only, never for the match: report
   // everything you know, match on what is always present.
@@ -101,6 +107,7 @@ export async function findPaymentByFingerprint(
     eq(payment.contractId, contractId),
     eq(payment.amount, amount),
     eq(payment.paidAt, paidAt),
+    ...(excludeId ? [ne(payment.id, excludeId)] : []),
   ));
   return row ?? null;
 }
@@ -114,11 +121,20 @@ async function findDuplicateFor(db: DB, orgId: string, input: PaymentInput) {
 /**
  * Says WHICH case this is, so the asymmetry with the externalId branch reads as
  * deliberate at the call site rather than as an inconsistency.
+ *
+ * Takes just `{ amount, paidAt }` rather than a full `PaymentInput` — it is
+ * shared by the insert path (recordPayment) and the two mutate paths
+ * (assignPaymentToContract, updatePayment), and only those two fields are ever
+ * needed to word the message. The wording itself ("je zapsaná platba… je třeba
+ * jej zaznamenat explicitně") doesn't assume an insert: it says a payment with
+ * that money is already on record and that a genuine second transfer needs an
+ * explicit decision — true whether the caller is inserting, assigning or
+ * editing, since `allowDuplicate` is that explicit decision in all three.
  */
-function duplicateMessage(hit: { id: string; source: string; vs: string | null }, input: PaymentInput): string {
+function duplicateMessage(hit: { id: string; source: string; vs: string | null }, money: { amount: number; paidAt: string }): string {
   const vs = hit.vs === null ? '' : `, VS ${hit.vs}`;
-  return `na tomto pronájmu už je zapsaná platba ${(input.amount / 100).toLocaleString('cs-CZ')} Kč`
-    + ` k datu ${input.paidAt} (${hit.id}, zdroj ${hit.source}${vs}) — shoda podle pronájmu, částky a data,`
+  return `na tomto pronájmu už je zapsaná platba ${(money.amount / 100).toLocaleString('cs-CZ')} Kč`
+    + ` k datu ${money.paidAt} (${hit.id}, zdroj ${hit.source}${vs}) — shoda podle pronájmu, částky a data,`
     + ' ne podle externalId, takže jde o jiný záznam o stejných penězích.'
     + ' Pokud je to skutečně druhý samostatný převod, je třeba jej zaznamenat explicitně.';
 }
@@ -352,9 +368,29 @@ export async function getPayment(db: DB, orgId: string, id: string, allowedPrope
   return rest;
 }
 
-export async function assignPaymentToContract(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, contractId: string | null): Promise<PaymentRow> {
-  await getPayment(db, orgId, id, allowedPropertyIds);
+/**
+ * Assign (or unassign, `contractId: null`) an existing payment to a contract.
+ *
+ * This is a MUTATE path, not an insert: the payment row already exists, so a
+ * fingerprint collision must exclude the row itself (see
+ * `findPaymentByFingerprint`'s `excludeId`) — otherwise assigning a payment
+ * onto a contract would always "collide" with the very row being assigned once
+ * it already carries that amount/date... except it doesn't yet at that point,
+ * so the real risk is colliding with a DIFFERENT existing payment already on
+ * the target contract with the same amount/date. Unassigning (`contractId:
+ * null`) never has anything to collide with, so it always skips the check —
+ * consistent with the insert path treating unassigned payments as
+ * unfingerprintable.
+ */
+export async function assignPaymentToContract(
+  db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, contractId: string | null, allowDuplicate = false,
+): Promise<PaymentRow> {
+  const current = await getPayment(db, orgId, id, allowedPropertyIds);
   await verifyContractInOrgIfSet(db, orgId, contractId, allowedPropertyIds);
+  if (contractId !== null && !allowDuplicate) {
+    const duplicate = await findPaymentByFingerprint(db, orgId, contractId, current.amount, current.paidAt, id);
+    if (duplicate) throw new AppError('conflict', duplicateMessage(duplicate, current));
+  }
   await db.update(payment).set({ contractId }).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
   // Access already verified above (existing payment + new contractId), and
   // .update().returning() wouldn't include the joined names — re-fetch
@@ -362,9 +398,30 @@ export async function assignPaymentToContract(db: DB, orgId: string, id: string,
   return getPayment(db, orgId, id, allowedPropertyIds);
 }
 
-export async function updatePayment(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, patch: Partial<Omit<PaymentInput, 'externalId' | 'allowDuplicate'>>): Promise<PaymentRow> {
-  await getPayment(db, orgId, id, allowedPropertyIds);
+export async function updatePayment(
+  db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null,
+  patch: Partial<Omit<PaymentInput, 'externalId'>>,
+): Promise<PaymentRow> {
+  const current = await getPayment(db, orgId, id, allowedPropertyIds);
   if (patch.contractId !== undefined) await verifyContractInOrgIfSet(db, orgId, patch.contractId, allowedPropertyIds);
+  // Only a patch that actually touches contractId/amount/paidAt can produce a
+  // NEW fingerprint — one touching only note/description must not pay for a
+  // query and must not be able to fail. Build the fingerprint from the MERGED
+  // values (patch where present, current row otherwise): checking the patch
+  // alone would miss collisions on fields the patch didn't touch, and would
+  // invent false ones by comparing a partial patch (e.g. amount only) against
+  // nothing.
+  if (!patch.allowDuplicate && (patch.contractId !== undefined || patch.amount !== undefined || patch.paidAt !== undefined)) {
+    const mergedContractId = patch.contractId !== undefined ? patch.contractId : current.contractId;
+    const mergedAmount = patch.amount !== undefined ? patch.amount : current.amount;
+    const mergedPaidAt = patch.paidAt !== undefined ? patch.paidAt : current.paidAt;
+    // An unassigned payment has no contract to fingerprint against — same rule
+    // as the insert path.
+    if (mergedContractId !== null) {
+      const duplicate = await findPaymentByFingerprint(db, orgId, mergedContractId, mergedAmount, mergedPaidAt, id);
+      if (duplicate) throw new AppError('conflict', duplicateMessage(duplicate, { amount: mergedAmount, paidAt: mergedPaidAt }));
+    }
+  }
   const cleaned: Record<string, unknown> = {};
   for (const key of ['contractId', 'amount', 'paidAt', 'counterparty', 'counterpartyAccount', 'vs', 'ks', 'ss', 'statementRef', 'description', 'note'] as const) {
     if ((patch as any)[key] !== undefined) cleaned[key] = (patch as any)[key];

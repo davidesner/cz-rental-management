@@ -381,13 +381,19 @@ export async function getPayment(db: DB, orgId: string, id: string, allowedPrope
  * null`) never has anything to collide with, so it always skips the check —
  * consistent with the insert path treating unassigned payments as
  * unfingerprintable.
+ *
+ * Also skips when `contractId` equals the row's OWN current `contractId`:
+ * that's a no-op, not a move, and must not go looking for siblings. Without
+ * this, re-confirming an assignment that already legitimately coexists with a
+ * duplicate (created earlier via `allowDuplicate`) would re-trigger the
+ * conflict on an action that changes nothing.
  */
 export async function assignPaymentToContract(
   db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, contractId: string | null, allowDuplicate = false,
 ): Promise<PaymentRow> {
   const current = await getPayment(db, orgId, id, allowedPropertyIds);
   await verifyContractInOrgIfSet(db, orgId, contractId, allowedPropertyIds);
-  if (contractId !== null && !allowDuplicate) {
+  if (contractId !== null && contractId !== current.contractId && !allowDuplicate) {
     const duplicate = await findPaymentByFingerprint(db, orgId, contractId, current.amount, current.paidAt, id);
     if (duplicate) throw new AppError('conflict', duplicateMessage(duplicate, current));
   }
@@ -415,9 +421,18 @@ export async function updatePayment(
     const mergedContractId = patch.contractId !== undefined ? patch.contractId : current.contractId;
     const mergedAmount = patch.amount !== undefined ? patch.amount : current.amount;
     const mergedPaidAt = patch.paidAt !== undefined ? patch.paidAt : current.paidAt;
+    // A genuine no-op — the merged values equal the row's OWN current values —
+    // must never go looking for siblings, regardless of which fields the patch
+    // nominally mentioned (e.g. `{ amount: <its current amount> }`). Skipping
+    // the query here, before it would run, is the point: this is what lets a
+    // patch that legitimately coexists with a duplicate (via `allowDuplicate`
+    // earlier) be re-sent as a no-op without re-triggering the conflict.
+    const isNoOp = mergedContractId === current.contractId
+      && mergedAmount === current.amount
+      && mergedPaidAt === current.paidAt;
     // An unassigned payment has no contract to fingerprint against — same rule
     // as the insert path.
-    if (mergedContractId !== null) {
+    if (!isNoOp && mergedContractId !== null) {
       const duplicate = await findPaymentByFingerprint(db, orgId, mergedContractId, mergedAmount, mergedPaidAt, id);
       if (duplicate) throw new AppError('conflict', duplicateMessage(duplicate, { amount: mergedAmount, paidAt: mergedPaidAt }));
     }

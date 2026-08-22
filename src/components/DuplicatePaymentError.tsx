@@ -5,6 +5,13 @@ interface DuplicatePaymentErrorProps {
   error: unknown;
   onForce: () => void;
   pending?: boolean;
+  /**
+   * Verb on the override button. Defaults to "Přesto zapsat" for the two
+   * create dialogs (ContractDetail, Payments' "Nová platba"); the assign
+   * dialog (Payments' "Přiřadit platbu") passes "Přesto přiřadit" since it
+   * isn't writing a new row, it's assigning an existing one.
+   */
+  label?: string;
 }
 
 /**
@@ -26,7 +33,7 @@ interface DuplicatePaymentErrorProps {
  * silently carry forward a stale "yes, duplicate" decision from a previous
  * submission.
  */
-export function DuplicatePaymentError({ error, onForce, pending }: DuplicatePaymentErrorProps) {
+export function DuplicatePaymentError({ error, onForce, pending, label = 'Přesto zapsat' }: DuplicatePaymentErrorProps) {
   if (!error) return null;
   const isDuplicateConflict = error instanceof ApiError && error.status === 409;
   return (
@@ -34,7 +41,7 @@ export function DuplicatePaymentError({ error, onForce, pending }: DuplicatePaym
       <p className="text-sm text-destructive">{apiErrorMessage(error)}</p>
       {isDuplicateConflict && (
         <Button type="button" variant="outline" size="sm" onClick={onForce} disabled={pending}>
-          Přesto zapsat
+          {label}
         </Button>
       )}
     </div>

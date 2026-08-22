@@ -236,6 +236,7 @@ export function PaymentsPage() {
               error={assignErr}
               pending={assignMutation.isPending}
               onForce={() => assignMutation.mutate({ allowDuplicate: true })}
+              label="Přesto přiřadit"
             />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setAssignPayment(null)} disabled={assignMutation.isPending}>Zrušit</Button>

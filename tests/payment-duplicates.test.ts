@@ -345,4 +345,59 @@ describe('payment duplicate detection', () => {
       await client.close();
     });
   });
+
+  // The sticky false conflict: once two payments legitimately coexist on one
+  // contract with the same amount/date (via `allowDuplicate`), a no-op action
+  // on EITHER one must not re-trigger the guard — self-exclusion alone isn't
+  // enough, because the OTHER sibling is a real fingerprint match and isn't
+  // excluded. The fix is a no-op short-circuit that runs BEFORE the fingerprint
+  // query, not just a suppressed throw after it.
+  describe('no-op short-circuit on a legitimately coexisting pair', () => {
+    async function seedCoexistingPair() {
+      const base = await seed();
+      const a = await recordPayment(base.db, base.orgId, [base.propertyId], { contractId: base.contractId, ...MONEY, externalId: 'a' });
+      const b = await recordPayment(base.db, base.orgId, [base.propertyId], {
+        contractId: base.contractId, ...MONEY, externalId: 'b', allowDuplicate: true,
+      });
+      return { ...base, a, b };
+    }
+
+    it('assigning either sibling to the contract it is already on succeeds (the reported bug)', async () => {
+      const { db, client, orgId, propertyId, contractId, a, b } = await seedCoexistingPair();
+
+      const reassignedA = await assignPaymentToContract(db, orgId, a.id, [propertyId], contractId);
+      expect(reassignedA.contractId).toBe(contractId);
+
+      const reassignedB = await assignPaymentToContract(db, orgId, b.id, [propertyId], contractId);
+      expect(reassignedB.contractId).toBe(contractId);
+
+      await client.close();
+    });
+
+    it('updating either sibling with its own unchanged amount succeeds', async () => {
+      const { db, client, orgId, propertyId, a, b } = await seedCoexistingPair();
+
+      const updatedA = await updatePayment(db, orgId, a.id, [propertyId], { amount: a.amount });
+      expect(updatedA.amount).toBe(a.amount);
+
+      const updatedB = await updatePayment(db, orgId, b.id, [propertyId], { amount: b.amount });
+      expect(updatedB.amount).toBe(b.amount);
+
+      await client.close();
+    });
+
+    // Proves the no-op short-circuit did NOT disable the guard: a genuinely
+    // different amount that collides with a THIRD payment must still conflict.
+    it('updating a sibling to a genuinely different amount that collides with a third payment still conflicts', async () => {
+      const { db, client, orgId, propertyId, contractId, a } = await seedCoexistingPair();
+      const third = await recordPayment(db, orgId, [propertyId], {
+        contractId, ...MONEY, amount: 1_000_00, externalId: 'c',
+      });
+
+      await expect(updatePayment(db, orgId, a.id, [propertyId], { amount: third.amount }))
+        .rejects.toMatchObject({ kind: 'conflict' });
+
+      await client.close();
+    });
+  });
 });

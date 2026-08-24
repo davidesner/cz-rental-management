@@ -157,7 +157,14 @@ export function bankRoutes() {
   // ── Per-contract rule (normal property access) ────────────────────────────
   r.get('/contracts/:id/payment-rule', async (c) => {
     const ctx = getCtx(c); requireOrg(ctx);
-    return c.json(await getPaymentRule(c.get('db'), ctx.orgId, c.req.param('id'), ctx.allowedPropertyIds));
+    // requireOrg, not requireOwner: a member with access to the property may
+    // configure pairing for their own contract. But the health MESSAGE is
+    // org-wide bank-integration detail, so only an owner gets it — see
+    // computePairingHealth.
+    return c.json(await getPaymentRule(
+      c.get('db'), ctx.orgId, c.req.param('id'), ctx.allowedPropertyIds,
+      { isOwner: ctx.role === 'owner' },
+    ));
   });
 
   r.put('/contracts/:id/payment-rule', async (c) => {

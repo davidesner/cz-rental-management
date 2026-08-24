@@ -186,6 +186,49 @@ describe('payment rule routes', () => {
     await client.close();
   });
 
+  // The health message is org-wide bank-integration detail — verbatim
+  // lastSyncError, e.g. 'cannot decrypt IMAP password — check
+  // SECRET_ENCRYPTION_KEY (…)'. This route is deliberately NOT owner-only (a
+  // member may configure pairing for a property they can see), so the message
+  // has to be gated separately.
+  it('gives a restricted member the failure state but not the failure text', async () => {
+    const { db, client, app, cookie, property, contract } = await bootstrap();
+    await app.request('/api/bank-integrations', { method: 'POST', headers: json(cookie), body: JSON.stringify(INTEGRATION) });
+    await app.request(`/api/contracts/${contract.id}/payment-rule`, {
+      method: 'PUT', headers: json(cookie), body: JSON.stringify({ vs: '2026008' }),
+    });
+    const secret = 'cannot decrypt IMAP password — check SECRET_ENCRYPTION_KEY (unsupported state or unable to authenticate data)';
+    await db.update(bankIntegration).set({ lastSyncStatus: 'error', lastSyncError: secret, lastSyncAt: new Date() });
+
+    const { userId } = await registerUser(app, 'member@example.com', 'password123', 'Member');
+    const login = await app.request('/api/auth/sign-in/email', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'member@example.com', password: 'password123' }),
+    });
+    const memberCookie = login.headers.get('set-cookie') ?? '';
+    const [org] = await db.select().from(membership);
+    const memberMembership = createId();
+    await db.insert(membership).values({ id: memberMembership, userId, orgId: org!.orgId, role: 'member' });
+    await db.insert(propertyAccess).values({ membershipId: memberMembership, propertyId: property.id });
+    // x-org-id, or the request lands in the member's own personal org where
+    // signup made them owner — see the integration-routes test above.
+    const memberHeaders = { cookie: memberCookie, 'x-org-id': org!.orgId };
+
+    const asMember = await app.request(`/api/contracts/${contract.id}/payment-rule`, { headers: memberHeaders });
+    expect(asMember.status).toBe(200);
+    const memberText = await asMember.clone().text();
+    expect(memberText).not.toContain('SECRET_ENCRYPTION_KEY');
+    const memberBody = await asMember.json() as any;
+    // Still tells them pairing is broken — just not why.
+    expect(memberBody.health.state).toBe('chyba');
+    expect(memberBody.health.message).toBeNull();
+    expect(memberBody.rule.vs).toBe('2026008');
+
+    const asOwner = await (await app.request(`/api/contracts/${contract.id}/payment-rule`, { headers: { cookie } })).json() as any;
+    expect(asOwner.health.message).toBe(secret);
+    await client.close();
+  });
+
   // Accepted before this was fixed: `hasAny` counted any non-null amount bound,
   // so a one-sided band with no identifying criterion passed validation and then
   // matched every transaction in the org — from a route a property-restricted

@@ -40,10 +40,22 @@ interface HealthIntegration {
  *
  * Pure and derived on read — storing it would let it go stale the moment a sync
  * ran.
+ *
+ * `includeMessage` is the OWNER gate. The integrations queried below are
+ * org-wide and unscoped by owner (a failure is not attributable to a property,
+ * so allowedPropertyIds cannot express the right answer — the same reasoning
+ * documented on requireOwner), and `lastSyncError` is a verbatim operational
+ * string: `AUTHENTICATIONFAILED`, or `cannot decrypt IMAP password — check
+ * SECRET_ENCRYPTION_KEY (…)`. No credential is echoed, but a property-restricted
+ * member has no business reading the org's bank-infrastructure failures.
+ *
+ * `state` and `lastSyncAt` stay visible to everyone: a member editing the rule
+ * must still be able to see THAT pairing is broken, just not why.
  */
 export function computePairingHealth(
   rule: { active: boolean } | null,
   integrations: HealthIntegration[],
+  opts: { includeMessage: boolean },
 ): PairingHealth {
   const live = integrations.filter((i) => i.active);
   if (rule === null || !rule.active || live.length === 0) {
@@ -53,7 +65,11 @@ export function computePairingHealth(
   // switched it off deliberately.
   const failing = live.find((i) => i.lastSyncStatus === 'error');
   if (failing) {
-    return { state: 'chyba', message: failing.lastSyncError, lastSyncAt: failing.lastSyncAt };
+    return {
+      state: 'chyba',
+      message: opts.includeMessage ? failing.lastSyncError : null,
+      lastSyncAt: failing.lastSyncAt,
+    };
   }
   const latest = live
     .map((i) => i.lastSyncAt)
@@ -71,12 +87,21 @@ async function assertContract(db: DB, orgId: string, contractId: string, allowed
   return c;
 }
 
-export async function getPaymentRule(
-  db: DB, orgId: string, contractId: string, allowedPropertyIds: string[] | null,
-): Promise<{ rule: PaymentRuleRow | null; health: PairingHealth }> {
-  await assertContract(db, orgId, contractId, allowedPropertyIds);
+async function loadRule(db: DB, orgId: string, contractId: string): Promise<PaymentRuleRow | null> {
   const [rule] = await db.select().from(paymentMatchingRule)
     .where(and(eq(paymentMatchingRule.orgId, orgId), eq(paymentMatchingRule.contractId, contractId)));
+  return (rule as PaymentRuleRow | undefined) ?? null;
+}
+
+export async function getPaymentRule(
+  db: DB, orgId: string, contractId: string, allowedPropertyIds: string[] | null,
+  // Callers must state the role rather than inherit a default: the health
+  // message is org-wide bank-infrastructure detail, and a forgotten argument
+  // would silently hand it to a restricted member.
+  opts: { isOwner: boolean },
+): Promise<{ rule: PaymentRuleRow | null; health: PairingHealth }> {
+  await assertContract(db, orgId, contractId, allowedPropertyIds);
+  const rule = await loadRule(db, orgId, contractId);
   const integrations = await db.select({
     active: bankIntegration.active,
     lastSyncStatus: bankIntegration.lastSyncStatus,
@@ -84,8 +109,8 @@ export async function getPaymentRule(
     lastSyncAt: bankIntegration.lastSyncAt,
   }).from(bankIntegration).where(eq(bankIntegration.orgId, orgId));
   return {
-    rule: (rule as PaymentRuleRow | undefined) ?? null,
-    health: computePairingHealth(rule ?? null, integrations),
+    rule,
+    health: computePairingHealth(rule, integrations, { includeMessage: opts.isOwner }),
   };
 }
 
@@ -159,8 +184,10 @@ export async function upsertPaymentRule(
       id: createId(), orgId, contractId, ...criteria, active: input.active ?? true,
     });
   }
-  const { rule } = await getPaymentRule(db, orgId, contractId, allowedPropertyIds);
-  return rule!;
+  // loadRule, not getPaymentRule: the caller wants the stored row, and going
+  // through getPaymentRule would compute a health object nobody reads — forcing
+  // this write path to answer an owner-visibility question it has no stake in.
+  return (await loadRule(db, orgId, contractId))!;
 }
 
 export async function deletePaymentRule(

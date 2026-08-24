@@ -94,6 +94,15 @@ export function nextSearchRange(
 /**
  * The cursor to persist after a fetch.
  *
+ * `lastProcessedUid` is the highest UID the caller reached a DECISION on —
+ * fetched successfully OR deliberately skipped (oversize, vanished body) —
+ * not merely the highest UID it fetched. A deliberate skip is still a
+ * decision never to import that message, so the cursor must advance past it
+ * or the next run re-selects the same UID and skips it again forever (see
+ * the oversize/missing-body branches in `fetchMessagesOverImap`). A UID never
+ * reached because the run's deadline cut it short is NOT processed and must
+ * NOT be folded into `lastProcessedUid` — it needs to be retried.
+ *
  * The high-water mark may only be carried forward WITHIN the same uidValidity
  * generation. Pairing the server's NEW uidValidity with the OLD generation's
  * lastUid produces a cursor that `nextSearchRange` then calls usable forever,
@@ -110,10 +119,10 @@ export function nextSearchRange(
 export function nextCursor(
   cursor: ImapCursor,
   serverUidValidity: number,
-  messages: RawMessage[],
+  lastProcessedUid: number | null,
 ): ImapCursor {
   const carried = cursorUsable(cursor, serverUidValidity) ? cursor.lastUid : null;
-  const lastUid = messages.length > 0 ? messages[messages.length - 1]!.uid : carried;
+  const lastUid = lastProcessedUid ?? carried;
   return { uidValidity: serverUidValidity, lastUid };
 }
 
@@ -188,6 +197,13 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
     }
 
     const messages: RawMessage[] = [];
+    // The highest UID actually PROCESSED — fetched or deliberately skipped —
+    // as opposed to the highest UID fetched. `selected` is ascending, so this
+    // only ever advances forward through the loop, and a `break` below (the
+    // deadline) leaves it at whatever it was before the cut-short UID, which
+    // is exactly the "not processed, must be retried" behaviour nextCursor's
+    // docblock requires.
+    let lastProcessedUid: number | null = null;
     for (const uid of selected) {
       if (Date.now() > opts.deadline) break;
       const size = sizes.get(uid);
@@ -196,6 +212,11 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
         // notification could be dropped. The parser would refuse a body this
         // large anyway, so downloading it buys nothing.
         console.warn(`[imap] skipping uid ${uid} in ${cfg.folder}: ${size} bytes exceeds the ${MAX_MESSAGE_BYTES} cap`);
+        // Deliberate skip: we have decided never to import this UID, so it
+        // counts as processed and the cursor must move past it — otherwise
+        // the next run re-selects the same oversized UID and skips it again,
+        // forever, wedging the sync (see nextCursor's docblock).
+        lastProcessedUid = uid;
         continue;
       }
       const msg = await client.fetchOne(String(uid), { source: true }, { uid: true });
@@ -212,14 +233,16 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
         // silently (a server returning no body for a message that still exists),
         // and without a line here that loss would be invisible.
         console.warn(`[imap] skipping uid ${uid} in ${cfg.folder}: no message body returned`);
+        lastProcessedUid = uid;
         continue;
       }
       messages.push({ uid, source: msg.source });
+      lastProcessedUid = uid;
     }
 
     return {
       messages,
-      cursor: nextCursor(cursor, uidValidity, messages),
+      cursor: nextCursor(cursor, uidValidity, lastProcessedUid),
       matchedCount: all.length,
     };
   } finally {

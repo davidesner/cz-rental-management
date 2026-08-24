@@ -33,16 +33,19 @@ describe('nextSearchRange', () => {
   });
 });
 
-const msg = (uid: number) => ({ uid, source: Buffer.alloc(0) });
-
 describe('nextCursor', () => {
-  it('advances to the highest uid it actually fetched', () => {
-    expect(nextCursor({ uidValidity: 111, lastUid: 42 }, 111, [msg(43), msg(47)]))
+  // `nextCursor`'s third argument is the highest UID actually PROCESSED —
+  // fetched or deliberately skipped — not the highest UID in a `messages`
+  // array. See imap-fetch-processed-cursor.test.ts for coverage of the loop
+  // that derives this value, including the deliberate-skip cases that were
+  // the actual bug.
+  it('advances to the highest uid it actually processed', () => {
+    expect(nextCursor({ uidValidity: 111, lastUid: 42 }, 111, 47))
       .toEqual({ uidValidity: 111, lastUid: 47 });
   });
 
-  it('keeps the high-water mark when a quiet run fetched nothing', () => {
-    expect(nextCursor({ uidValidity: 111, lastUid: 42 }, 111, []))
+  it('keeps the high-water mark when a quiet run processed nothing', () => {
+    expect(nextCursor({ uidValidity: 111, lastUid: 42 }, 111, null))
       .toEqual({ uidValidity: 111, lastUid: 42 });
   });
 
@@ -51,18 +54,18 @@ describe('nextCursor', () => {
   // and search oldLastUid+1:* in a mailbox whose UIDs restarted low — so
   // everything at or below the old mark is permanently invisible. And the
   // precondition is ordinary: a rebuild plus any day with no notification.
-  it('drops a stale lastUid when uidValidity changed and nothing was fetched', () => {
-    expect(nextCursor({ uidValidity: 111, lastUid: 42 }, 222, []))
+  it('drops a stale lastUid when uidValidity changed and nothing was processed', () => {
+    expect(nextCursor({ uidValidity: 111, lastUid: 42 }, 222, null))
       .toEqual({ uidValidity: 222, lastUid: null });
   });
 
-  it('takes the new generation\'s own uid when a rebuilt mailbox did return messages', () => {
-    expect(nextCursor({ uidValidity: 111, lastUid: 42 }, 222, [msg(3)]))
+  it('takes the new generation\'s own uid when a rebuilt mailbox did process a message', () => {
+    expect(nextCursor({ uidValidity: 111, lastUid: 42 }, 222, 3))
       .toEqual({ uidValidity: 222, lastUid: 3 });
   });
 
-  it('leaves the cursor unusable after a first run that fetched nothing', () => {
-    const c = nextCursor({ uidValidity: null, lastUid: null }, 111, []);
+  it('leaves the cursor unusable after a first run that processed nothing', () => {
+    const c = nextCursor({ uidValidity: null, lastUid: null }, 111, null);
     expect(c).toEqual({ uidValidity: 111, lastUid: null });
     // Belt and braces: the two functions must agree about the same cursor.
     expect(nextSearchRange(c, 111, FALLBACK).kind).toBe('since');

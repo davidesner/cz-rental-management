@@ -20,8 +20,10 @@ export function fakeImap(messages: Array<{ uid: number; source: Buffer | string 
       .map((m) => ({ uid: m.uid, source: Buffer.isBuffer(m.source) ? m.source : Buffer.from(m.source, 'utf8') }));
     // The REAL cursor derivation, not a re-implementation of it: a fake that
     // computes the cursor its own way cannot catch a regression in the one the
-    // production fetcher uses.
-    return { messages: selected, cursor: nextCursor(cursor, 1, selected), matchedCount: messages.length };
+    // production fetcher uses. This fake never skips a UID, so "processed" and
+    // "fetched" coincide — the last selected UID, if any.
+    const lastProcessedUid = selected.length > 0 ? selected[selected.length - 1]!.uid : null;
+    return { messages: selected, cursor: nextCursor(cursor, 1, lastProcessedUid), matchedCount: messages.length };
   };
   return { fetchMessages, calls };
 }
@@ -48,7 +50,9 @@ export function fakeImapByUser(byUser: Record<string, Array<{ uid: number; sourc
       .sort((a, b) => a.uid - b.uid)
       .slice(0, opts.limit)
       .map((m) => ({ uid: m.uid, source: Buffer.isBuffer(m.source) ? m.source : Buffer.from(m.source, 'utf8') }));
-    return { messages: selected, cursor: nextCursor(cursor, 1, selected), matchedCount: selected.length };
+    // This fake never skips a UID either — see fakeImap's comment above.
+    const lastProcessedUid = selected.length > 0 ? selected[selected.length - 1]!.uid : null;
+    return { messages: selected, cursor: nextCursor(cursor, 1, lastProcessedUid), matchedCount: selected.length };
   };
   return { fetchMessages, calls };
 }

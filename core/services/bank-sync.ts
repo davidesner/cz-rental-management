@@ -17,8 +17,15 @@ export const MAX_MESSAGES_PER_RUN = 25;
 /** Wall-clock allowance for one integration, leaving headroom under maxDuration=60s. */
 const DEFAULT_BUDGET_MS = 45_000;
 
-/** How far back a cursor-less run looks. */
-const FIRST_RUN_LOOKBACK_DAYS = 90;
+/**
+ * How far back a cursor-less run looks.
+ *
+ * Exported so `testBankIntegration` (core/services/bank-integration.ts) can
+ * pass the same number to `probeConnection`'s `sinceDays` — the test button's
+ * count is only meaningful if its window matches what a first sync would
+ * actually import. Deliberately not duplicated as a literal there.
+ */
+export const FIRST_RUN_LOOKBACK_DAYS = 90;
 
 export interface SyncDeps {
   fetchMessages: FetchMessages;

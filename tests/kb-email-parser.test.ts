@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseKbPaymentNotification, extractSpanTokens } from '../core/lib/kb-email-parser.js';
+import { parseKbPaymentNotification, extractSpanTokens, matchesFilters } from '../core/lib/kb-email-parser.js';
 import { loadFixtureEml, loadFixtureHtml, makeEml, setFieldValue } from './helpers/kb-email.js';
 
 const FILTERS = { fromFilter: 'servis@kbinfo.cz', subjectFilter: 'Přijali jsme platbu' };
@@ -196,6 +196,31 @@ describe('kb-email-parser', () => {
     it('flattens nested markup inside a span', () => {
       const tokens = extractSpanTokens('<span><a><font>Z účtu</font></a></span>');
       expect(tokens).toEqual(['Z účtu']);
+    });
+  });
+
+  describe('matchesFilters', () => {
+    const from = '"KB info" <servis@kbinfo.cz>';
+    const subject = 'Přijali jsme platbu na Váš účet';
+
+    it('matches an exact sender and subject', () => {
+      expect(matchesFilters(from, subject, FILTERS)).toBe(true);
+    });
+
+    it('matches a diacritic-stripped subject', () => {
+      expect(matchesFilters(from, 'Prijali jsme platbu na Vas ucet', FILTERS)).toBe(true);
+    });
+
+    it('matches regardless of case', () => {
+      expect(matchesFilters(from.toUpperCase(), subject.toUpperCase(), FILTERS)).toBe(true);
+    });
+
+    it('rejects a non-matching sender', () => {
+      expect(matchesFilters('"Newsletter" <newsletter@example.com>', subject, FILTERS)).toBe(false);
+    });
+
+    it('rejects a non-matching subject', () => {
+      expect(matchesFilters(from, 'Výpis z účtu', FILTERS)).toBe(false);
     });
   });
 });

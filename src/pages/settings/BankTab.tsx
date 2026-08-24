@@ -10,6 +10,10 @@ import { TableError } from '@/components/ui/table-error';
 import { IntegrationDialog, type BankIntegration } from './IntegrationDialog';
 import { TransactionInbox } from './TransactionInbox';
 
+type TestBankIntegrationResult =
+  | { ok: true; mailboxExists: number; fromMatches: number; filterMatches: number; truncated: boolean; sinceDays: number }
+  | { ok: false; error: string };
+
 function fmtDateTime(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('cs-CZ');
@@ -45,7 +49,7 @@ export function BankTab() {
   });
 
   const [dialog, setDialog] = useState<{ open: boolean; target: BankIntegration | null }>({ open: false, target: null });
-  const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'warn' | 'err'; text: string } | null>(null);
 
   // ?action=new opens the create dialog on load — the deep link the MCP
   // bank_integrations_setup_url tool hands to the user.
@@ -63,10 +67,29 @@ export function BankTab() {
   };
 
   const test = useMutation({
-    mutationFn: (id: string) => api.post<{ ok: boolean; mailboxExists?: number; error?: string }>(`/api/bank-integrations/${id}/test`, {}),
-    onSuccess: (r) => setNotice(r.ok
-      ? { kind: 'ok', text: `Připojení funguje. Ve složce je ${r.mailboxExists ?? 0} zpráv.` }
-      : { kind: 'err', text: `Připojení selhalo: ${r.error ?? 'neznámá chyba'}` }),
+    mutationFn: (id: string) => api.post<TestBankIntegrationResult>(`/api/bank-integrations/${id}/test`, {}),
+    onSuccess: (r) => {
+      if (!r.ok) {
+        setNotice({ kind: 'err', text: `Připojení selhalo: ${r.error ?? 'neznámá chyba'}` });
+        return;
+      }
+      // truncated: the from-search matched more messages than we fetched
+      // headers for (capped for speed on a shared mailbox), so filterMatches
+      // is a floor, not an exact count.
+      const truncatedNote = r.truncated ? ' Počet je spodní odhad — zkontrolována byla jen část zpráv od tohoto odesílatele.' : '';
+      setNotice(r.filterMatches > 0
+        ? {
+            kind: 'ok',
+            text: `Připojení funguje. Za posledních ${r.sinceDays} dní odpovídá filtru ${r.filterMatches} z ${r.mailboxExists} zpráv ve složce.${truncatedNote}`,
+          }
+        // A green tick here would be the original defect in a new costume:
+        // the connection works, but the filter catches nothing, so the
+        // integration is still useless.
+        : {
+            kind: 'warn',
+            text: `Připojení funguje, ale za posledních ${r.sinceDays} dní filtru neodpovídá žádná zpráva. Zkontroluj odesílatele a předmět.${truncatedNote}`,
+          });
+    },
     onError: (e: unknown) => setNotice({ kind: 'err', text: apiErrorMessage(e) }),
   });
 
@@ -98,8 +121,16 @@ export function BankTab() {
       </div>
 
       {notice && (
-        <Card className={`p-4 flex items-start justify-between gap-4 ${notice.kind === 'ok' ? 'border-green-500 bg-green-50' : 'border-destructive bg-red-50'}`}>
-          <p className={`text-sm ${notice.kind === 'ok' ? 'text-green-900' : 'text-red-900'}`}>{notice.text}</p>
+        <Card className={`p-4 flex items-start justify-between gap-4 ${
+          notice.kind === 'ok' ? 'border-green-500 bg-green-50'
+          : notice.kind === 'warn' ? 'border-amber-500 bg-amber-100'
+          : 'border-destructive bg-red-50'
+        }`}>
+          <p className={`text-sm ${
+            notice.kind === 'ok' ? 'text-green-900'
+            : notice.kind === 'warn' ? 'text-amber-900'
+            : 'text-red-900'
+          }`}>{notice.text}</p>
           <Button size="sm" variant="outline" onClick={() => setNotice(null)}>Zavřít</Button>
         </Card>
       )}

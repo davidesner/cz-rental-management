@@ -6,7 +6,8 @@
 //
 // Verified working from a Vercel function (fra1, TLSv1.3, ~38 ms to Gmail) —
 // see the risk register in the design spec.
-import { ImapFlow } from 'imapflow';
+import { ImapFlow, type MessageEnvelopeObject } from 'imapflow';
+import { matchesFilters } from './kb-email-parser.js';
 
 export interface ImapConfig {
   host: string;
@@ -163,15 +164,85 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
   }
 };
 
-/** Verify credentials and report the folder's total message count (mailbox.exists). */
+/** What a probe is looking for — separate from `ImapConfig`, which is only
+ *  how to connect. Filters are what the sync would actually import. */
+export interface ProbeFilters {
+  fromFilter: string;
+  subjectFilter: string;
+}
+
+export interface ProbeOpts {
+  /** How far back to search, in days. Callers pass bank-sync's
+   *  FIRST_RUN_LOOKBACK_DAYS so the count means "what a first sync would
+   *  import", not an arbitrary window. */
+  sinceDays: number;
+}
+
+/** Header fetch is capped so a shared mailbox with a huge from-match can never
+ *  turn the test button into a hang. A personal mailbox will never hit this. */
+const PROBE_HEADER_FETCH_CAP = 200;
+
+function envelopeFromText(envelope: MessageEnvelopeObject | undefined): string {
+  return (envelope?.from ?? []).map((a) => `${a.name ?? ''} <${a.address ?? ''}>`).join(', ');
+}
+
+/**
+ * Verify credentials and report how many messages actually match the
+ * integration's filters — not just the folder total (see the design spec:
+ * the old `mailboxExists`-only probe couldn't distinguish a working
+ * integration from one with a typo'd filter).
+ *
+ * The subject filter can't be pushed into IMAP SEARCH (diacritics, charset
+ * handling varies by server — see kb-email-parser.ts and bank-sync.ts), but
+ * `fromFilter` is plain ASCII and indexed, so we search server-side by
+ * `from` + `since` and only fetch headers for the (capped) matches to apply
+ * the subject filter in code via `matchesFilters` — the exact predicate the
+ * sync uses, so the probe and the sync cannot disagree.
+ */
 export async function probeConnection(
   cfg: ImapConfig,
-): Promise<{ ok: true; mailboxExists: number } | { ok: false; error: string }> {
+  filters: ProbeFilters,
+  opts: ProbeOpts,
+): Promise<
+  | { ok: true; mailboxExists: number; fromMatches: number; filterMatches: number; truncated: boolean }
+  | { ok: false; error: string }
+> {
   const client = clientFor(cfg);
   try {
     await client.connect();
+    // readOnly: same invariant as fetchMessagesOverImap — never mark seen,
+    // move or delete just because the user clicked "test".
     const mailbox = await client.mailboxOpen(cfg.folder, { readOnly: true });
-    return { ok: true, mailboxExists: Number(mailbox.exists) };
+    const since = new Date(Date.now() - opts.sinceDays * 86_400_000);
+    const found = await client.search({ from: filters.fromFilter, since }, { uid: true });
+
+    // search() resolves `false` (not null/undefined) when nothing matches —
+    // this exact bug was already found and fixed once in this file, so a
+    // plain `?? []` is not enough; narrow it explicitly.
+    const all = Array.isArray(found) ? found : [];
+    const truncated = all.length > PROBE_HEADER_FETCH_CAP;
+    // Newest first, capped.
+    const selected = all.slice().sort((a, b) => b - a).slice(0, PROBE_HEADER_FETCH_CAP);
+
+    let filterMatches = 0;
+    if (selected.length > 0) {
+      // Headers only (envelope), never `source` — the probe needs subject and
+      // from, not the body.
+      const messages = await client.fetchAll(selected, { envelope: true }, { uid: true });
+      for (const msg of messages) {
+        const from = envelopeFromText(msg.envelope);
+        const subject = msg.envelope?.subject ?? '';
+        if (matchesFilters(from, subject, filters)) filterMatches++;
+      }
+    }
+
+    return {
+      ok: true,
+      mailboxExists: Number(mailbox.exists),
+      fromMatches: all.length,
+      filterMatches,
+      truncated,
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   } finally {

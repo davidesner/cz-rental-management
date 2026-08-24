@@ -6,6 +6,10 @@ import { AppError } from '../errors.js';
 import type { AuthContext } from '../auth/context.js';
 import { seal, open } from '../lib/crypto-box.js';
 import { probeConnection, type ImapConfig } from '../lib/imap-fetcher.js';
+// FIRST_RUN_LOOKBACK_DAYS, not a duplicated literal here — see that file's
+// comment. bank-integration.ts is a service, so importing another service is
+// fine; the constant itself never crosses into core/lib.
+import { FIRST_RUN_LOOKBACK_DAYS } from './bank-sync.js';
 
 /**
  * Bank integrations and the transaction inbox are owner-only.
@@ -156,9 +160,21 @@ async function loadImapConfig(db: DB, orgId: string, id: string, key: Buffer): P
   };
 }
 
+export type TestBankIntegrationResult =
+  | {
+      ok: true;
+      mailboxExists: number;
+      fromMatches: number;
+      filterMatches: number;
+      truncated: boolean;
+      sinceDays: number;
+    }
+  | { ok: false; error: string };
+
 export async function testBankIntegration(
   db: DB, orgId: string, id: string, key: Buffer,
-): Promise<{ ok: boolean; mailboxExists?: number; error?: string }> {
+): Promise<TestBankIntegrationResult> {
+  const row = await getBankIntegration(db, orgId, id);
   let cfg: ImapConfig;
   try {
     cfg = await loadImapConfig(db, orgId, id, key);
@@ -166,6 +182,19 @@ export async function testBankIntegration(
     if (e instanceof AppError) throw e;
     return { ok: false, error: `nelze dešifrovat heslo — zkontroluj SECRET_ENCRYPTION_KEY` };
   }
-  const result = await probeConnection(cfg);
-  return result.ok ? { ok: true, mailboxExists: result.mailboxExists } : { ok: false, error: result.error };
+  const result = await probeConnection(
+    cfg,
+    { fromFilter: row.fromFilter, subjectFilter: row.subjectFilter },
+    { sinceDays: FIRST_RUN_LOOKBACK_DAYS },
+  );
+  return result.ok
+    ? {
+        ok: true,
+        mailboxExists: result.mailboxExists,
+        fromMatches: result.fromMatches,
+        filterMatches: result.filterMatches,
+        truncated: result.truncated,
+        sinceDays: FIRST_RUN_LOOKBACK_DAYS,
+      }
+    : { ok: false, error: result.error };
 }

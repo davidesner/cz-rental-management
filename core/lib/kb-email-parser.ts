@@ -104,6 +104,22 @@ function fold(s: string): string {
   return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 }
 
+/**
+ * The sender/subject gate, extracted so the sync parser and the connection
+ * probe (`probeConnection` in `imap-fetcher.ts`) share exactly one definition
+ * of "does this message match". A probe that reimplemented this would drift
+ * from the parser over time — reporting matches the sync would not actually
+ * import, which is worse than the plain folder total it replaces.
+ */
+export function matchesFilters(
+  from: string,
+  subject: string,
+  filters: { fromFilter: string; subjectFilter: string },
+): boolean {
+  return fold(from).includes(fold(filters.fromFilter))
+    && fold(subject).includes(fold(filters.subjectFilter));
+}
+
 export function extractSpanTokens(html: string): string[] {
   const root = parseHtml(html);
   // querySelectorAll returns document order, which is exactly the label→value
@@ -298,12 +314,9 @@ export async function parseKbPaymentNotification(
   });
 
   const fromText = mail.from?.text ?? '';
-  if (!fold(fromText).includes(fold(filters.fromFilter))) {
-    return bail('not_kb_notification', `sender "${fromText}" does not match "${filters.fromFilter}"`);
-  }
   const subject = mail.subject ?? '';
-  if (!fold(subject).includes(fold(filters.subjectFilter))) {
-    return bail('not_kb_notification', `subject "${subject}" does not match "${filters.subjectFilter}"`);
+  if (!matchesFilters(fromText, subject, filters)) {
+    return bail('not_kb_notification', `sender "${fromText}" or subject "${subject}" does not match filters "${filters.fromFilter}" / "${filters.subjectFilter}"`);
   }
   if (!mail.html) return bail('unexpected_structure', 'message has no text/html part');
   if (!messageId) return bail('unexpected_structure', 'message has no Message-ID header');

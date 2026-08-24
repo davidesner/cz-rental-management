@@ -57,6 +57,40 @@ describe('crypto-box', () => {
     expect(() => open('not-an-envelope', KEY)).toThrow(/unsupported ciphertext/);
   });
 
+  // Node's setAuthTag accepts tags down to 4 bytes and createDecipheriv accepts
+  // any IV length, and BOTH come from the stored row. A row rewritten with a
+  // 4-byte tag drops the cost of forging a value we then use as a password from
+  // 2^128 to 2^32, so the lengths are asserted rather than trusted. Needs DB
+  // write access, hence defence in depth.
+  describe('envelope parameter lengths', () => {
+    const reseal = (i: number, buf: Buffer) => {
+      const parts = seal('secret', KEY).split(':');
+      parts[i] = buf.toString('base64url');
+      return parts.join(':');
+    };
+
+    it('refuses a truncated auth tag instead of letting GCM shorten the tag', () => {
+      const parts = seal('secret', KEY).split(':');
+      const tag = Buffer.from(parts[2]!, 'base64url');
+      expect(tag.length).toBe(16);
+      expect(() => open(reseal(2, tag.subarray(0, 4)), KEY)).toThrow(/unsupported ciphertext/);
+      expect(() => open(reseal(2, tag.subarray(0, 8)), KEY)).toThrow(/unsupported ciphertext/);
+      expect(() => open(reseal(2, Buffer.concat([tag, Buffer.alloc(1)])), KEY)).toThrow(/unsupported ciphertext/);
+    });
+
+    it('refuses an IV that is not the 96 bits GCM is specified for', () => {
+      const parts = seal('secret', KEY).split(':');
+      const iv = Buffer.from(parts[1]!, 'base64url');
+      expect(iv.length).toBe(12);
+      expect(() => open(reseal(1, iv.subarray(0, 8)), KEY)).toThrow(/unsupported ciphertext/);
+      expect(() => open(reseal(1, Buffer.concat([iv, Buffer.alloc(4)])), KEY)).toThrow(/unsupported ciphertext/);
+    });
+
+    it('still opens a well-formed envelope', () => {
+      expect(open(seal('secret', KEY), KEY)).toBe('secret');
+    });
+  });
+
   describe('loadKey', () => {
     it('accepts 32 base64 bytes', () => {
       expect(loadKey(KEY_B64).length).toBe(32);

@@ -10,6 +10,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 const VERSION = 'v1';
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12; // 96-bit nonce, the size GCM is specified for
+const TAG_BYTES = 16; // full 128-bit GCM tag; a truncated one is not accepted on open()
 const KEY_BYTES = 32;
 
 /**
@@ -46,10 +47,23 @@ export function open(sealed: string, key: Buffer): string {
     throw new Error(`unsupported ciphertext format`);
   }
   const [, ivB64, tagB64, ctB64] = parts;
-  const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(ivB64!, 'base64url'));
+  const iv = Buffer.from(ivB64!, 'base64url');
+  const tag = Buffer.from(tagB64!, 'base64url');
+  // Node accepts a SHORT GCM tag (down to 4 bytes) and an IV of any length, and
+  // both are read from the stored row. Verified: with these two asserts removed,
+  // open() happily accepts the first 4 bytes of a valid tag — GCM tags truncate,
+  // so that is not a corrupt value it would reject, it is a WEAKER one it
+  // accepts. Forging a value we then decrypt and use as a password drops from
+  // 2^128 to 2^32; a non-96-bit IV leaves GCM outside the construction it is
+  // specified for. seal() only ever writes 12 and 16, so anything else is
+  // tampering or corruption, not a format we support.
+  if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
+    throw new Error('unsupported ciphertext format');
+  }
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
   // Throws on mismatch in final() below — this is what makes a tampered row or
   // a wrong key an error rather than silent garbage.
-  decipher.setAuthTag(Buffer.from(tagB64!, 'base64url'));
+  decipher.setAuthTag(tag);
   return Buffer.concat([
     decipher.update(Buffer.from(ctB64!, 'base64url')),
     decipher.final(),

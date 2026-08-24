@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, apiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -90,6 +90,21 @@ export function PaymentsPage() {
     onError: (e: unknown) => setAssignErr(e),
   });
 
+  // Delete
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: (paymentId: string) => api.delete<void>(`/api/payments/${paymentId}`),
+    onSuccess: () => {
+      setDeleteErr(null);
+      qc.invalidateQueries({ queryKey: ['payments'] });
+      // A deleted bank-sourced payment returns its bank_transaction to the
+      // Nepřiřazené platby inbox (paymentId is SET NULL there) — refresh it
+      // so the returned transaction shows up without a manual reload.
+      qc.invalidateQueries({ queryKey: ['bank-transactions'] });
+    },
+    onError: (e: unknown) => setDeleteErr(apiErrorMessage(e)),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -100,6 +115,12 @@ export function PaymentsPage() {
           <Button onClick={() => { setNewErr(null); setNewOpen(true); }}>Nová platba</Button>
         </div>
       </div>
+      {deleteErr && (
+        <Card className="p-4 border-destructive bg-red-50 flex items-start justify-between gap-4">
+          <p className="text-sm text-red-900">{deleteErr}</p>
+          <Button size="sm" variant="outline" onClick={() => setDeleteErr(null)}>Zavřít</Button>
+        </Card>
+      )}
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
@@ -139,13 +160,31 @@ export function PaymentsPage() {
                   </TableCell>
                   <TableCell>{p.source}</TableCell>
                   <TableCell>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { setAssignPayment(p); setAssignContractId(p.contractId ?? ''); setAssignErr(null); }}
-                    >
-                      Přiřadit
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setAssignPayment(p); setAssignContractId(p.contractId ?? ''); setAssignErr(null); }}
+                      >
+                        Přiřadit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={deleteMutation.isPending}
+                        title="Smazat platbu"
+                        onClick={() => {
+                          const base = `Smazat platbu ${fmtKc(p.amount)} ze dne ${p.paidAt}?`;
+                          const msg = p.source === 'bank'
+                            ? `${base} Pokud k ní existuje navázaná bankovní transakce, vrátí se zpět do Nepřiřazených plateb k novému přiřazení.`
+                            : base;
+                          if (confirm(msg)) deleteMutation.mutate(p.id);
+                        }}
+                      >
+                        Smazat
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { computeDeductibleForPeriod } from '@/lib/proration';
-import { api } from '@/lib/api';
+import { api, apiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1452,6 +1452,22 @@ export function ContractDetailPage() {
     enabled: !!id,
   });
 
+  const [paymentDeleteErr, setPaymentDeleteErr] = useState<string | null>(null);
+
+  const deletePayment = useMutation({
+    mutationFn: (paymentId: string) => api.delete<void>(`/api/payments/${paymentId}`),
+    onSuccess: () => {
+      setPaymentDeleteErr(null);
+      qc.invalidateQueries({ queryKey: ['payments-by-contract', id] });
+      qc.invalidateQueries({ queryKey: ['payment-breakdown', id] });
+      // A deleted bank-sourced payment returns its bank_transaction to the
+      // Nepřiřazené platby inbox (paymentId is SET NULL) — refresh it so the
+      // returned transaction shows up without a manual reload.
+      qc.invalidateQueries({ queryKey: ['bank-transactions'] });
+    },
+    onError: (e: unknown) => setPaymentDeleteErr(apiErrorMessage(e)),
+  });
+
   // ── Derived: current terms & utilities (validTo === null) ──────────────────
   const terms = termsData?.terms ?? [];
   const utilities = utilitiesData?.utilities ?? [];
@@ -1666,6 +1682,12 @@ export function ContractDetailPage() {
                   <Button size="sm" onClick={() => setPaymentOpen(true)}>Nová platba</Button>
                 )}
               </div>
+              {paymentDeleteErr && (
+                <Card className="p-4 border-destructive bg-red-50 flex items-start justify-between gap-4">
+                  <p className="text-sm text-red-900">{paymentDeleteErr}</p>
+                  <Button size="sm" variant="outline" onClick={() => setPaymentDeleteErr(null)}>Zavřít</Button>
+                </Card>
+              )}
               <div className="overflow-hidden border rounded-md">
                 <Table>
                   <TableHeader>
@@ -1677,16 +1699,17 @@ export function ContractDetailPage() {
                       <TableHead>Zdroj</TableHead>
                       <TableHead>Externí ID</TableHead>
                       <TableHead>Poznámka</TableHead>
+                      <TableHead className="w-12"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paymentsDataError && !paymentsData ? (
-                      <TableError cols={7} onRetry={() => paymentsDataRefetch()} />
+                      <TableError cols={8} onRetry={() => paymentsDataRefetch()} />
                     ) : !paymentsData ? (
-                      <TableSkeleton cols={7} />
+                      <TableSkeleton cols={8} />
                     ) : paymentsData.payments.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Žádné platby pro tento pronájem.</TableCell>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">Žádné platby pro tento pronájem.</TableCell>
                       </TableRow>
                     ) : (
                       paymentsData.payments.map(p => (
@@ -1705,6 +1728,24 @@ export function ContractDetailPage() {
                           <TableCell className="text-xs text-muted-foreground">{p.externalId ?? '—'}</TableCell>
                           <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={p.note ?? undefined}>
                             {p.note ?? p.description ?? '—'}
+                          </TableCell>
+                          <TableCell className="w-12">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              disabled={deletePayment.isPending}
+                              title="Smazat platbu"
+                              onClick={() => {
+                                const base = `Smazat platbu ${fmtKc(p.amount)} ze dne ${p.paidAt}?`;
+                                const msg = p.source === 'bank'
+                                  ? `${base} Pokud k ní existuje navázaná bankovní transakce, vrátí se zpět do Nepřiřazených plateb k novému přiřazení.`
+                                  : base;
+                                if (confirm(msg)) deletePayment.mutate(p.id);
+                              }}
+                            >
+                              Smazat
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))

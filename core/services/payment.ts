@@ -1,7 +1,7 @@
 import { createId } from '@paralleldrive/cuid2';
 import { and, eq, isNull, ne, gte, lte, desc, inArray } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
-import { payment, contract, property, tenant } from '../db/schema.js';
+import { payment, contract, property, tenant, bankTransaction } from '../db/schema.js';
 import { AppError } from '../errors.js';
 
 export interface PaymentInput {
@@ -449,7 +449,24 @@ export async function updatePayment(
   return getPayment(db, orgId, id, allowedPropertyIds);
 }
 
+/**
+ * `bank_transaction.paymentId` is ON DELETE SET NULL, so a plain `DELETE FROM
+ * payment` alone already returns the row to Nepřiřazené platby (that list
+ * filters on `paymentId IS NULL`). But the FK only touches that one column —
+ * `status`/`matchedBy`/`statusReason` are set by `assignBankTransaction`
+ * (status: 'matched', matchedBy: 'manual'|'rule', statusReason: null) and
+ * would otherwise survive the delete untouched, so the row would land back in
+ * the unassigned list still labelled "Spárováno" with stale match metadata —
+ * and the API/MCP tools that read `status` directly would see the same lie.
+ * Reset the row deliberately, in the same transaction as the delete, back to
+ * the shape a fresh unmatched transaction has.
+ */
 export async function deletePayment(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<void> {
   await getPayment(db, orgId, id, allowedPropertyIds);
-  await db.delete(payment).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
+  await db.transaction(async (tx) => {
+    await tx.update(bankTransaction)
+      .set({ paymentId: null, status: 'unmatched', matchedBy: null, statusReason: null })
+      .where(and(eq(bankTransaction.paymentId, id), eq(bankTransaction.orgId, orgId)));
+    await tx.delete(payment).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
+  });
 }

@@ -243,6 +243,18 @@ describe('bank transaction routes', () => {
     await app.request(`/api/payments/${tx!.paymentId}`, { method: 'DELETE', headers: { cookie } });
     const reopened = await (await app.request('/api/bank-transactions?pending=1', { headers: { cookie } })).json() as any;
     expect(reopened.bankTransactions).toHaveLength(1);
+
+    // Not just off the pending list by way of paymentId — the row itself must
+    // stop claiming it is matched. Without resetting status/matchedBy/
+    // statusReason in deletePayment, this row would come back labelled
+    // "Spárováno" (StatusBadge reads `status`) inside a list that's supposed
+    // to be exclusively unmatched, and the API/MCP tools that read `status`
+    // directly would see the same stale lie.
+    const [afterDelete] = await db.select().from(bankTransaction).where(eq(bankTransaction.id, txId));
+    expect(afterDelete!.paymentId).toBeNull();
+    expect(afterDelete!.status).toBe('unmatched');
+    expect(afterDelete!.matchedBy).toBeNull();
+    expect(afterDelete!.statusReason).toBeNull();
     await client.close();
   });
 

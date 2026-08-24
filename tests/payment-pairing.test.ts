@@ -106,9 +106,35 @@ describe('payment-pairing', () => {
       expect(validateRuleCriteria(base)).toMatch(/alespoň jedno kritérium/);
     });
 
-    it('accepts a rule with a single criterion', () => {
+    it('accepts a single IDENTIFYING criterion', () => {
       expect(validateRuleCriteria({ ...base, vs: '2026008' })).toBeNull();
-      expect(validateRuleCriteria({ ...base, amountFrom: 100 })).toBeNull();
+      expect(validateRuleCriteria({ ...base, ks: '0308' })).toBeNull();
+      expect(validateRuleCriteria({ ...base, ss: '77' })).toBeNull();
+      expect(validateRuleCriteria({ ...base, counterpartyAccount: '294153028/0300' })).toBeNull();
+    });
+
+    it('accepts an amount range closed on both sides', () => {
+      expect(validateRuleCriteria({ ...base, amountFrom: 100, amountTo: 500 })).toBeNull();
+    });
+
+    // The match-everything hole: `hasAny` was satisfied by any non-null amount
+    // bound and only NEGATIVE amounts were rejected, so an amount half-band was
+    // accepted and then matched anything at all. Reachable by a
+    // property-restricted member, whose rule then both harvests unmatched org
+    // payments and pushes every other contract's payments to `ambiguous`.
+    it('rejects an amount-only rule whose band is open on one side', () => {
+      expect(validateRuleCriteria({ ...base, amountFrom: 0 })).toMatch(/alespoň jedno kritérium/);
+      expect(validateRuleCriteria({ ...base, amountFrom: 100 })).toMatch(/alespoň jedno kritérium/);
+      expect(validateRuleCriteria({ ...base, amountTo: 100 })).toMatch(/alespoň jedno kritérium/);
+    });
+
+    // Replicates the accepted-today case end to end: validation let it through,
+    // and then it matched.
+    it('would have matched an unrelated transaction — which is why it is refused', () => {
+      const wide = { counterpartyAccount: null, vs: null, ks: null, ss: null, amountFrom: 0, amountTo: null };
+      expect(validateRuleCriteria(wide)).not.toBeNull();
+      // Proof the refusal is load-bearing rather than cosmetic.
+      expect(ruleMatches(rule(wide), tx({ amount: 999_999_999, fromAccount: '111222333/0800', vs: null, ks: null, ss: null }))).toBe(true);
     });
 
     it('rejects an inverted amount band', () => {

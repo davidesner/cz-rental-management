@@ -2,9 +2,11 @@
 //
 // One rule per contract (see the spec's decision table). A rule is a conjunction
 // of OPTIONAL criteria: every non-null criterion must hold, and a null one means
-// "cokoliv". Because a rule with no criteria at all would match every
-// transaction in the org, that is rejected at write time by
-// validateRuleCriteria rather than tolerated here.
+// "cokoliv". Because a rule that constrains nothing in particular would match
+// every transaction in the org, `validateRuleCriteria` requires at write time
+// either an identifying criterion (account, VS, KS or SS) or an amount range
+// closed on both sides — a single open amount bound identifies nothing and is
+// refused. Matching itself stays permissive and does not re-check this.
 import { accountsEqual } from './account-number.js';
 
 export interface MatchableTransaction {
@@ -106,8 +108,24 @@ export function validateRuleCriteria(r: RuleCriteria): string | null {
   if (r.amountFrom !== null && r.amountTo !== null && r.amountFrom > r.amountTo) {
     return 'Částka od nesmí být větší než Částka do';
   }
-  const hasAny = r.counterpartyAccount !== null || r.vs !== null || r.ks !== null
-    || r.ss !== null || r.amountFrom !== null || r.amountTo !== null;
-  if (!hasAny) return 'Pravidlo musí mít alespoň jedno kritérium, jinak by spárovalo každou platbu';
+  // An IDENTIFYING criterion, or an amount range closed on BOTH sides.
+  //
+  // `hasAny` over all six fields was not enough: `{amountFrom: 0}` alone
+  // satisfied it (only NEGATIVE amounts are rejected above) and then matched
+  // every transaction in the org — amount >= 0 with no other constraint. Same
+  // for `{amountTo: null, amountFrom: 1}` or any single open bound: an amount
+  // half-band identifies nothing.
+  //
+  // That is reachable by a property-restricted member, since
+  // PUT /contracts/:id/payment-rule gates on property access rather than
+  // ownership. The damage is two-sided: unmatched org payments auto-record onto
+  // that member's contract, AND every other contract's payments now satisfy two
+  // rules, so matchTransaction reports `many` and org-wide auto-pairing stops.
+  const hasIdentifying = r.counterpartyAccount !== null
+    || r.vs !== null || r.ks !== null || r.ss !== null;
+  const hasClosedAmountRange = r.amountFrom !== null && r.amountTo !== null;
+  if (!hasIdentifying && !hasClosedAmountRange) {
+    return 'Pravidlo musí mít alespoň jedno kritérium, které platbu identifikuje (účet, VS, KS nebo SS), nebo částku vyplněnou z obou stran — jinak by spárovalo příliš mnoho plateb';
+  }
   return null;
 }

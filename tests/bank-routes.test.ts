@@ -186,6 +186,28 @@ describe('payment rule routes', () => {
     await client.close();
   });
 
+  // Accepted before this was fixed: `hasAny` counted any non-null amount bound,
+  // so a one-sided band with no identifying criterion passed validation and then
+  // matched every transaction in the org — from a route a property-restricted
+  // member can reach.
+  it('rejects an amount-only rule with one open bound', async () => {
+    const { client, app, cookie, contract } = await bootstrap();
+    for (const body of [{ amountFrom: 0 }, { amountFrom: 100 }, { amountTo: 100 }]) {
+      const res = await app.request(`/api/contracts/${contract.id}/payment-rule`, {
+        method: 'PUT', headers: json(cookie), body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(422);
+      expect((await res.json() as any).error.message).toMatch(/alespoň jedno kritérium/);
+    }
+
+    // A band closed on BOTH sides is still a rule.
+    const ok = await app.request(`/api/contracts/${contract.id}/payment-rule`, {
+      method: 'PUT', headers: json(cookie), body: JSON.stringify({ amountFrom: 100, amountTo: 500 }),
+    });
+    expect(ok.status).toBe(200);
+    await client.close();
+  });
+
   it('rejects an inverted amount band', async () => {
     const { client, app, cookie, contract } = await bootstrap();
     const res = await app.request(`/api/contracts/${contract.id}/payment-rule`, {

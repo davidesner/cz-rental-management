@@ -94,6 +94,59 @@ export function IntegrationDialog({ integration, kind, onClose, onSaved }: Props
       <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-xl font-semibold">{editing ? 'Upravit integraci' : 'Nová bankovní integrace'}</h2>
 
+        {kind === 'kb_email' && (
+          // Open by default on create — a first-timer needs this to get any
+          // e-mails at all. Collapsed on edit — someone fixing a port already
+          // did this part.
+          <details className="text-sm" open={!editing}>
+            <summary className="cursor-pointer text-muted-foreground">Jak to nastavit v bance</summary>
+            <div className="space-y-3 pt-3 text-muted-foreground">
+              <div>
+                <p className="font-medium text-foreground">Zapnout e-mailové oznámení o platbě</p>
+                <p>
+                  E-mailové notifikace jsou zdarma, SMS jsou placené (cca 3 Kč za zprávu). Nastavuje se{' '}
+                  <strong>po jednotlivých účtech</strong> — je potřeba zopakovat pro každý účet, který chceš sbírat.
+                </p>
+                <ul className="list-disc pl-5 space-y-1 mt-1">
+                  <li><strong>KB+ (web):</strong> Nastavení → Nastavení služeb → Oznámení → typ Příchozí platby → vyber účet → zapni e-mail → ulož.</li>
+                  <li><strong>KB+ (mobilní aplikace):</strong> Nastavení → Oznámení, pak stejné volby. Názvy se mezi verzemi mírně liší.</li>
+                  <li><strong>MojeBanka (starší IB):</strong> Nastavení → Oznámení o platbách → účet → směr Příchozí → příjemce → kanál e-mail → Pokračovat → potvrdit.</li>
+                </ul>
+                <p className="mt-1">
+                  <a
+                    href="https://www.kb.cz/cs/podpora/ucty-a-platby/jak-si-nastavim-notifikace-o-platbach"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >Návod KB k nastavení notifikací o platbách</a>
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Nastavit filtr v mailboxu</p>
+                <p>
+                  Vyhrazená složka zlevní každou synchronizaci oproti hledání ve velké schránce.
+                </p>
+                <p className="mt-1">
+                  Gmail: Nastavení → Filtry a blokované adresy → Vytvořit filtr → Od: <code>servis@kbinfo.cz</code> →
+                  Vytvořit filtr → Použít štítek (např. <code>KB platby</code>).
+                </p>
+                <p className="mt-1">
+                  <strong>Pozor:</strong> pokud zaškrtneš i „Přeskočit doručenou poštu", Gmail zprávě odebere
+                  štítek <code>INBOX</code> — zpráva pak v INBOX vůbec není. Proto: nastav <strong>Složku</strong>{' '}
+                  níže v tomto formuláři na název štítku (např. <code>KB platby</code>, ne <code>INBOX</code>), a
+                  ověř, že má tento štítek v nastavení Gmailu zapnuté „Zobrazit v IMAP" — Gmail umí štítky z IMAPu
+                  úplně skrýt.
+                </p>
+                <p className="mt-1">
+                  Po uložení integrace tlačítko <strong>Test</strong> v přehledu integrací ukáže, kolik zpráv
+                  filtru odpovídá — špatná složka nebo skrytý štítek se tak projeví hned, ne až po tichém nočním
+                  cronu.
+                </p>
+              </div>
+            </div>
+          </details>
+        )}
+
         <div>
           <Label>Název</Label>
           <Input value={form.name} onChange={e => set('name')(e.target.value)} />

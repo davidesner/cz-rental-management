@@ -105,18 +105,70 @@ function fold(s: string): string {
 }
 
 /**
+ * Does the sender's PARSED address satisfy `fromFilter`?
+ *
+ * The filter has always been documented and configured as a loose "sender
+ * contains" value (the default is `servis@kbinfo.cz`, but `kb.cz` is a
+ * perfectly reasonable thing for a user to have typed), so this accepts two
+ * shapes:
+ *
+ *   - the whole address, case-insensitively: `servis@kbinfo.cz`
+ *   - a domain: `kbinfo.cz` matches `servis@kbinfo.cz`, and `kb.cz` matches
+ *     `noreply@mail.kb.cz` as a subdomain of it
+ *
+ * What it deliberately does NOT do is a substring test. `attacker@kb.cz.evil.example`
+ * CONTAINS `kb.cz`, so a substring test on the address would hand any domain
+ * registrar customer a matching sender. The comparison is therefore anchored on
+ * the address's domain boundary: either the domain equals the filter, or the
+ * filter is a parent domain of it.
+ */
+export function senderMatchesFilter(
+  address: string | null | undefined,
+  fromFilter: string,
+): boolean {
+  const a = fold((address ?? '').trim());
+  // A leading '@' is a natural way to write "this domain"; accept it rather
+  // than silently matching nothing.
+  const f = fold(fromFilter.trim()).replace(/^@/, '');
+  // An empty filter used to match every sender (substring of anything). Refusing
+  // instead is the safe direction: the routes require a non-empty filter, and a
+  // blank one reaching here means misconfiguration, not "accept the world".
+  if (a === '' || f === '') return false;
+  if (a === f) return true;
+  const at = a.lastIndexOf('@');
+  if (at < 0) return false;
+  const domain = a.slice(at + 1);
+  return domain === f || domain.endsWith(`.${f}`);
+}
+
+/**
  * The sender/subject gate, extracted so the sync parser and the connection
  * probe (`probeConnection` in `imap-fetcher.ts`) share exactly one definition
  * of "does this message match". A probe that reimplemented this would drift
  * from the parser over time — reporting matches the sync would not actually
  * import, which is worse than the plain folder total it replaces.
+ *
+ * ⚠️ THIS IS A FILTER, NOT SENDER AUTHENTICATION. It says "this message looks
+ * like the one we know how to read", nothing about who actually sent it.
+ *
+ * `from` must be the PARSED address (`mail.from.value[0].address`, or IMAP
+ * ENVELOPE's `from[0].address`) and never mailparser's rendered `from.text`.
+ * The rendered form interleaves the display name with the address, so
+ * `From: "servis@kbinfo.cz" <attacker@evil.example>` matched the old
+ * text-substring check while actually coming from the attacker.
+ *
+ * Even matching the parsed address, the From header is unauthenticated: anyone
+ * who can deliver mail to the watched mailbox can set it. The remaining gap is
+ * DKIM / `Authentication-Results` verification, which is provider-specific and
+ * needs live-mailbox verification before it can be turned on — deliberately not
+ * implemented here.
  */
 export function matchesFilters(
-  from: string,
+  from: string | null | undefined,
   subject: string,
   filters: { fromFilter: string; subjectFilter: string },
 ): boolean {
-  return fold(from).includes(fold(filters.fromFilter))
+  return senderMatchesFilter(from, filters.fromFilter)
     && fold(subject).includes(fold(filters.subjectFilter));
 }
 
@@ -313,10 +365,13 @@ export async function parseKbPaymentNotification(
     ok: false, reason, detail, tokens, messageId, receivedAt,
   });
 
-  const fromText = mail.from?.text ?? '';
+  // The PARSED address, never `mail.from.text` — see matchesFilters. The
+  // rendered text contains the attacker-controlled display name, which is what
+  // made the old check forgeable by putting the expected sender in quotes.
+  const fromAddress = mail.from?.value?.[0]?.address ?? null;
   const subject = mail.subject ?? '';
-  if (!matchesFilters(fromText, subject, filters)) {
-    return bail('not_kb_notification', `sender "${fromText}" or subject "${subject}" does not match filters "${filters.fromFilter}" / "${filters.subjectFilter}"`);
+  if (!matchesFilters(fromAddress, subject, filters)) {
+    return bail('not_kb_notification', `sender "${fromAddress ?? ''}" or subject "${subject}" does not match filters "${filters.fromFilter}" / "${filters.subjectFilter}"`);
   }
   if (!mail.html) return bail('unexpected_structure', 'message has no text/html part');
   if (!messageId) return bail('unexpected_structure', 'message has no Message-ID header');

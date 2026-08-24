@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseKbPaymentNotification, extractSpanTokens, matchesFilters } from '../core/lib/kb-email-parser.js';
+import { parseKbPaymentNotification, extractSpanTokens, matchesFilters, senderMatchesFilter } from '../core/lib/kb-email-parser.js';
 import { loadFixtureEml, loadFixtureHtml, makeEml, setFieldValue } from './helpers/kb-email.js';
 
 const FILTERS = { fromFilter: 'servis@kbinfo.cz', subjectFilter: 'Přijali jsme platbu' };
@@ -200,7 +200,9 @@ describe('kb-email-parser', () => {
   });
 
   describe('matchesFilters', () => {
-    const from = '"KB info" <servis@kbinfo.cz>';
+    // The PARSED address, not a rendered "Name <addr>" string — that is the
+    // whole point of the gate. See the spoofing block below.
+    const from = 'servis@kbinfo.cz';
     const subject = 'Přijali jsme platbu na Váš účet';
 
     it('matches an exact sender and subject', () => {
@@ -216,11 +218,83 @@ describe('kb-email-parser', () => {
     });
 
     it('rejects a non-matching sender', () => {
-      expect(matchesFilters('"Newsletter" <newsletter@example.com>', subject, FILTERS)).toBe(false);
+      expect(matchesFilters('newsletter@example.com', subject, FILTERS)).toBe(false);
     });
 
     it('rejects a non-matching subject', () => {
       expect(matchesFilters(from, 'Výpis z účtu', FILTERS)).toBe(false);
+    });
+
+    it('rejects a missing sender address outright', () => {
+      expect(matchesFilters(null, subject, FILTERS)).toBe(false);
+      expect(matchesFilters('', subject, FILTERS)).toBe(false);
+    });
+  });
+
+  // The gate matches the PARSED address, so a display name cannot impersonate
+  // the expected sender. It is still only a filter — the From header is
+  // unauthenticated — but it must not be defeatable by quoting.
+  describe('sender spoofing', () => {
+    it('rejects the expected sender smuggled in as the display name', async () => {
+      const res = await parse(makeEml(await loadFixtureHtml(), {
+        from: '"servis@kbinfo.cz" <attacker@evil.example>',
+      }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.reason).toBe('not_kb_notification');
+      // The detail must name the REAL address, not the display name.
+      expect(res.detail).toContain('attacker@evil.example');
+    });
+
+    it('rejects a display name that merely contains the filter', async () => {
+      const res = await parse(makeEml(await loadFixtureHtml(), {
+        from: 'Komerční banka servis@kbinfo.cz <phish@evil.example>',
+      }));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.reason).toBe('not_kb_notification');
+    });
+
+    it('still accepts the legitimate sender', async () => {
+      const res = await parse(makeEml(await loadFixtureHtml(), {
+        from: 'Komerční banka <servis@kbinfo.cz>',
+      }));
+      if (!res.ok) throw new Error(`expected ok, got ${res.reason}: ${res.detail}`);
+      expect(res.value.amount).toBe(3000);
+    });
+  });
+
+  describe('senderMatchesFilter', () => {
+    it('accepts the exact address, case-insensitively', () => {
+      expect(senderMatchesFilter('servis@kbinfo.cz', 'servis@kbinfo.cz')).toBe(true);
+      expect(senderMatchesFilter('SERVIS@KBinfo.CZ', 'servis@kbinfo.cz')).toBe(true);
+    });
+
+    it('accepts a domain filter — the shape a user is documented to be able to type', () => {
+      expect(senderMatchesFilter('servis@kb.cz', 'kb.cz')).toBe(true);
+      expect(senderMatchesFilter('servis@kb.cz', '@kb.cz')).toBe(true);
+    });
+
+    it('accepts a real subdomain of the filtered domain', () => {
+      expect(senderMatchesFilter('noreply@mail.kb.cz', 'kb.cz')).toBe(true);
+    });
+
+    it('rejects a lookalike domain that merely CONTAINS the filter', () => {
+      // The reason this is not a substring test: anyone can register this.
+      expect(senderMatchesFilter('attacker@kb.cz.evil.example', 'kb.cz')).toBe(false);
+      expect(senderMatchesFilter('attacker@evilkb.cz', 'kb.cz')).toBe(false);
+      expect(senderMatchesFilter('servis@kbinfo.cz.evil.example', 'servis@kbinfo.cz')).toBe(false);
+    });
+
+    it('rejects the filter appearing in the local part', () => {
+      expect(senderMatchesFilter('kb.cz@evil.example', 'kb.cz')).toBe(false);
+      expect(senderMatchesFilter('servis@kbinfo.cz.evil.example', 'kbinfo.cz')).toBe(false);
+    });
+
+    it('rejects an empty address or an empty filter', () => {
+      expect(senderMatchesFilter('', 'kb.cz')).toBe(false);
+      expect(senderMatchesFilter(null, 'kb.cz')).toBe(false);
+      expect(senderMatchesFilter('servis@kbinfo.cz', '')).toBe(false);
     });
   });
 });

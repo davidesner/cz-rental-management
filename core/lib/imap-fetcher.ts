@@ -182,8 +182,18 @@ export interface ProbeOpts {
  *  turn the test button into a hang. A personal mailbox will never hit this. */
 const PROBE_HEADER_FETCH_CAP = 200;
 
-function envelopeFromText(envelope: MessageEnvelopeObject | undefined): string {
-  return (envelope?.from ?? []).map((a) => `${a.name ?? ''} <${a.address ?? ''}>`).join(', ');
+/**
+ * The sender ADDRESS from the IMAP ENVELOPE — deliberately not a rendered
+ * "Name <addr>" string.
+ *
+ * `matchesFilters` matches on the parsed address precisely so a display name
+ * cannot impersonate the expected sender (see kb-email-parser.ts). Handing it a
+ * rendered string here would put the display name back in scope and make the
+ * probe count matches the sync then refuses — the exact drift the shared
+ * predicate exists to prevent.
+ */
+function envelopeFromAddress(envelope: MessageEnvelopeObject | undefined): string | null {
+  return envelope?.from?.[0]?.address ?? null;
 }
 
 /**
@@ -230,7 +240,7 @@ export async function probeConnection(
       // from, not the body.
       const messages = await client.fetchAll(selected, { envelope: true }, { uid: true });
       for (const msg of messages) {
-        const from = envelopeFromText(msg.envelope);
+        const from = envelopeFromAddress(msg.envelope);
         const subject = msg.envelope?.subject ?? '';
         if (matchesFilters(from, subject, filters)) filterMatches++;
       }

@@ -172,6 +172,41 @@ export function matchesFilters(
     && fold(subject).includes(fold(filters.subjectFilter));
 }
 
+/**
+ * Input caps, sized against the real committed fixture: its .eml is 77 905 bytes
+ * and its HTML part is 72 826 bytes across 35 <span> elements. So a legitimate
+ * notification has ~7× headroom on size and ~57× on span count, and KB would
+ * have to grow its template by an order of magnitude before either bites.
+ *
+ * They exist because both parse paths are superlinear in span count: a 3.7 MB /
+ * 200 000-span body measured 49 s in extractSpanTokens and 41 s in
+ * parseFromTokens. Nothing in the parse loop checks a deadline (the deadline
+ * lives in the FETCH loop, imap-fetcher.ts), so on Vercel's maxDuration=60 the
+ * function dies before BOTH the cursor write and the lastSyncError write — the
+ * same message is refetched forever while health still reports 'ok'. Silent,
+ * permanent breakage from one oversized e-mail.
+ *
+ * Over-cap input takes the ordinary `unexpected_structure` path, so it is
+ * recorded as a parse_failed row, visible, and skipped like any other message we
+ * cannot read.
+ */
+export const MAX_HTML_BYTES = 512 * 1024;
+export const MAX_SPAN_TOKENS = 2_000;
+
+/**
+ * Cheap O(n) upper bound on the span count, computed on the raw HTML BEFORE
+ * node-html-parser is handed the document.
+ *
+ * A token-count check after extraction would be too late: extraction is itself
+ * the quadratic step. Counting the opening tags textually costs one linear scan
+ * and lets an oversized body be refused before any tree is built.
+ */
+export function countSpanTags(html: string): number {
+  let n = 0;
+  for (let i = html.indexOf('<span'); i !== -1; i = html.indexOf('<span', i + 5)) n++;
+  return n;
+}
+
 export function extractSpanTokens(html: string): string[] {
   const root = parseHtml(html);
   // querySelectorAll returns document order, which is exactly the label→value
@@ -221,12 +256,24 @@ interface StructureError { detail: string }
  */
 function validateStructure(tokens: string[]): { index: Map<string, number> } | StructureError {
   if (tokens.length === 0) return { detail: 'no <span> elements found in the message body' };
+  // Also guards the RE-PARSE path (`reparseBankTransaction` feeds stored
+  // rawTokens straight to parseFromTokens), which never sees the HTML caps.
+  if (tokens.length > MAX_SPAN_TOKENS) {
+    return { detail: `${tokens.length} span tokens exceeds the ${MAX_SPAN_TOKENS} cap` };
+  }
 
   const index = new Map<string, number>();
   const problems: string[] = [];
 
   for (const label of CZ_ORDER) {
-    const hits = tokens.reduce<number[]>((acc, t, i) => (t === label ? [...acc, i] : acc), []);
+    // A push loop, not `reduce` with a spread: the spread copies the whole
+    // accumulator on every hit, so a body that repeats one label N times cost
+    // O(N²) — 41 s at 200 000 tokens, with no deadline check anywhere in the
+    // parse loop to stop it.
+    const hits: number[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i] === label) hits.push(i);
+    }
     if (hits.length !== 1) {
       problems.push(`label "${label}" found ${hits.length} times, expected exactly 1`);
       continue;
@@ -375,6 +422,18 @@ export async function parseKbPaymentNotification(
   }
   if (!mail.html) return bail('unexpected_structure', 'message has no text/html part');
   if (!messageId) return bail('unexpected_structure', 'message has no Message-ID header');
+
+  // Both caps are checked BEFORE node-html-parser sees the document — see
+  // MAX_HTML_BYTES for why parsing first is not an option. `tokens: []` because
+  // there are none: the row records the refusal, not a partial read.
+  const htmlBytes = Buffer.byteLength(mail.html, 'utf8');
+  if (htmlBytes > MAX_HTML_BYTES) {
+    return bail('unexpected_structure', `text/html part is ${htmlBytes} bytes, over the ${MAX_HTML_BYTES} cap`);
+  }
+  const spanTags = countSpanTags(mail.html);
+  if (spanTags > MAX_SPAN_TOKENS) {
+    return bail('unexpected_structure', `${spanTags} <span> tags exceeds the ${MAX_SPAN_TOKENS} cap`);
+  }
 
   const tokens = extractSpanTokens(mail.html);
   return parseFromTokens(tokens, {

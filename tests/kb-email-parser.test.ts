@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { parseKbPaymentNotification, extractSpanTokens, matchesFilters, senderMatchesFilter } from '../core/lib/kb-email-parser.js';
+import {
+  parseKbPaymentNotification, parseFromTokens, extractSpanTokens, matchesFilters,
+  senderMatchesFilter, countSpanTags, MAX_HTML_BYTES, MAX_SPAN_TOKENS,
+} from '../core/lib/kb-email-parser.js';
 import { loadFixtureEml, loadFixtureHtml, makeEml, setFieldValue } from './helpers/kb-email.js';
 
 const FILTERS = { fromFilter: 'servis@kbinfo.cz', subjectFilter: 'Přijali jsme platbu' };
@@ -152,6 +155,61 @@ describe('kb-email-parser', () => {
       expect(res.ok).toBe(false);
       if (res.ok) return;
       expect(res.reason).toBe('unexpected_structure');
+    });
+  });
+
+  // Both parse paths are superlinear in span count and NOTHING in the parse loop
+  // checks a deadline, so an oversized body would kill the serverless function
+  // before the cursor write AND before the lastSyncError write — refetching the
+  // same message forever while health still says 'ok'.
+  describe('input caps', () => {
+    it('states caps with real headroom over the committed fixture', async () => {
+      const html = await loadFixtureHtml();
+      expect(Buffer.byteLength(html, 'utf8')).toBeLessThan(MAX_HTML_BYTES / 5);
+      expect(countSpanTags(html)).toBeLessThan(MAX_SPAN_TOKENS / 10);
+    });
+
+    it('refuses an over-long HTML part as unexpected_structure, not by hanging', async () => {
+      const html = `${await loadFixtureHtml()}<div>${'x'.repeat(MAX_HTML_BYTES)}</div>`;
+      const res = await parse(makeEml(html));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.reason).toBe('unexpected_structure');
+      expect(res.detail).toMatch(/over the \d+ cap/);
+      // Recorded and skippable like any other unparseable message.
+      expect(res.messageId).toBe('FIXTURE-0001@example.invalid');
+    });
+
+    it('refuses a span flood before building the document', async () => {
+      const html = `<html><body>${'<span>x</span>'.repeat(MAX_SPAN_TOKENS + 1)}</body></html>`;
+      const started = Date.now();
+      const res = await parse(makeEml(html));
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.reason).toBe('unexpected_structure');
+      expect(res.detail).toMatch(/exceeds the \d+ cap/);
+      // The point of refusing BEFORE the parse: it has to be fast.
+      expect(Date.now() - started).toBeLessThan(2_000);
+    });
+
+    it('refuses an over-long stored token array on the re-parse path', () => {
+      const tokens = new Array<string>(MAX_SPAN_TOKENS + 1).fill('x');
+      const res = parseFromTokens(tokens, { messageId: 'm1', receivedAt: new Date(0), sourceLink: null });
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.reason).toBe('unexpected_structure');
+      expect(res.detail).toMatch(/span tokens exceeds/);
+    });
+
+    it('does not go quadratic on a repeated label', () => {
+      // The old `reduce` with a spread accumulator was O(hits²) here.
+      const tokens = new Array<string>(MAX_SPAN_TOKENS).fill('Z účtu');
+      const started = Date.now();
+      const res = parseFromTokens(tokens, { messageId: 'm1', receivedAt: new Date(0), sourceLink: null });
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.reason).toBe('unexpected_structure');
+      expect(Date.now() - started).toBeLessThan(2_000);
     });
   });
 

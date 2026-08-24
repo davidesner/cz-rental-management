@@ -10,6 +10,7 @@ import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
 import { DuplicatePaymentError } from '@/components/DuplicatePaymentError';
 import { formatSymbols } from '@/lib/symbols';
+import { parseKorun } from '@/lib/money';
 
 interface Payment {
   id: string;
@@ -54,11 +55,15 @@ export function PaymentsPage() {
   // amount can never silently carry forward a stale "yes, duplicate" decision
   // from a previous submission of this dialog.
   const setNewField = (patch: Partial<typeof newForm>) => { setNewForm(f => ({ ...f, ...patch })); setNewErr(null); };
+  // A payment amount is required, so 'empty' is just as unsubmittable as
+  // 'invalid' — unlike PairingCard's amount band, there is no "cokoliv" here.
+  const newAmount = parseKorun(newForm.amount);
+  const newAmountInvalid = newAmount.kind !== 'value';
 
   const createPayment = useMutation({
     mutationFn: (vars?: { allowDuplicate?: boolean }) => api.post<{ payment: Payment }>('/api/payments', {
       contractId: newForm.contractId || null,
-      amount: Math.round(parseFloat(newForm.amount) * 100),
+      amount: newAmount.kind === 'value' ? newAmount.halere : 0,
       paidAt: newForm.paidAt,
       counterparty: newForm.counterparty || null,
       source: newForm.source,
@@ -211,7 +216,12 @@ export function PaymentsPage() {
             </div>
             <div>
               <Label>Částka (Kč)</Label>
-              <Input type="text" placeholder="0.00" value={newForm.amount} onChange={e => setNewField({ amount: e.target.value })} />
+              <Input type="text" placeholder="35000,50" value={newForm.amount} onChange={e => setNewField({ amount: e.target.value })} />
+              {newForm.amount !== '' && newAmountInvalid && (
+                <p className="text-sm text-destructive mt-1">
+                  Částka musí být číslo v korunách, např. 35000 nebo 35000,50.
+                </p>
+              )}
             </div>
             <div>
               <Label>Zaplaceno dne</Label>
@@ -245,7 +255,7 @@ export function PaymentsPage() {
               <Button variant="outline" onClick={() => setNewOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => createPayment.mutate({})}
-                disabled={!newForm.amount || !newForm.paidAt || createPayment.isPending}
+                disabled={newAmountInvalid || !newForm.paidAt || createPayment.isPending}
               >
                 Vytvořit
               </Button>

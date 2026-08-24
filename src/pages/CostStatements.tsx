@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { computeDeductibleForPeriod } from '@/lib/proration';
+import { parseKorun } from '@/lib/money';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -165,6 +166,14 @@ export function CostStatementsPage() {
     tariffsQuery.data,
   ]);
 
+  // totalAmount is required — 'empty' is as unsubmittable as 'invalid'.
+  // adjustmentAmount is optional and signed: empty or a parsed zero both mean
+  // "no adjustment" (null on the wire), matching the previous '' / '0' checks.
+  const totalAmount = parseKorun(form.totalAmount);
+  const totalAmountInvalid = totalAmount.kind !== 'value';
+  const adjustmentAmount = parseKorun(form.adjustmentAmount);
+  const adjustmentAmountInvalid = adjustmentAmount.kind === 'invalid';
+
   const create = useMutation({
     mutationFn: () => {
       const periodFrom = periodMode === 'year' ? `${year}-01-01` : form.periodFrom;
@@ -174,9 +183,9 @@ export function CostStatementsPage() {
         kind: form.kind,
         periodFrom,
         periodTo,
-        totalAmount: Math.round(parseFloat(form.totalAmount) * 100),
-        adjustmentAmount: form.adjustmentAmount !== '' && form.adjustmentAmount !== '0'
-          ? Math.round(parseFloat(form.adjustmentAmount.replace(',', '.')) * 100)
+        totalAmount: totalAmount.kind === 'value' ? totalAmount.halere : 0,
+        adjustmentAmount: adjustmentAmount.kind === 'value' && adjustmentAmount.halere !== 0
+          ? adjustmentAmount.halere
           : null,
         adjustmentNote: form.adjustmentNote || null,
         documentRef: form.documentRef || null,
@@ -363,7 +372,10 @@ export function CostStatementsPage() {
             </div>
             <div>
               <Label>Celková částka (Kč)</Label>
-              <Input type="text" placeholder="0.00" value={form.totalAmount} onChange={e => setForm({ ...form, totalAmount: e.target.value })} />
+              <Input type="text" placeholder="35000,50" value={form.totalAmount} onChange={e => setForm({ ...form, totalAmount: e.target.value })} />
+              {form.totalAmount !== '' && totalAmountInvalid && (
+                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -382,6 +394,9 @@ export function CostStatementsPage() {
                   setForm({ ...form, adjustmentAmount: e.target.value });
                 }}
               />
+              {adjustmentAmountInvalid && (
+                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. -350 nebo 35000,50.</p>
+              )}
             </div>
             <div>
               <Label>Poznámka k úpravě (volitelné)</Label>
@@ -401,7 +416,8 @@ export function CostStatementsPage() {
                 onClick={() => create.mutate()}
                 disabled={
                   !form.propertyId ||
-                  !form.totalAmount ||
+                  totalAmountInvalid ||
+                  adjustmentAmountInvalid ||
                   (periodMode === 'custom' && (!form.periodFrom || !form.periodTo)) ||
                   create.isPending
                 }

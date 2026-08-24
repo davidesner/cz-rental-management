@@ -1978,7 +1978,14 @@ export function ContractDetailPage() {
         <PaymentDialog
           fixedContractId={id}
           onClose={() => setPaymentOpen(false)}
-          onCreated={() => qc.invalidateQueries({ queryKey: ['payments-by-contract', id] })}
+          onCreated={() => {
+            qc.invalidateQueries({ queryKey: ['payments-by-contract', id] });
+            // Without this, staleTime: 30_000 on payment-breakdown means
+            // Měsíční rozpis can show pre-payment allocation for up to 30s
+            // after creating a payment — the delete mutation above already
+            // invalidates both keys; this create path must match.
+            qc.invalidateQueries({ queryKey: ['payment-breakdown', id] });
+          }}
         />
       )}
 

@@ -50,6 +50,10 @@ export class RentalApiClient {
     return this.req<T>('PATCH', path, body);
   }
 
+  put<T>(path: string, body: unknown): Promise<T> {
+    return this.req<T>('PUT', path, body);
+  }
+
   delete<T>(path: string): Promise<T> {
     return this.req<T>('DELETE', path);
   }

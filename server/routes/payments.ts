@@ -13,11 +13,17 @@ const PaymentBody = z.object({
   paidAt: DateStr,
   counterparty: z.string().nullable().optional(),
   counterpartyAccount: z.string().nullable().optional(),
+  vs: z.string().nullable().optional(),
+  ks: z.string().nullable().optional(),
+  ss: z.string().nullable().optional(),
   externalId: z.string().nullable().optional(),
   statementRef: z.string().nullable().optional(),
   source: z.enum(['bank', 'manual']),
   description: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
+  // Only ever sent after a human confirmed this really is a second, separate
+  // transfer — see recordPayment's duplicate detection.
+  allowDuplicate: z.boolean().optional(),
 });
 
 const UpdatePaymentBody = z.object({
@@ -26,12 +32,23 @@ const UpdatePaymentBody = z.object({
   paidAt: DateStr.optional(),
   counterparty: z.string().nullable().optional(),
   counterpartyAccount: z.string().nullable().optional(),
+  vs: z.string().nullable().optional(),
+  ks: z.string().nullable().optional(),
+  ss: z.string().nullable().optional(),
   statementRef: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
+  // Only ever sent after a human confirmed this really is a second, separate
+  // transfer — see updatePayment's duplicate detection.
+  allowDuplicate: z.boolean().optional(),
 });
 
-const AssignBody = z.object({ contractId: z.string().nullable() });
+const AssignBody = z.object({
+  contractId: z.string().nullable(),
+  // Only ever sent after a human confirmed this really is a second, separate
+  // transfer — see assignPaymentToContract's duplicate detection.
+  allowDuplicate: z.boolean().optional(),
+});
 
 export function paymentRoutes() {
   const r = new Hono<AppEnv>();
@@ -80,7 +97,7 @@ export function paymentRoutes() {
     const ctx = getCtx(c); requireOrg(ctx);
     const body = AssignBody.parse(await c.req.json());
     const db = c.get('db');
-    return c.json({ payment: await assignPaymentToContract(db, ctx.orgId, c.req.param('id'), ctx.allowedPropertyIds, body.contractId) });
+    return c.json({ payment: await assignPaymentToContract(db, ctx.orgId, c.req.param('id'), ctx.allowedPropertyIds, body.contractId, body.allowDuplicate) });
   });
 
   r.delete('/payments/:id', async (c) => {

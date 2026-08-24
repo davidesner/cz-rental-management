@@ -19,6 +19,7 @@ import { costStatementRoutes } from './routes/cost-statements.js';
 import { reconciliationRoutes } from './routes/reconciliations.js';
 import { rentReductionRoutes } from './routes/rent-reductions.js';
 import { paymentBreakdownRoutes } from './routes/payment-breakdown.js';
+import { bankRoutes, cronRoutes } from './routes/bank.js';
 import type { DB } from '../core/db/client.js';
 import type { Auth } from '../core/auth/better-auth.js';
 import type { AuthContext } from '../core/auth/context.js';
@@ -76,6 +77,11 @@ export function buildApp(deps: AppDeps): HonoApp {
   // Auth routes must remain unauthenticated
   app.route('/api', authRoutes(auth));
 
+  // Cron endpoint: authenticated by CRON_SECRET rather than a session, so it
+  // must sit BEFORE the auth middleware. See cronRoutes() for why this is the
+  // one place orgId does not come from ctx.
+  app.route('/api', cronRoutes());
+
   // Gated /api/* (skip the /api/auth/* paths)
   app.use('/api/*', async (c, next) => {
     if (c.req.path.startsWith('/api/auth/')) return next();
@@ -97,6 +103,7 @@ export function buildApp(deps: AppDeps): HonoApp {
   app.route('/api', reconciliationRoutes());
   app.route('/api', rentReductionRoutes());
   app.route('/api', paymentBreakdownRoutes());
+  app.route('/api', bankRoutes());
 
   return app;
 }

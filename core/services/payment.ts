@@ -1,7 +1,7 @@
 import { createId } from '@paralleldrive/cuid2';
-import { and, eq, isNull, gte, lte, desc, inArray } from 'drizzle-orm';
+import { and, eq, isNull, ne, gte, lte, desc, inArray } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
-import { payment, contract, property, tenant } from '../db/schema.js';
+import { payment, contract, property, tenant, bankTransaction } from '../db/schema.js';
 import { AppError } from '../errors.js';
 
 export interface PaymentInput {
@@ -10,11 +10,25 @@ export interface PaymentInput {
   paidAt: string;
   counterparty?: string | null;
   counterpartyAccount?: string | null;
+  /**
+   * The bank symbols a payment_matching_rule filters on. Optional everywhere:
+   * a hand-entered payment has none, and every caller predating these columns
+   * keeps working by omitting them.
+   */
+  vs?: string | null;
+  ks?: string | null;
+  ss?: string | null;
   externalId?: string | null;
   statementRef?: string | null;
   source: 'bank' | 'manual';
   description?: string | null;
   note?: string | null;
+  /**
+   * Force creation of a payment that duplicate detection would otherwise
+   * refuse. Only ever set after a human has confirmed this really is a second,
+   * separate transfer — never as a way to make an error go away.
+   */
+  allowDuplicate?: boolean;
 }
 
 export interface PaymentRow {
@@ -25,6 +39,9 @@ export interface PaymentRow {
   paidAt: string;
   counterparty: string | null;
   counterpartyAccount: string | null;
+  vs: string | null;
+  ks: string | null;
+  ss: string | null;
   externalId: string | null;
   statementRef: string | null;
   source: 'bank' | 'manual';
@@ -45,6 +62,113 @@ async function verifyContractInOrgIfSet(db: DB, orgId: string, contractId: strin
   }
 }
 
+/**
+ * Is this same money already recorded on this contract?
+ *
+ * The fingerprint is orgId + contractId + amount + paidAt, and it is
+ * deliberately NOT externalId — the two answer different questions:
+ *
+ * - Same `externalId` means "the same source record, retried". Idempotent
+ *   success is right; the caller learns nothing from an error.
+ * - Same fingerprint with a DIFFERENT `externalId` means a different source
+ *   record claims the same money — two channels disagreeing about whether this
+ *   transfer has been accounted for. There is no default the service can pick
+ *   that is safe, which is why the single-write path throws.
+ *
+ * Why exactly these three columns:
+ *
+ * - `contractId` must be non-null. An unassigned payment has no contract to
+ *   fingerprint against, so those are never treated as duplicates.
+ * - The counterparty account is NOT in the key, even though it would narrow it:
+ *   `payment.counterpartyAccount` is nullable and is routinely null on a
+ *   hand-entered row. Three parameters that are always present beat four that
+ *   sometimes are.
+ * - Nor are the bank symbols (vs/ks/ss), even though `payment` now has those
+ *   columns: they are deliberately NOT part of the match key because they are
+ *   nullable. A payment recorded from a channel that did not supply a symbol
+ *   would have `vs` null, and a later notification carrying `vs = '2026008'`
+ *   would produce a different key and slip past the guard. Symbols are selected
+ *   only to enrich the conflict message (see "differing vs does not stop the
+ *   duplicate guard" test in payment-duplicates.test.ts).
+ *
+ * `excludeId` is passed by both mutate paths (`assignPaymentToContract`,
+ * `updatePayment`) but, since the no-op short-circuit added in 3570d00, it no
+ * longer excludes anything in practice on either one: both skip this query
+ * entirely for a genuine no-op, and whenever it DOES run, at least one of
+ * contractId/amount/paidAt is guaranteed to differ from the row's own current
+ * values — so the row could never have matched its own fingerprint anyway.
+ * It stays belt-and-braces, not load-bearing. The insert path (`recordPayment`
+ * / `recordPaymentsBatch`) never passes it — there is no existing row to
+ * exclude yet.
+ */
+export async function findPaymentByFingerprint(
+  db: DB, orgId: string, contractId: string, amount: number, paidAt: string, excludeId?: string,
+): Promise<{ id: string; source: 'bank' | 'manual'; vs: string | null } | null> {
+  // `vs` is selected for the conflict MESSAGE only, never for the match: report
+  // everything you know, match on what is always present.
+  const [row] = await db.select({ id: payment.id, source: payment.source, vs: payment.vs }).from(payment).where(and(
+    eq(payment.orgId, orgId),
+    eq(payment.contractId, contractId),
+    eq(payment.amount, amount),
+    eq(payment.paidAt, paidAt),
+    ...(excludeId ? [ne(payment.id, excludeId)] : []),
+  ));
+  return row ?? null;
+}
+
+async function findDuplicateFor(db: DB, orgId: string, input: PaymentInput) {
+  if (input.allowDuplicate) return null;
+  if (!input.contractId) return null;
+  return findPaymentByFingerprint(db, orgId, input.contractId, input.amount, input.paidAt);
+}
+
+/**
+ * Says WHICH case this is, so the asymmetry with the externalId branch reads as
+ * deliberate at the call site rather than as an inconsistency.
+ *
+ * Takes just `{ amount, paidAt }` rather than a full `PaymentInput` — it is
+ * shared by the insert path (recordPayment) and the two mutate paths
+ * (assignPaymentToContract, updatePayment), and only those two fields are ever
+ * needed to word the message. The wording itself ("je zapsaná platba… je třeba
+ * jej zaznamenat explicitně") doesn't assume an insert: it says a payment with
+ * that money is already on record and that a genuine second transfer needs an
+ * explicit decision — true whether the caller is inserting, assigning or
+ * editing, since `allowDuplicate` is that explicit decision in all three.
+ */
+/**
+ * Normalize a bank-symbol-shaped field on write: trim, and blank (after
+ * trimming) becomes `null`.
+ *
+ * Same convention as `core/services/payment-rule.ts#blankToNull` (the
+ * pairing-rule write path) — kept as a small local copy rather than an
+ * import because the two callers have no other shared dependency and this
+ * is a two-line pure function, but the SEMANTICS must not drift: `""` and
+ * `null` mean the same thing ("no symbol") everywhere in this feature, and a
+ * caller that persists them differently is what let `duplicateMessage` render
+ * a dangling `, VS ` label for a row whose `vs` was `""` rather than `null`.
+ */
+function blankToNull(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const t = v.trim();
+  return t === '' ? null : t;
+}
+
+/**
+ * Defensive on top of write-time normalization, not instead of it: a row
+ * written before `blankToNull` existed (or by some path that skipped it) can
+ * still have `vs = ''` in the database. Treating only `null` as absent would
+ * render a dangling `, VS ` — trim-and-check here so a legacy blank string
+ * degrades the same way `null` does.
+ */
+function duplicateMessage(hit: { id: string; source: string; vs: string | null }, money: { amount: number; paidAt: string }): string {
+  const hitVs = hit.vs?.trim();
+  const vs = hitVs ? `, VS ${hitVs}` : '';
+  return `na tomto pronájmu už je zapsaná platba ${(money.amount / 100).toLocaleString('cs-CZ')} Kč`
+    + ` k datu ${money.paidAt} (${hit.id}, zdroj ${hit.source}${vs}) — shoda podle pronájmu, částky a data,`
+    + ' ne podle externalId, takže jde o jiný záznam o stejných penězích.'
+    + ' Pokud je to skutečně druhý samostatný převod, je třeba jej zaznamenat explicitně.';
+}
+
 export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: string[] | null, input: PaymentInput): Promise<PaymentRow> {
   await verifyContractInOrgIfSet(db, orgId, input.contractId, allowedPropertyIds);
   // Idempotency on externalId
@@ -59,6 +183,12 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
     // contract") when it fails, same as any other read of this row.
     if (existing) return getPayment(db, orgId, existing.id, allowedPropertyIds);
   }
+  // NOT the branch above. That one is a retry of the same source record and
+  // succeeds idempotently; this one is a DIFFERENT record claiming the same
+  // money, and a single deliberate write deserves to be told there is a
+  // decision to make rather than have one channel silently win.
+  const duplicate = await findDuplicateFor(db, orgId, input);
+  if (duplicate) throw new AppError('conflict', duplicateMessage(duplicate, input));
   const id = createId();
   await db.insert(payment).values({
     id, orgId,
@@ -66,7 +196,10 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
     amount: input.amount,
     paidAt: input.paidAt,
     counterparty: input.counterparty ?? null,
-    counterpartyAccount: input.counterpartyAccount ?? null,
+    counterpartyAccount: blankToNull(input.counterpartyAccount),
+    vs: blankToNull(input.vs),
+    ks: blankToNull(input.ks),
+    ss: blankToNull(input.ss),
     externalId: input.externalId ?? null,
     statementRef: input.statementRef ?? null,
     source: input.source,
@@ -81,7 +214,17 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
 
 export const PAYMENT_BATCH_MAX = 500;
 
-export async function recordPaymentsBatch(db: DB, orgId: string, allowedPropertyIds: string[] | null, inputs: PaymentInput[]): Promise<{ created: PaymentRow[]; existing: PaymentRow[] }> {
+/**
+ * `existing` and `duplicates` are NOT the same thing and must stay apart:
+ * `existing` means "same externalId — you already sent me this record", while
+ * `duplicates` means "a DIFFERENT record already accounts for this money".
+ * Conflating them would lose exactly the information the caller needs.
+ *
+ * Unlike recordPayment, a fingerprint match here does NOT throw. The whole batch
+ * is one transaction, so a per-item throw would roll back every sibling and make
+ * a statement import all-or-nothing on its noisiest row. Skip and report.
+ */
+export async function recordPaymentsBatch(db: DB, orgId: string, allowedPropertyIds: string[] | null, inputs: PaymentInput[]): Promise<{ created: PaymentRow[]; existing: PaymentRow[]; duplicates: PaymentRow[] }> {
   if (inputs.length > PAYMENT_BATCH_MAX) {
     throw new AppError('bad_request', `batch size ${inputs.length} exceeds max ${PAYMENT_BATCH_MAX}`);
   }
@@ -94,6 +237,9 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
     // extra query for the whole call instead of N.
     const createdIds: string[] = [];
     const existingIds: string[] = [];
+    // The ids of the payments that ALREADY cover this money, same shape as
+    // existingIds: what the caller needs is the row that blocked them.
+    const duplicateIds: string[] = [];
     for (const input of inputs) {
       await verifyContractInOrgIfSet(tx, orgId, input.contractId, allowedPropertyIds);
       if (input.externalId) {
@@ -103,6 +249,13 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
           continue;
         }
       }
+      // Reads inside the same transaction, so two identical inputs in ONE batch
+      // are caught as well: the first insert is visible to the second's lookup.
+      const duplicate = await findDuplicateFor(tx, orgId, input);
+      if (duplicate) {
+        duplicateIds.push(duplicate.id);
+        continue;
+      }
       const id = createId();
       await tx.insert(payment).values({
         id, orgId,
@@ -110,7 +263,10 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
         amount: input.amount,
         paidAt: input.paidAt,
         counterparty: input.counterparty ?? null,
-        counterpartyAccount: input.counterpartyAccount ?? null,
+        counterpartyAccount: blankToNull(input.counterpartyAccount),
+        vs: blankToNull(input.vs),
+        ks: blankToNull(input.ks),
+        ss: blankToNull(input.ss),
         externalId: input.externalId ?? null,
         statementRef: input.statementRef ?? null,
         source: input.source,
@@ -119,7 +275,9 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
       });
       createdIds.push(id);
     }
-    if (createdIds.length === 0 && existingIds.length === 0) return { created: [], existing: [] };
+    if (createdIds.length === 0 && existingIds.length === 0 && duplicateIds.length === 0) {
+      return { created: [], existing: [], duplicates: [] };
+    }
     // Access for createdIds was already verified above via
     // verifyContractInOrgIfSet against the caller-supplied contractId that
     // was actually inserted, so those rows are safe as-is. existingIds rows
@@ -135,7 +293,7 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
       .leftJoin(contract, and(eq(contract.id, payment.contractId), eq(contract.orgId, payment.orgId)))
       .leftJoin(property, eq(property.id, contract.propertyId))
       .leftJoin(tenant, eq(tenant.id, contract.tenantId))
-      .where(inArray(payment.id, [...createdIds, ...existingIds]));
+      .where(inArray(payment.id, [...createdIds, ...existingIds, ...duplicateIds]));
     const byId = new Map(rows.map(r => [r.id, r]));
     if (allowedPropertyIds !== null) {
       for (const id of existingIds) {
@@ -150,7 +308,11 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
       const { contractPropertyId: _ignored, ...row } = byId.get(id)!;
       return row;
     };
-    return { created: createdIds.map(strip), existing: existingIds.map(strip) };
+    // duplicateIds needs no extra access check, unlike existingIds: the
+    // fingerprint includes input.contractId, which verifyContractInOrgIfSet
+    // already validated for this caller, so the row found is on the caller's own
+    // verified contract by construction.
+    return { created: createdIds.map(strip), existing: existingIds.map(strip), duplicates: duplicateIds.map(strip) };
   });
 }
 
@@ -172,6 +334,9 @@ const paymentSelect = {
   paidAt: payment.paidAt,
   counterparty: payment.counterparty,
   counterpartyAccount: payment.counterpartyAccount,
+  vs: payment.vs,
+  ks: payment.ks,
+  ss: payment.ss,
   externalId: payment.externalId,
   statementRef: payment.statementRef,
   source: payment.source,
@@ -233,9 +398,35 @@ export async function getPayment(db: DB, orgId: string, id: string, allowedPrope
   return rest;
 }
 
-export async function assignPaymentToContract(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, contractId: string | null): Promise<PaymentRow> {
-  await getPayment(db, orgId, id, allowedPropertyIds);
+/**
+ * Assign (or unassign, `contractId: null`) an existing payment to a contract.
+ *
+ * This is a MUTATE path, not an insert: the payment row already exists, so a
+ * fingerprint collision must exclude the row itself (see
+ * `findPaymentByFingerprint`'s `excludeId`) — otherwise assigning a payment
+ * onto a contract would always "collide" with the very row being assigned once
+ * it already carries that amount/date... except it doesn't yet at that point,
+ * so the real risk is colliding with a DIFFERENT existing payment already on
+ * the target contract with the same amount/date. Unassigning (`contractId:
+ * null`) never has anything to collide with, so it always skips the check —
+ * consistent with the insert path treating unassigned payments as
+ * unfingerprintable.
+ *
+ * Also skips when `contractId` equals the row's OWN current `contractId`:
+ * that's a no-op, not a move, and must not go looking for siblings. Without
+ * this, re-confirming an assignment that already legitimately coexists with a
+ * duplicate (created earlier via `allowDuplicate`) would re-trigger the
+ * conflict on an action that changes nothing.
+ */
+export async function assignPaymentToContract(
+  db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, contractId: string | null, allowDuplicate = false,
+): Promise<PaymentRow> {
+  const current = await getPayment(db, orgId, id, allowedPropertyIds);
   await verifyContractInOrgIfSet(db, orgId, contractId, allowedPropertyIds);
+  if (contractId !== null && contractId !== current.contractId && !allowDuplicate) {
+    const duplicate = await findPaymentByFingerprint(db, orgId, contractId, current.amount, current.paidAt, id);
+    if (duplicate) throw new AppError('conflict', duplicateMessage(duplicate, current));
+  }
   await db.update(payment).set({ contractId }).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
   // Access already verified above (existing payment + new contractId), and
   // .update().returning() wouldn't include the joined names — re-fetch
@@ -243,12 +434,48 @@ export async function assignPaymentToContract(db: DB, orgId: string, id: string,
   return getPayment(db, orgId, id, allowedPropertyIds);
 }
 
-export async function updatePayment(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, patch: Partial<Omit<PaymentInput, 'externalId'>>): Promise<PaymentRow> {
-  await getPayment(db, orgId, id, allowedPropertyIds);
+export async function updatePayment(
+  db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null,
+  patch: Partial<Omit<PaymentInput, 'externalId'>>,
+): Promise<PaymentRow> {
+  const current = await getPayment(db, orgId, id, allowedPropertyIds);
   if (patch.contractId !== undefined) await verifyContractInOrgIfSet(db, orgId, patch.contractId, allowedPropertyIds);
+  // Only a patch that actually touches contractId/amount/paidAt can produce a
+  // NEW fingerprint — one touching only note/description must not pay for a
+  // query and must not be able to fail. Build the fingerprint from the MERGED
+  // values (patch where present, current row otherwise): checking the patch
+  // alone would miss collisions on fields the patch didn't touch, and would
+  // invent false ones by comparing a partial patch (e.g. amount only) against
+  // nothing.
+  if (!patch.allowDuplicate && (patch.contractId !== undefined || patch.amount !== undefined || patch.paidAt !== undefined)) {
+    const mergedContractId = patch.contractId !== undefined ? patch.contractId : current.contractId;
+    const mergedAmount = patch.amount !== undefined ? patch.amount : current.amount;
+    const mergedPaidAt = patch.paidAt !== undefined ? patch.paidAt : current.paidAt;
+    // A genuine no-op — the merged values equal the row's OWN current values —
+    // must never go looking for siblings, regardless of which fields the patch
+    // nominally mentioned (e.g. `{ amount: <its current amount> }`). Skipping
+    // the query here, before it would run, is the point: this is what lets a
+    // patch that legitimately coexists with a duplicate (via `allowDuplicate`
+    // earlier) be re-sent as a no-op without re-triggering the conflict.
+    const isNoOp = mergedContractId === current.contractId
+      && mergedAmount === current.amount
+      && mergedPaidAt === current.paidAt;
+    // An unassigned payment has no contract to fingerprint against — same rule
+    // as the insert path.
+    if (!isNoOp && mergedContractId !== null) {
+      const duplicate = await findPaymentByFingerprint(db, orgId, mergedContractId, mergedAmount, mergedPaidAt, id);
+      if (duplicate) throw new AppError('conflict', duplicateMessage(duplicate, { amount: mergedAmount, paidAt: mergedPaidAt }));
+    }
+  }
   const cleaned: Record<string, unknown> = {};
-  for (const key of ['contractId', 'amount', 'paidAt', 'counterparty', 'counterpartyAccount', 'statementRef', 'description', 'note'] as const) {
-    if ((patch as any)[key] !== undefined) cleaned[key] = (patch as any)[key];
+  // vs/ks/ss/counterpartyAccount go through blankToNull, same as the insert
+  // path — an `undefined` key is still "not touched" (skipped below), but a
+  // key the caller DID send, even as `''` or whitespace, must land as `null`.
+  const NORMALIZED_KEYS = new Set(['counterpartyAccount', 'vs', 'ks', 'ss']);
+  for (const key of ['contractId', 'amount', 'paidAt', 'counterparty', 'counterpartyAccount', 'vs', 'ks', 'ss', 'statementRef', 'description', 'note'] as const) {
+    const value = (patch as any)[key];
+    if (value === undefined) continue;
+    cleaned[key] = NORMALIZED_KEYS.has(key) ? blankToNull(value) : value;
   }
   if (Object.keys(cleaned).length === 0) return getPayment(db, orgId, id, allowedPropertyIds);
   await db.update(payment).set(cleaned).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
@@ -258,7 +485,24 @@ export async function updatePayment(db: DB, orgId: string, id: string, allowedPr
   return getPayment(db, orgId, id, allowedPropertyIds);
 }
 
+/**
+ * `bank_transaction.paymentId` is ON DELETE SET NULL, so a plain `DELETE FROM
+ * payment` alone already returns the row to Nepřiřazené platby (that list
+ * filters on `paymentId IS NULL`). But the FK only touches that one column —
+ * `status`/`matchedBy`/`statusReason` are set by `assignBankTransaction`
+ * (status: 'matched', matchedBy: 'manual'|'rule', statusReason: null) and
+ * would otherwise survive the delete untouched, so the row would land back in
+ * the unassigned list still labelled "Spárováno" with stale match metadata —
+ * and the API/MCP tools that read `status` directly would see the same lie.
+ * Reset the row deliberately, in the same transaction as the delete, back to
+ * the shape a fresh unmatched transaction has.
+ */
 export async function deletePayment(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<void> {
   await getPayment(db, orgId, id, allowedPropertyIds);
-  await db.delete(payment).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
+  await db.transaction(async (tx) => {
+    await tx.update(bankTransaction)
+      .set({ paymentId: null, status: 'unmatched', matchedBy: null, statusReason: null })
+      .where(and(eq(bankTransaction.paymentId, id), eq(bankTransaction.orgId, orgId)));
+    await tx.delete(payment).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));
+  });
 }

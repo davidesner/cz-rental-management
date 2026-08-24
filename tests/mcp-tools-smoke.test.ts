@@ -16,6 +16,7 @@ import { listOrganizations, createOrganization } from '../mcp/tools/organization
 import { getMe } from '../mcp/tools/me.js';
 import { addRentReduction, listRentReductions, deleteRentReduction } from '../mcp/tools/rent-reductions.js';
 import { paymentBreakdown } from '../mcp/tools/payment-breakdown.js';
+import { bankIntegrationsList, bankIntegrationsSetupUrl, bankTransactionsList, paymentRuleGet, paymentRuleSet } from '../mcp/tools/bank.js';
 
 async function bootstrap() {
   const { db, client: dbClient } = await freshDb();
@@ -325,6 +326,49 @@ describe('MCP tools smoke', () => {
     expect((breakdown as any).months[0].expected.total).toBe(1150000); // rent + service + utilities
     expect((breakdown as any).months[0].effectiveExpected).toBe(950000); // after reduction
     expect((breakdown as any).rentReductions).toHaveLength(1);
+
+    await dbClient.close();
+  });
+
+  it('bank_integrations_list returns empty for a fresh org', async () => {
+    const { dbClient, mcpClient } = await bootstrap();
+    const list = await bankIntegrationsList(mcpClient, {});
+    expect(list).toEqual([]);
+    await dbClient.close();
+  });
+
+  it('bank_integrations_setup_url points at the settings deep link', async () => {
+    const { dbClient, mcpClient } = await bootstrap();
+    const result = await bankIntegrationsSetupUrl(mcpClient, {});
+    expect((result as { url: string }).url.endsWith('/settings?tab=bank&action=new')).toBe(true);
+    await dbClient.close();
+  });
+
+  it('bank_transactions_list returns empty, with and without pending filter', async () => {
+    const { dbClient, mcpClient } = await bootstrap();
+    const list = await bankTransactionsList(mcpClient, {});
+    expect(list).toEqual([]);
+    const pending = await bankTransactionsList(mcpClient, { pending: true });
+    expect(pending).toEqual([]);
+    await dbClient.close();
+  });
+
+  it('payment_rule_set then payment_rule_get round-trip on a seeded contract', async () => {
+    const { dbClient, mcpClient } = await bootstrap();
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
+    const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
+    const contractId = (contract as { id: string }).id;
+
+    const rule = await paymentRuleSet(mcpClient, { contractId, vs: '294153028', counterpartyAccount: null, ks: null, ss: null, amountFrom: null, amountTo: null });
+    expect((rule as { vs: string }).vs).toBe('294153028');
+
+    const fetched = await paymentRuleGet(mcpClient, { contractId });
+    expect((fetched as { rule: { vs: string } }).rule.vs).toBe('294153028');
+    // No bank integration exists in this fixture, so pairing health is 'nenastaveno'
+    // even though a rule is set — health reflects operational readiness, not
+    // whether a rule exists.
+    expect((fetched as { health: { state: string } }).health.state).toBe('nenastaveno');
 
     await dbClient.close();
   });

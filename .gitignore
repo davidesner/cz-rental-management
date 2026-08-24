@@ -19,3 +19,4 @@ coverage/
 .claude/worktrees/
 .vercel
 .env*.local
+test-results/

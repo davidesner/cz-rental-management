@@ -2,15 +2,19 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { computeDeductibleForPeriod } from '@/lib/proration';
-import { api } from '@/lib/api';
+import { api, apiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatSymbols } from '@/lib/symbols';
+import { parseKorun } from '@/lib/money';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { DuplicatePaymentError } from '@/components/DuplicatePaymentError';
+import { PairingCard } from './contract/PairingCard';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -110,6 +114,9 @@ interface Payment {
   amount: number;
   counterparty: string | null;
   counterpartyAccount: string | null;
+  vs: string | null;
+  ks: string | null;
+  ss: string | null;
   contractId: string | null;
   source: string;
   externalId: string | null;
@@ -445,6 +452,14 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
     setAutoFillLabel('(automaticky z evidenčního listu)');
   }, [adjustmentTouched, form.kind, form.propertyId, form.periodFrom, form.periodTo, tariffsQuery.data]);
 
+  // totalAmount is required — 'empty' is as unsubmittable as 'invalid'.
+  // adjustmentAmount is optional and signed: empty or a parsed zero both mean
+  // "no adjustment" (null on the wire), matching the previous '' / '0' checks.
+  const totalAmount = parseKorun(form.totalAmount);
+  const totalAmountInvalid = totalAmount.kind !== 'value';
+  const adjustmentAmount = parseKorun(form.adjustmentAmount);
+  const adjustmentAmountInvalid = adjustmentAmount.kind === 'invalid';
+
   const create = useMutation({
     mutationFn: () => {
       const periodFrom = periodMode === 'year' ? `${year}-01-01` : form.periodFrom;
@@ -454,9 +469,9 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
         kind: form.kind,
         periodFrom,
         periodTo,
-        totalAmount: Math.round(parseFloat(form.totalAmount) * 100),
-        adjustmentAmount: form.adjustmentAmount !== '' && form.adjustmentAmount !== '0'
-          ? Math.round(parseFloat(form.adjustmentAmount.replace(',', '.')) * 100)
+        totalAmount: totalAmount.kind === 'value' ? totalAmount.halere : 0,
+        adjustmentAmount: adjustmentAmount.kind === 'value' && adjustmentAmount.halere !== 0
+          ? adjustmentAmount.halere
           : null,
         adjustmentNote: form.adjustmentNote || null,
         documentRef: form.documentRef || null,
@@ -535,7 +550,10 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
         </div>
         <div>
           <Label>Celková částka (Kč)</Label>
-          <Input type="text" placeholder="0.00" value={form.totalAmount} onChange={e => setForm({ ...form, totalAmount: e.target.value })} />
+          <Input type="text" placeholder="35000,50" value={form.totalAmount} onChange={e => setForm({ ...form, totalAmount: e.target.value })} />
+          {form.totalAmount !== '' && totalAmountInvalid && (
+            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+          )}
         </div>
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -543,6 +561,9 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
             {autoFillLabel && !adjustmentTouched && <span className="text-xs text-muted-foreground italic">{autoFillLabel}</span>}
           </div>
           <Input type="text" placeholder="0.00" value={form.adjustmentAmount} onChange={e => { setAdjustmentTouched(true); setAutoFillLabel(null); setForm({ ...form, adjustmentAmount: e.target.value }); }} />
+          {adjustmentAmountInvalid && (
+            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. -350 nebo 35000,50.</p>
+          )}
         </div>
         <div>
           <Label>Poznámka k úpravě (volitelné)</Label>
@@ -557,7 +578,7 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
           <Button variant="outline" onClick={onClose}>Zrušit</Button>
           <Button
             onClick={() => create.mutate()}
-            disabled={!form.propertyId || !form.totalAmount || (periodMode === 'custom' && (!form.periodFrom || !form.periodTo)) || create.isPending}
+            disabled={!form.propertyId || totalAmountInvalid || adjustmentAmountInvalid || (periodMode === 'custom' && (!form.periodFrom || !form.periodTo)) || create.isPending}
           >
             Vytvořit
           </Button>
@@ -586,12 +607,20 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
     description: '',
     note: '',
   });
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<unknown>(null);
+  // Every field edit clears err (see setField below) — a corrected amount can
+  // never silently carry forward a stale "yes, duplicate" decision from a
+  // previous submission of this dialog.
+  const setField = (patch: Partial<typeof form>) => { setForm(f => ({ ...f, ...patch })); setErr(null); };
+  // A payment amount is required, so 'empty' is just as unsubmittable as
+  // 'invalid' — there is no "cokoliv" meaning here.
+  const amount = parseKorun(form.amount);
+  const amountInvalid = amount.kind !== 'value';
 
   const create = useMutation({
-    mutationFn: () => api.post<{ payment: Payment }>('/api/payments', {
+    mutationFn: (vars?: { allowDuplicate?: boolean }) => api.post<{ payment: Payment }>('/api/payments', {
       contractId: fixedContractId,
-      amount: Math.round(parseFloat(form.amount.replace(',', '.')) * 100),
+      amount: amount.kind === 'value' ? amount.halere : 0,
       paidAt: form.paidAt,
       counterparty: form.counterparty || null,
       counterpartyAccount: form.counterpartyAccount || null,
@@ -599,9 +628,10 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
       externalId: form.externalId || null,
       description: form.description || null,
       note: form.note || null,
+      allowDuplicate: vars?.allowDuplicate,
     }),
     onSuccess: () => { onCreated(); onClose(); },
-    onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setErr(e),
   });
 
   return (
@@ -610,26 +640,29 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
         <h2 className="text-xl font-semibold">Nová platba</h2>
         <div>
           <Label>Částka (Kč)</Label>
-          <Input type="text" placeholder="0.00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+          <Input type="text" placeholder="35000,50" value={form.amount} onChange={e => setField({ amount: e.target.value })} />
+          {form.amount !== '' && amountInvalid && (
+            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+          )}
         </div>
         <div>
           <Label>Zaplaceno dne</Label>
-          <Input type="date" value={form.paidAt} onChange={e => setForm({ ...form, paidAt: e.target.value })} />
+          <Input type="date" value={form.paidAt} onChange={e => setField({ paidAt: e.target.value })} />
         </div>
         <div>
           <Label>Protistrana (volitelné)</Label>
-          <Input value={form.counterparty} onChange={e => setForm({ ...form, counterparty: e.target.value })} />
+          <Input value={form.counterparty} onChange={e => setField({ counterparty: e.target.value })} />
         </div>
         <div>
           <Label>Číslo účtu protistrany (volitelné)</Label>
-          <Input value={form.counterpartyAccount} onChange={e => setForm({ ...form, counterpartyAccount: e.target.value })} />
+          <Input value={form.counterpartyAccount} onChange={e => setField({ counterpartyAccount: e.target.value })} />
         </div>
         <div>
           <Label>Zdroj</Label>
           <select
             className={SELECT_CLS}
             value={form.source}
-            onChange={e => setForm({ ...form, source: e.target.value as 'manual' | 'bank' })}
+            onChange={e => setField({ source: e.target.value as 'manual' | 'bank' })}
           >
             <option value="manual">Ručně</option>
             <option value="bank">Banka</option>
@@ -637,22 +670,26 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
         </div>
         <div>
           <Label>Externí ID (volitelné)</Label>
-          <Input value={form.externalId} onChange={e => setForm({ ...form, externalId: e.target.value })} />
+          <Input value={form.externalId} onChange={e => setField({ externalId: e.target.value })} />
         </div>
         <div>
           <Label>Popis (volitelné)</Label>
-          <Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+          <Input value={form.description} onChange={e => setField({ description: e.target.value })} />
         </div>
         <div>
           <Label>Poznámka (volitelné)</Label>
-          <Input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
+          <Input value={form.note} onChange={e => setField({ note: e.target.value })} />
         </div>
-        {err && <p className="text-sm text-destructive">{err}</p>}
+        <DuplicatePaymentError
+          error={err}
+          pending={create.isPending}
+          onForce={() => create.mutate({ allowDuplicate: true })}
+        />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Zrušit</Button>
           <Button
-            onClick={() => create.mutate()}
-            disabled={!form.amount || !form.paidAt || create.isPending}
+            onClick={() => create.mutate({})}
+            disabled={amountInvalid || !form.paidAt || create.isPending}
           >
             Vytvořit
           </Button>
@@ -809,16 +846,28 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
 
   const availableNewKinds = UTILITY_KINDS.filter(k => !presentKinds.includes(k));
 
+  // Required amounts: 'empty' is as unsubmittable as 'invalid'. Utility
+  // amounts stay optional — an empty field is still a legitimate no-op skip.
+  const baseRent = parseKorun(form.baseRentCzk);
+  const serviceAdvance = parseKorun(form.serviceAdvanceCzk);
+  const requiredAmountInvalid = baseRent.kind !== 'value' || serviceAdvance.kind !== 'value';
+  const utilityInvalid = (k: UtilityKind) => {
+    const v = form.utilities[k];
+    return !!v && v.trim() !== '' && parseKorun(v).kind === 'invalid';
+  };
+  const anyUtilityInvalid = presentKinds.some(utilityInvalid);
+  const newUtilityInvalid = newUtilityCzk.trim() !== '' && parseKorun(newUtilityCzk).kind === 'invalid';
+
   async function handleSubmit() {
-    if (!form.validFrom || !form.baseRentCzk || !form.serviceAdvanceCzk) return;
+    if (!form.validFrom || requiredAmountInvalid || anyUtilityInvalid || newUtilityInvalid) return;
     setSubmitting(true);
     setErr(null);
     try {
       // 1. POST terms
       await api.post(`/api/contracts/${contractId}/terms`, {
         validFrom: form.validFrom,
-        baseRent: Math.round(parseFloat(form.baseRentCzk.replace(',', '.')) * 100),
-        serviceAdvance: Math.round(parseFloat(form.serviceAdvanceCzk.replace(',', '.')) * 100),
+        baseRent: baseRent.kind === 'value' ? baseRent.halere : 0,
+        serviceAdvance: serviceAdvance.kind === 'value' ? serviceAdvance.halere : 0,
         paymentDueDay: parseInt(form.paymentDueDay, 10) || 10,
         paymentAppliesTo: form.paymentAppliesTo,
         source: form.source,
@@ -831,7 +880,9 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
       for (const k of presentKinds) {
         const valStr = form.utilities[k];
         if (!valStr || valStr.trim() === '') continue; // skip empty — no-op (known limitation: doesn't remove utility)
-        const newAmount = Math.round(parseFloat(valStr.replace(',', '.')) * 100);
+        const parsed = parseKorun(valStr);
+        if (parsed.kind !== 'value') continue; // guarded by anyUtilityInvalid above; defensive only
+        const newAmount = parsed.halere;
         const currentU = utilities.filter(x => x.kind === k).find(x => x.validTo === null || x.validTo === undefined);
         const currentAmount = currentU?.monthlyAdvance ?? null;
         // Only POST if value changed or it's a new entry
@@ -851,15 +902,18 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
 
       // 3. POST new utility kind if filled in
       if (newUtilityKind && newUtilityCzk.trim() !== '') {
-        try {
-          await api.post(`/api/contracts/${contractId}/utilities`, {
-            kind: newUtilityKind,
-            validFrom: form.validFrom,
-            monthlyAdvance: Math.round(parseFloat(newUtilityCzk.replace(',', '.')) * 100),
-            note: null,
-          });
-        } catch (e) {
-          errors.push(`${UTILITY_LABEL[newUtilityKind]}: ${e instanceof Error ? e.message : String(e)}`);
+        const parsedNew = parseKorun(newUtilityCzk);
+        if (parsedNew.kind === 'value') {
+          try {
+            await api.post(`/api/contracts/${contractId}/utilities`, {
+              kind: newUtilityKind,
+              validFrom: form.validFrom,
+              monthlyAdvance: parsedNew.halere,
+              note: null,
+            });
+          } catch (e) {
+            errors.push(`${UTILITY_LABEL[newUtilityKind]}: ${e instanceof Error ? e.message : String(e)}`);
+          }
         }
       }
 
@@ -885,11 +939,17 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
         </div>
         <div>
           <Label>Nájem (Kč)</Label>
-          <Input type="text" placeholder="0.00" value={form.baseRentCzk} onChange={e => setForm({ ...form, baseRentCzk: e.target.value })} />
+          <Input type="text" placeholder="35000,50" value={form.baseRentCzk} onChange={e => setForm({ ...form, baseRentCzk: e.target.value })} />
+          {form.baseRentCzk !== '' && baseRent.kind === 'invalid' && (
+            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+          )}
         </div>
         <div>
           <Label>Záloha SVJ (Kč)</Label>
-          <Input type="text" placeholder="0.00" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
+          <Input type="text" placeholder="35000,50" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
+          {form.serviceAdvanceCzk !== '' && serviceAdvance.kind === 'invalid' && (
+            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -946,6 +1006,9 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
                   value={form.utilities[k] ?? ''}
                   onChange={e => setForm({ ...form, utilities: { ...form.utilities, [k]: e.target.value } })}
                 />
+                {utilityInvalid(k) && (
+                  <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+                )}
               </div>
             ))}
           </div>
@@ -971,6 +1034,9 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
                 onChange={e => setNewUtilityCzk(e.target.value)}
               />
             </div>
+            {newUtilityInvalid && (
+              <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+            )}
           </div>
         )}
 
@@ -979,7 +1045,7 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
           <Button variant="outline" onClick={onClose}>Zrušit</Button>
           <Button
             onClick={handleSubmit}
-            disabled={!form.validFrom || !form.baseRentCzk || !form.serviceAdvanceCzk || submitting}
+            disabled={!form.validFrom || requiredAmountInvalid || anyUtilityInvalid || newUtilityInvalid || submitting}
           >
             {submitting ? 'Ukládám…' : 'Přidat'}
           </Button>
@@ -1011,13 +1077,18 @@ function EditPodminkyDialog({ contractId, term, onClose, onUpdated }: EditPodmin
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const baseRent = parseKorun(form.baseRentCzk);
+  const serviceAdvance = parseKorun(form.serviceAdvanceCzk);
+  const amountsInvalid = baseRent.kind !== 'value' || serviceAdvance.kind !== 'value';
+
   async function handleSubmit() {
+    if (amountsInvalid) return;
     setSubmitting(true);
     setErr(null);
     try {
       await api.patch(`/api/contracts/${contractId}/terms/${term.id}`, {
-        baseRent: Math.round(parseFloat(form.baseRentCzk.replace(',', '.')) * 100),
-        serviceAdvance: Math.round(parseFloat(form.serviceAdvanceCzk.replace(',', '.')) * 100),
+        baseRent: baseRent.kind === 'value' ? baseRent.halere : 0,
+        serviceAdvance: serviceAdvance.kind === 'value' ? serviceAdvance.halere : 0,
         paymentDueDay: parseInt(form.paymentDueDay, 10) || 10,
         paymentAppliesTo: form.paymentAppliesTo,
         source: form.source,
@@ -1043,10 +1114,16 @@ function EditPodminkyDialog({ contractId, term, onClose, onUpdated }: EditPodmin
         <div>
           <Label>Nájem (Kč)</Label>
           <Input type="text" value={form.baseRentCzk} onChange={e => setForm({ ...form, baseRentCzk: e.target.value })} />
+          {form.baseRentCzk !== '' && baseRent.kind === 'invalid' && (
+            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+          )}
         </div>
         <div>
           <Label>Záloha SVJ (Kč)</Label>
           <Input type="text" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
+          {form.serviceAdvanceCzk !== '' && serviceAdvance.kind === 'invalid' && (
+            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -1092,7 +1169,7 @@ function EditPodminkyDialog({ contractId, term, onClose, onUpdated }: EditPodmin
         {err && <p className="text-sm text-destructive">{err}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose} disabled={submitting}>Zrušit</Button>
-          <Button onClick={handleSubmit} disabled={submitting}>
+          <Button onClick={handleSubmit} disabled={amountsInvalid || submitting}>
             {submitting ? 'Ukládám…' : 'Uložit'}
           </Button>
         </div>
@@ -1118,10 +1195,13 @@ function RentReductionDialog({ contractId, prefillMonth, onClose, onCreated }: R
   });
   const [err, setErr] = useState<string | null>(null);
 
+  const amount = parseKorun(form.amountCzk);
+  const amountInvalid = amount.kind !== 'value';
+
   const create = useMutation({
     mutationFn: () => api.post(`/api/contracts/${contractId}/rent-reductions`, {
       forMonth: form.forMonth,
-      amount: Math.round(parseFloat(form.amountCzk.replace(',', '.')) * 100),
+      amount: amount.kind === 'value' ? amount.halere : 0,
       reason: form.reason || null,
     }),
     onSuccess: () => { onCreated(); onClose(); },
@@ -1138,7 +1218,10 @@ function RentReductionDialog({ contractId, prefillMonth, onClose, onCreated }: R
         </div>
         <div>
           <Label>Částka srážky (Kč)</Label>
-          <Input type="text" placeholder="0.00" value={form.amountCzk} onChange={e => setForm({ ...form, amountCzk: e.target.value })} />
+          <Input type="text" placeholder="35000,50" value={form.amountCzk} onChange={e => setForm({ ...form, amountCzk: e.target.value })} />
+          {form.amountCzk !== '' && amountInvalid && (
+            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+          )}
         </div>
         <div>
           <Label>Důvod (volitelné)</Label>
@@ -1149,7 +1232,7 @@ function RentReductionDialog({ contractId, prefillMonth, onClose, onCreated }: R
           <Button variant="outline" onClick={onClose}>Zrušit</Button>
           <Button
             onClick={() => create.mutate()}
-            disabled={!form.forMonth || !form.amountCzk || create.isPending}
+            disabled={!form.forMonth || amountInvalid || create.isPending}
           >
             Přidat
           </Button>
@@ -1437,6 +1520,22 @@ export function ContractDetailPage() {
     enabled: !!id,
   });
 
+  const [paymentDeleteErr, setPaymentDeleteErr] = useState<string | null>(null);
+
+  const deletePayment = useMutation({
+    mutationFn: (paymentId: string) => api.delete<void>(`/api/payments/${paymentId}`),
+    onSuccess: () => {
+      setPaymentDeleteErr(null);
+      qc.invalidateQueries({ queryKey: ['payments-by-contract', id] });
+      qc.invalidateQueries({ queryKey: ['payment-breakdown', id] });
+      // A deleted bank-sourced payment returns its bank_transaction to the
+      // Nepřiřazené platby inbox (paymentId is SET NULL) — refresh it so the
+      // returned transaction shows up without a manual reload.
+      qc.invalidateQueries({ queryKey: ['bank-transactions'] });
+    },
+    onError: (e: unknown) => setPaymentDeleteErr(apiErrorMessage(e)),
+  });
+
   // ── Derived: current terms & utilities (validTo === null) ──────────────────
   const terms = termsData?.terms ?? [];
   const utilities = utilitiesData?.utilities ?? [];
@@ -1606,6 +1705,9 @@ export function ContractDetailPage() {
               })()}
           </Card>
 
+          {/* Sekce Párování plateb */}
+          {id && <PairingCard contractId={id} expectedMonthlyTotal={monthlyTotal} />}
+
           {/* Sekce Historie smlouvy */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -1648,6 +1750,12 @@ export function ContractDetailPage() {
                   <Button size="sm" onClick={() => setPaymentOpen(true)}>Nová platba</Button>
                 )}
               </div>
+              {paymentDeleteErr && (
+                <Card className="p-4 border-destructive bg-red-50 flex items-start justify-between gap-4">
+                  <p className="text-sm text-red-900">{paymentDeleteErr}</p>
+                  <Button size="sm" variant="outline" onClick={() => setPaymentDeleteErr(null)}>Zavřít</Button>
+                </Card>
+              )}
               <div className="overflow-hidden border rounded-md">
                 <Table>
                   <TableHeader>
@@ -1659,16 +1767,17 @@ export function ContractDetailPage() {
                       <TableHead>Zdroj</TableHead>
                       <TableHead>Externí ID</TableHead>
                       <TableHead>Poznámka</TableHead>
+                      <TableHead className="w-12"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paymentsDataError && !paymentsData ? (
-                      <TableError cols={7} onRetry={() => paymentsDataRefetch()} />
+                      <TableError cols={8} onRetry={() => paymentsDataRefetch()} />
                     ) : !paymentsData ? (
-                      <TableSkeleton cols={7} />
+                      <TableSkeleton cols={8} />
                     ) : paymentsData.payments.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Žádné platby pro tento pronájem.</TableCell>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">Žádné platby pro tento pronájem.</TableCell>
                       </TableRow>
                     ) : (
                       paymentsData.payments.map(p => (
@@ -1676,11 +1785,35 @@ export function ContractDetailPage() {
                           <TableCell>{p.paidAt}</TableCell>
                           <TableCell>{fmtKc(p.amount)}</TableCell>
                           <TableCell>{p.counterparty ?? '—'}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{p.counterpartyAccount ?? '—'}</TableCell>
+                          {/* Folded into the account cell, which is already the
+                              bank-identifiers cell, rather than widening a
+                              seven-column table to ten. */}
+                          <TableCell className="text-xs text-muted-foreground">
+                            <div>{p.counterpartyAccount ?? '—'}</div>
+                            {formatSymbols(p) && <div>{formatSymbols(p)}</div>}
+                          </TableCell>
                           <TableCell>{p.source}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{p.externalId ?? '—'}</TableCell>
                           <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={p.note ?? undefined}>
                             {p.note ?? p.description ?? '—'}
+                          </TableCell>
+                          <TableCell className="w-12">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive"
+                              disabled={deletePayment.isPending}
+                              title="Smazat platbu"
+                              onClick={() => {
+                                const base = `Smazat platbu ${fmtKc(p.amount)} ze dne ${p.paidAt}?`;
+                                const msg = p.source === 'bank'
+                                  ? `${base} Pokud k ní existuje navázaná bankovní transakce, vrátí se zpět do Nepřiřazených plateb k novému přiřazení.`
+                                  : base;
+                                if (confirm(msg)) deletePayment.mutate(p.id);
+                              }}
+                            >
+                              Smazat
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))
@@ -1845,7 +1978,14 @@ export function ContractDetailPage() {
         <PaymentDialog
           fixedContractId={id}
           onClose={() => setPaymentOpen(false)}
-          onCreated={() => qc.invalidateQueries({ queryKey: ['payments-by-contract', id] })}
+          onCreated={() => {
+            qc.invalidateQueries({ queryKey: ['payments-by-contract', id] });
+            // Without this, staleTime: 30_000 on payment-breakdown means
+            // Měsíční rozpis can show pre-payment allocation for up to 30s
+            // after creating a payment — the delete mutation above already
+            // invalidates both keys; this create path must match.
+            qc.invalidateQueries({ queryKey: ['payment-breakdown', id] });
+          }}
         />
       )}
 

@@ -16,7 +16,7 @@ interface ApiToken {
   createdAt: string;
 }
 
-export function ApiTokensPage() {
+export function ApiTokensPanel() {
   const qc = useQueryClient();
   const { data, isError, refetch } = useQuery({
     queryKey: ['api-tokens'],
@@ -47,7 +47,7 @@ export function ApiTokensPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">API tokeny</h1>
+        <h2 className="text-xl font-semibold">API tokeny</h2>
         <Button onClick={() => { setErr(null); setOpen(true); }}>Nový token</Button>
       </div>
 

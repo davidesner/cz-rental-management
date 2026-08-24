@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, apiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,12 +8,18 @@ import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
+import { DuplicatePaymentError } from '@/components/DuplicatePaymentError';
+import { formatSymbols } from '@/lib/symbols';
+import { parseKorun } from '@/lib/money';
 
 interface Payment {
   id: string;
   paidAt: string;
   amount: number;
   counterparty: string | null;
+  vs: string | null;
+  ks: string | null;
+  ss: string | null;
   contractId: string | null;
   source: string;
   externalId: string | null;
@@ -44,38 +50,64 @@ export function PaymentsPage() {
   // New payment dialog
   const [newOpen, setNewOpen] = useState(false);
   const [newForm, setNewForm] = useState({ contractId: '', amount: '', paidAt: '', counterparty: '', source: 'manual', externalId: '' });
-  const [newErr, setNewErr] = useState<string | null>(null);
+  const [newErr, setNewErr] = useState<unknown>(null);
+  // Every field edit clears newErr (see setNewField below) — a corrected
+  // amount can never silently carry forward a stale "yes, duplicate" decision
+  // from a previous submission of this dialog.
+  const setNewField = (patch: Partial<typeof newForm>) => { setNewForm(f => ({ ...f, ...patch })); setNewErr(null); };
+  // A payment amount is required, so 'empty' is just as unsubmittable as
+  // 'invalid' — unlike PairingCard's amount band, there is no "cokoliv" here.
+  const newAmount = parseKorun(newForm.amount);
+  const newAmountInvalid = newAmount.kind !== 'value';
 
   const createPayment = useMutation({
-    mutationFn: () => api.post<{ payment: Payment }>('/api/payments', {
+    mutationFn: (vars?: { allowDuplicate?: boolean }) => api.post<{ payment: Payment }>('/api/payments', {
       contractId: newForm.contractId || null,
-      amount: Math.round(parseFloat(newForm.amount) * 100),
+      amount: newAmount.kind === 'value' ? newAmount.halere : 0,
       paidAt: newForm.paidAt,
       counterparty: newForm.counterparty || null,
       source: newForm.source,
       externalId: newForm.externalId || null,
+      allowDuplicate: vars?.allowDuplicate,
     }),
     onSuccess: () => {
       setNewOpen(false);
       setNewForm({ contractId: '', amount: '', paidAt: '', counterparty: '', source: 'manual', externalId: '' });
+      setNewErr(null);
       qc.invalidateQueries({ queryKey: ['payments'] });
     },
-    onError: (e: unknown) => setNewErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setNewErr(e),
   });
 
   // Assign dialog
   const [assignPayment, setAssignPayment] = useState<Payment | null>(null);
   const [assignContractId, setAssignContractId] = useState('');
-  const [assignErr, setAssignErr] = useState<string | null>(null);
+  const [assignErr, setAssignErr] = useState<unknown>(null);
 
   const assignMutation = useMutation({
-    mutationFn: () => api.patch<{ payment: Payment }>(`/api/payments/${assignPayment!.id}/assign`, { contractId: assignContractId }),
+    mutationFn: (vars?: { allowDuplicate?: boolean }) => api.patch<{ payment: Payment }>(`/api/payments/${assignPayment!.id}/assign`, { contractId: assignContractId, allowDuplicate: vars?.allowDuplicate }),
     onSuccess: () => {
       setAssignPayment(null);
       setAssignContractId('');
+      setAssignErr(null);
       qc.invalidateQueries({ queryKey: ['payments'] });
     },
-    onError: (e: unknown) => setAssignErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setAssignErr(e),
+  });
+
+  // Delete
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: (paymentId: string) => api.delete<void>(`/api/payments/${paymentId}`),
+    onSuccess: () => {
+      setDeleteErr(null);
+      qc.invalidateQueries({ queryKey: ['payments'] });
+      // A deleted bank-sourced payment returns its bank_transaction to the
+      // Nepřiřazené platby inbox (paymentId is SET NULL there) — refresh it
+      // so the returned transaction shows up without a manual reload.
+      qc.invalidateQueries({ queryKey: ['bank-transactions'] });
+    },
+    onError: (e: unknown) => setDeleteErr(apiErrorMessage(e)),
   });
 
   return (
@@ -88,6 +120,12 @@ export function PaymentsPage() {
           <Button onClick={() => { setNewErr(null); setNewOpen(true); }}>Nová platba</Button>
         </div>
       </div>
+      {deleteErr && (
+        <Card className="p-4 border-destructive bg-red-50 flex items-start justify-between gap-4">
+          <p className="text-sm text-red-900">{deleteErr}</p>
+          <Button size="sm" variant="outline" onClick={() => setDeleteErr(null)}>Zavřít</Button>
+        </Card>
+      )}
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
@@ -114,19 +152,44 @@ export function PaymentsPage() {
                 <TableRow key={p.id}>
                   <TableCell>{p.paidAt}</TableCell>
                   <TableCell>{fmtKc(p.amount)}</TableCell>
-                  <TableCell>{p.counterparty ?? '—'}</TableCell>
+                  {/* Symbols ride along under Protistrana instead of taking a
+                      seventh column — this table is already six wide. */}
+                  <TableCell>
+                    <div>{p.counterparty ?? '—'}</div>
+                    {formatSymbols(p) && (
+                      <div className="text-xs text-muted-foreground">{formatSymbols(p)}</div>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {p.contractId ? `${p.propertyName ?? '—'} / ${p.tenantName ?? '—'}` : '—'}
                   </TableCell>
                   <TableCell>{p.source}</TableCell>
                   <TableCell>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { setAssignErr(null); setAssignContractId(p.contractId ?? ''); setAssignPayment(p); }}
-                    >
-                      Přiřadit
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setAssignPayment(p); setAssignContractId(p.contractId ?? ''); setAssignErr(null); }}
+                      >
+                        Přiřadit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={deleteMutation.isPending}
+                        title="Smazat platbu"
+                        onClick={() => {
+                          const base = `Smazat platbu ${fmtKc(p.amount)} ze dne ${p.paidAt}?`;
+                          const msg = p.source === 'bank'
+                            ? `${base} Pokud k ní existuje navázaná bankovní transakce, vrátí se zpět do Nepřiřazených plateb k novému přiřazení.`
+                            : base;
+                          if (confirm(msg)) deleteMutation.mutate(p.id);
+                        }}
+                      >
+                        Smazat
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -145,7 +208,7 @@ export function PaymentsPage() {
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={newForm.contractId}
-                onChange={e => setNewForm({ ...newForm, contractId: e.target.value })}
+                onChange={e => setNewField({ contractId: e.target.value })}
               >
                 <option value="">Žádná</option>
                 {contracts.map(c => <option key={c.id} value={c.id}>{contractLabel(c)}</option>)}
@@ -153,22 +216,27 @@ export function PaymentsPage() {
             </div>
             <div>
               <Label>Částka (Kč)</Label>
-              <Input type="text" placeholder="0.00" value={newForm.amount} onChange={e => setNewForm({ ...newForm, amount: e.target.value })} />
+              <Input type="text" placeholder="35000,50" value={newForm.amount} onChange={e => setNewField({ amount: e.target.value })} />
+              {newForm.amount !== '' && newAmountInvalid && (
+                <p className="text-sm text-destructive mt-1">
+                  Částka musí být číslo v korunách, např. 35000 nebo 35000,50.
+                </p>
+              )}
             </div>
             <div>
               <Label>Zaplaceno dne</Label>
-              <Input type="date" value={newForm.paidAt} onChange={e => setNewForm({ ...newForm, paidAt: e.target.value })} />
+              <Input type="date" value={newForm.paidAt} onChange={e => setNewField({ paidAt: e.target.value })} />
             </div>
             <div>
               <Label>Protistrana</Label>
-              <Input value={newForm.counterparty} onChange={e => setNewForm({ ...newForm, counterparty: e.target.value })} />
+              <Input value={newForm.counterparty} onChange={e => setNewField({ counterparty: e.target.value })} />
             </div>
             <div>
               <Label>Zdroj</Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={newForm.source}
-                onChange={e => setNewForm({ ...newForm, source: e.target.value })}
+                onChange={e => setNewField({ source: e.target.value })}
               >
                 <option value="manual">Ručně</option>
                 <option value="bank">Banka</option>
@@ -176,14 +244,18 @@ export function PaymentsPage() {
             </div>
             <div>
               <Label>Externí ID (volitelné)</Label>
-              <Input value={newForm.externalId} onChange={e => setNewForm({ ...newForm, externalId: e.target.value })} />
+              <Input value={newForm.externalId} onChange={e => setNewField({ externalId: e.target.value })} />
             </div>
-            {newErr && <p className="text-sm text-destructive">{newErr}</p>}
+            <DuplicatePaymentError
+              error={newErr}
+              pending={createPayment.isPending}
+              onForce={() => createPayment.mutate({ allowDuplicate: true })}
+            />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setNewOpen(false)}>Zrušit</Button>
               <Button
-                onClick={() => createPayment.mutate()}
-                disabled={!newForm.amount || !newForm.paidAt || createPayment.isPending}
+                onClick={() => createPayment.mutate({})}
+                disabled={newAmountInvalid || !newForm.paidAt || createPayment.isPending}
               >
                 Vytvořit
               </Button>
@@ -203,16 +275,21 @@ export function PaymentsPage() {
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={assignContractId}
-                onChange={e => setAssignContractId(e.target.value)}
+                onChange={e => { setAssignContractId(e.target.value); setAssignErr(null); }}
               >
                 <option value="">Vyber smlouvu…</option>
                 {contracts.map(c => <option key={c.id} value={c.id}>{contractLabel(c)}</option>)}
               </select>
             </div>
-            {assignErr && <p className="text-sm text-destructive">{assignErr}</p>}
+            <DuplicatePaymentError
+              error={assignErr}
+              pending={assignMutation.isPending}
+              onForce={() => assignMutation.mutate({ allowDuplicate: true })}
+              label="Přesto přiřadit"
+            />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setAssignPayment(null)}>Zrušit</Button>
-              <Button onClick={() => assignMutation.mutate()} disabled={!assignContractId || assignMutation.isPending}>Přiřadit</Button>
+              <Button variant="outline" onClick={() => setAssignPayment(null)} disabled={assignMutation.isPending}>Zrušit</Button>
+              <Button onClick={() => assignMutation.mutate({})} disabled={!assignContractId || assignMutation.isPending}>Přiřadit</Button>
             </div>
           </Card>
         </div>

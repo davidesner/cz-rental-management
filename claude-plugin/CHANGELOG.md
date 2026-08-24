@@ -5,6 +5,11 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 0.3.3 — 2026-08-22
+
+### Changed
+- `SKILL.md` krok 5 (MCP zápis): `record_payments` teď dokumentuje i `duplicates` v response, ne jen `existing`. Agent má zkontrolovat response a říct user, které řádky se přeskočily a proč — `duplicates` (jiné externalId, stejná platba už zapsaná jiným kanálem) je jiná věc než `existing` (stejné externalId, idempotentní re-run). Import zůstává správný krok, jen je teď bezpečnější — systém duplicitu odmítne místo aby ji založil znovu.
+
 ## 0.3.2 — 2026-06-11
 
 ### Changed

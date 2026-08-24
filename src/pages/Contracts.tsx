@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { parseKorun } from '@/lib/money';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,11 +37,14 @@ export function ContractsPage() {
   const properties = propertiesData?.properties ?? [];
   const tenants = tenantsData?.tenants ?? [];
 
+  // Kauce is optional: empty means "none" (null on the wire), same as before.
+  // An unparseable value must not silently take that same null path.
+  const securityDeposit = parseKorun(form.securityDeposit);
+  const securityDepositInvalid = securityDeposit.kind === 'invalid';
+
   const create = useMutation({
     mutationFn: () => {
-      const depositHalere = form.securityDeposit
-        ? Math.round(parseFloat(form.securityDeposit) * 100)
-        : null;
+      const depositHalere = securityDeposit.kind === 'value' ? securityDeposit.halere : null;
       return api.post<{ contract: Contract }>('/api/contracts', {
         propertyId: form.propertyId,
         tenantId: form.tenantId,
@@ -146,7 +150,10 @@ export function ContractsPage() {
             </div>
             <div>
               <Label>Kauce (Kč)</Label>
-              <Input type="text" placeholder="0.00" value={form.securityDeposit} onChange={e => setForm({ ...form, securityDeposit: e.target.value })} />
+              <Input type="text" placeholder="35000,50" value={form.securityDeposit} onChange={e => setForm({ ...form, securityDeposit: e.target.value })} />
+              {securityDepositInvalid && (
+                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               Splatnost (den + aktuální/následující měsíc) se nastavuje na detailu pronájmu při přidání podmínek (initial terms / amendment).
@@ -156,7 +163,7 @@ export function ContractsPage() {
               <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => create.mutate()}
-                disabled={!form.propertyId || !form.tenantId || !form.startDate || create.isPending}
+                disabled={!form.propertyId || !form.tenantId || !form.startDate || securityDepositInvalid || create.isPending}
               >
                 Vytvořit
               </Button>

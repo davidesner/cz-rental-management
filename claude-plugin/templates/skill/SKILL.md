@@ -88,6 +88,10 @@ Pokud skript neexistuje a potřebuješ matiku → napiš ho jako deterministick�
 4. **Regression test** — pokud `properties/<slug>/fixtures/` existují, spusť je proti current parsery; **fail = STOP a oznam user**
 5. **MCP zápis** (idempotentní přes `externalId` / `documentRef`):
    - `record_payments` (z bank statementu, s SHA hash jako externalId)
+   - **Zkontroluj response** — `record_payments` může vrátit i `duplicates`, ne jen `created`/`existing`:
+     - `existing` = shoda podle `externalId` (stejný záznam, poslaný znovu) — idempotentní no-op, nic neříkej
+     - `duplicates` = shoda podle smlouvy + částky + data, ale JINÉ `externalId` — tuhle platbu už zapsal jiný kanál (nejspíš aktivní bank integrace). `duplicates` a `existing` neplet dohromady, znamenají různé věci.
+     - Import ze statementu tím nepřestává být správný krok — je teď navíc bezpečný, protože systém duplicitu odmítne místo aby ji založil znovu. Neruš tenhle krok, jen **řekni user, které řádky se přeskočily a proč** (že daná platba je už evidovaná odjinud) — to je informace, kterou potřebuje, ne chyba k opravě
    - `create_cost_statement` per dokument (SVJ, elektřina, …) s `totalAmount` + signed `adjustmentAmount`
 6. **Audit trail** — vždy doplň lidsky čitelný `adjustmentNote` ukazující výpočet (proměnné, vzorec, výsledek). Tyto poznámky v MCP slouží jako důkaz proti podkladu — README říká jak, MCP zachycuje co.
 7. **Compute reconciliation** přes MCP `compute_reconciliation`

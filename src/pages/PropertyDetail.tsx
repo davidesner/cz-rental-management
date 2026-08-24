@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api';
+import { parseKorun } from '@/lib/money';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,11 +58,15 @@ export function PropertyDetailPage() {
   });
   const [err, setErr] = useState<string | null>(null);
 
+  const totalSvjAdvance = parseKorun(form.totalSvjAdvanceCzk);
+  const deductibleAmount = parseKorun(form.deductibleAmountCzk);
+  const amountsInvalid = totalSvjAdvance.kind !== 'value' || deductibleAmount.kind !== 'value';
+
   const create = useMutation({
     mutationFn: () => api.post(`/api/properties/${id}/tariffs`, {
       validFrom: form.validFrom,
-      totalSvjAdvance: Math.round(parseFloat(form.totalSvjAdvanceCzk.replace(',', '.')) * 100),
-      deductibleAmount: Math.round(parseFloat(form.deductibleAmountCzk.replace(',', '.')) * 100),
+      totalSvjAdvance: totalSvjAdvance.kind === 'value' ? totalSvjAdvance.halere : 0,
+      deductibleAmount: deductibleAmount.kind === 'value' ? deductibleAmount.halere : 0,
       deductibleNote: form.deductibleNote || null,
       documentRef: form.documentRef || null,
       note: form.note || null,
@@ -165,10 +170,16 @@ export function PropertyDetailPage() {
             <div>
               <Label>Celkové zálohy SVJ (Kč/měs)</Label>
               <Input type="text" placeholder="8884" value={form.totalSvjAdvanceCzk} onChange={e => setForm({ ...form, totalSvjAdvanceCzk: e.target.value })} />
+              {form.totalSvjAdvanceCzk !== '' && totalSvjAdvance.kind === 'invalid' && (
+                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 8884 nebo 8884,50.</p>
+              )}
             </div>
             <div>
               <Label>Odečitatelné (FO + ostatní) (Kč/měs)</Label>
               <Input type="text" placeholder="1878" value={form.deductibleAmountCzk} onChange={e => setForm({ ...form, deductibleAmountCzk: e.target.value })} />
+              {form.deductibleAmountCzk !== '' && deductibleAmount.kind === 'invalid' && (
+                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 1878 nebo 1878,50.</p>
+              )}
             </div>
             <div>
               <Label>Složení (poznámka)</Label>
@@ -181,7 +192,7 @@ export function PropertyDetailPage() {
             {err && <p className="text-sm text-destructive">{err}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
-              <Button onClick={() => create.mutate()} disabled={!form.validFrom || !form.totalSvjAdvanceCzk || !form.deductibleAmountCzk || create.isPending}>Vytvořit</Button>
+              <Button onClick={() => create.mutate()} disabled={!form.validFrom || amountsInvalid || create.isPending}>Vytvořit</Button>
             </div>
           </Card>
         </div>

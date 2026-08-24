@@ -11,7 +11,7 @@ import { TenantsPage } from './pages/Tenants';
 import { ContractsPage } from './pages/Contracts';
 import { PaymentsPage } from './pages/Payments';
 import { CostStatementsPage } from './pages/CostStatements';
-import { ApiTokensPage } from './pages/ApiTokens';
+import { SettingsPage } from './pages/Settings';
 import { ContractDetailPage } from './pages/ContractDetail';
 import { ReconciliationDetailPage } from './pages/ReconciliationDetail';
 import { PropertyDetailPage } from './pages/PropertyDetail';
@@ -48,7 +48,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route path="/contracts" element={<ContractsPage />} />
             <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/cost-statements" element={<CostStatementsPage />} />
-            <Route path="/settings/api-tokens" element={<ApiTokensPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            {/* Old bookmarks and any external link keep working. */}
+            <Route path="/settings/api-tokens" element={<Navigate to="/settings?tab=api-tokens" replace />} />
             <Route path="/contracts/:id" element={<ContractDetailPage />} />
             <Route path="/reconciliations/:id" element={<ReconciliationDetailPage />} />
             <Route path="/properties/:id" element={<PropertyDetailPage />} />

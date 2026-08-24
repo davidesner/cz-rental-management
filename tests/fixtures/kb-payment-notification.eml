@@ -1,0 +1,2631 @@
+From: =?utf-8?q?Komer=C4=8Dn=C3=AD?= banka <servis@kbinfo.cz>
+Reply-To: =?utf-8?q?Komer=C4=8Dn=C3=AD?= banka <kbplus@kb.cz>
+To: landlord@example.com
+Subject: =?utf-8?q?Servisn=C3=AD_zpr=C3=A1va=3A_P=C5=99ijali_jsme_platbu_na_?=
+ =?utf-8?b?VsOhxaEgw7rEjWV0?=
+Date: Thu, 20 Aug 2026 10:52:24 +0000
+Message-ID: <FIXTURE-0001@example.invalid>
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<!DOCTYPE html>
+<html xmlns=3D"http://www.w3.org/1999/xhtml" xmlns:o=3D"urn:schemas-microsoft=
+-com:office:office" lang=3D"cs">
+<head>
+    <meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Dutf-8" >
+
+<title>Komer=C4=8Dn&iacute; banka</title><meta name=3D"viewport" content=3D"w=
+idth=3Ddevice-width, initial-scale=3D1, maximum-scale=3D1, user-scalable=3D0"=
+ />
+<meta name=3D"color-scheme" content=3D"light dark" />
+<meta name=3D"supported-color-schemes" content=3D"light dark" />
+<!--[if !mso]><!-->
+<meta http-equiv=3D"X-UA-Compatible" content=3D"IE=3Dedge" />
+<link href=3D"https://fonts.googleapis.com/css2?family=3DInter:wght&display=
+=3Dswap" rel=3D"stylesheet" />
+<!--<![endif]-->
+<style type=3D"text/css">
+
+img {
+display: block;
+border: 0 !important;
+}
+table,
+td {
+mso-table-lspace: 0pt !important;
+mso-table-rspace: 0pt !important;
+}
+div[style*=3D"margin: 16px 0"] {
+/* Fix for unwanted padding in Android 4.4=E2=80=99s native mail client */
+margin: 0 !important;
+}
+.w-100 {
+width: 100% !important;
+}
+.h-auto {
+height: auto !important;
+}
+/* HOVER START */
+.hover-cta-r:hover {
+background-color: #BE0000 !important;
+}
+.active-cta-r:active {
+background-color: #BE0000 !important;
+}
+.hover-cta-g:hover {
+background-color: #E9E9E9 !important;
+border-radius: 6px !important;
+}
+.active-cta-g:active {
+background-color: #E9E9E9 !important;
+border-radius: 6px !important;
+}
+.hover-link-g:hover {
+color: #454545 !important;
+text-decoration: underline !important;
+}
+.active-link-g:active {
+color: #454545 !important;
+text-decoration: none !important;
+}
+.hover-td-g:hover {
+background-color: #E9E9E9 !important;
+}
+.active-td-g:active {
+background-color: #E9E9E9 !important;
+}
+.hover-cta-2-g:hover {
+background-color: #EFEFEF !important;
+border-radius: 6px !important;
+}
+.active-cta-2-g:active {
+background-color: #EFEFEF !important;
+border-radius: 6px !important;
+}
+.hover-td-w:hover {
+background-color: #ffffff !important;
+}
+.active-td-w:active {
+background-color: #ffffff !important;
+}
+/* HOVER END */
+.fix-blueLinks {
+pointer-events: none !important;
+}
+[data-ogsb] .bgc-dark-1 {
+background-color: #000000 !important;
+}
+[data-ogsb] .bgc-dark-2 {
+background-color: #1c1c1c !important;
+}
+[data-ogsb] .red-cta-bgc-dark {
+background-color: #d60a3d !important;
+}
+[data-ogsb] .sec-cta-bgc-dark-1 {
+background-color: #000000 !important;
+}
+[data-ogsb] .sec-cta-bgc-dark-2 {
+background-color: #1c1c1c !important;
+}
+[data-ogsb] .c-dark-1 {
+color: #f9f9f9 !important;
+}
+[data-ogsb] .c-dark-2 {
+color: #9e9e9e !important;
+}
+[data-ogsb] .c-dark-3 {
+color: #d9d9d9 !important;
+}
+[data-ogsb] .red-cta-c-dark {
+color: #f8f8f8 !important;
+}
+[data-ogsb] .sec-cta-bc-dark {
+border-color: #f9f9f9 !important;
+}
+[data-ogsb] .line-dark {
+border-top-color: #323232 !important;
+}
+[data-ogsb] .swap .hybrid {
+display: none !important;
+}
+[data-ogsb] .swap .light {
+display: none !important;
+}
+[data-ogsb] .swap .light-dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+[data-ogsb] .swap .light-desktop {
+display: none !important;
+}
+[data-ogsb] .swap .dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+[data-ogsb] .swap .dark-desktop {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+[data-ogsb] .swap .logo {
+padding: 31px 0 !important;
+}
+[data-ogsb] .pl-10-dark {
+padding-left: 10px !important;
+}
+[class~=3D"x_sec-cta-bgc-dark-1"] {
+background-color: #f8f8f8 !important;
+}
+[class~=3D"x_sec-cta-bgc-dark-2"] {
+background-color: #ffffff !important;
+}
+[class~=3D"x_swap"] .hybrid {
+display: none !important;
+}
+[class~=3D"x_swap"] .light {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+[class~=3D"x_swap"] .light-dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+[class~=3D"x_swap"] .light-desktop {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+[class~=3D"x_swap"] .logo {
+padding: 32px 1px !important;
+}
+@media (prefers-color-scheme: dark) {
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .bgc-dark-1 {
+background-color: #000000 !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .bgc-dark-2 {
+background-color: #1c1c1c !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .red-cta-bgc-dark {
+background-color: #d60a3d !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .sec-cta-bgc-dark-1 {
+background-color: #000000 !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .sec-cta-bgc-dark-2 {
+background-color: #1c1c1c !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .c-dark-1 {
+color: #f9f9f9 !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .c-dark-2 {
+color: #9e9e9e !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .c-dark-3 {
+color: #d9d9d9 !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .red-cta-c-dark {
+color: #f8f8f8 !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .line-dark {
+border-top-color: #323232 !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .hybrid {
+display: none !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .light-dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .dark-desktop {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .logo {
+padding: 31px 0 !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .pl-10-dark {
+padding-left: 10px !important;
+}
+.bgc-dark-1:not([class^=3D"x_"]) {
+background-color: #000000 !important;
+}
+.bgc-dark-2:not([class^=3D"x_"]) {
+background-color: #1c1c1c !important;
+}
+.red-cta-bgc-dark:not([class^=3D"x_"]) {
+background-color: #d60a3d !important;
+}
+.sec-cta-bgc-dark-1:not([class^=3D"x_"]) {
+background-color: #000000 !important;
+}
+.sec-cta-bgc-dark-2:not([class^=3D"x_"]) {
+background-color: #1c1c1c !important;
+}
+.c-dark-1:not([class^=3D"x_"]) {
+color: #f9f9f9 !important;
+}
+.c-dark-2:not([class^=3D"x_"]) {
+color: #9e9e9e !important;
+}
+.c-dark-3:not([class^=3D"x_"]) {
+color: #d9d9d9 !important;
+}
+.red-cta-c-dark:not([class^=3D"x_"]) {
+color: #f8f8f8 !important;
+}
+.sec-cta-bc-dark:not([class^=3D"x_"]) {
+border-color: #f9f9f9 !important;
+}
+.line-dark:not([class^=3D"x_"]) {
+border-top-color: #323232 !important;
+}
+.swap:not([class^=3D"x_"]) .hybrid {
+display: none !important;
+}
+.swap:not([class^=3D"x_"]) .light-dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap:not([class^=3D"x_"]) .dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap:not([class^=3D"x_"]) .dark-desktop {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap:not([class^=3D"x_"]) .logo {
+padding: 31px 0 !important;
+}
+.pl-10-dark:not([class^=3D"x_"]) {
+padding-left: 10px !important;
+}
+.hover-cta-r:hover:not([class^=3D"x_"]) {
+background-color: #BE0000 !important;
+border-radius: 6px !important;
+}
+.active-cta-r:active:not([class^=3D"x_"]) {
+background-color: #BE0000 !important;
+border-radius: 6px !important;
+}
+.hover-cta-g:hover:not([class^=3D"x_"]) {
+background-color: #232323 !important;
+border-radius: 6px !important;
+}
+.active-cta-g:active:not([class^=3D"x_"]) {
+background-color: #232323 !important;
+border-radius: 6px !important;
+}
+.hover-link-g:hover:not([class^=3D"x_"]) {
+color: #D9D9D9 !important;
+text-decoration: underline !important;
+}
+.active-link-g:active:not([class^=3D"x_"]) {
+color: #D9D9D9 !important;
+text-decoration: underline !important;
+}
+.hover-td-g:hover:not([class^=3D"x_"]) {
+background-color: #232323 !important;
+border-radius: 6px !important;
+}
+.active-td-g:active:not([class^=3D"x_"]) {
+background-color: #232323 !important;
+border-radius: 6px !important;
+}
+.hover-cta-2-g:hover:not([class^=3D"x_"]) {
+background-color: #3B3B3B !important;
+border-radius: 6px !important;
+}
+.active-cta-2-g:active:not([class^=3D"x_"]) {
+background-color: #3B3B3B !important;
+border-radius: 6px !important;
+}
+.hover-td-w:hover:not([class^=3D"x_"]) {
+background-color: #1C1C1C !important;
+text-decoration: none !important;
+}
+.active-td-w:active:not([class^=3D"x_"]) {
+background-color: #1C1C1C !important;
+text-decoration: none !important;
+}
+}
+@media (prefers-color-scheme: light) {
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .sec-cta-bgc-dark-1 {
+background-color: #f8f8f8 !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .sec-cta-bgc-dark-2 {
+background-color: #ffffff !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .hybrid {
+display: none !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .light {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .light-dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .light-desktop {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .logo {
+padding: 32px 1px !important;
+}
+.sec-cta-bgc-dark-1:not([class^=3D"x_"]) {
+background-color: #f8f8f8 !important;
+}
+.sec-cta-bgc-dark-2:not([class^=3D"x_"]) {
+background-color: #ffffff !important;
+}
+.swap:not([class^=3D"x_"]) .hybrid {
+display: none !important;
+}
+.swap:not([class^=3D"x_"]) .light {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap:not([class^=3D"x_"]) .light-dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap:not([class^=3D"x_"]) .light-desktop {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap:not([class^=3D"x_"]) .logo {
+padding: 32px 1px !important;
+}
+}
+@media (prefers-color-scheme: dark) and (max-width: 480px) {
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .dark-desktop {
+display: none !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .dark-xs {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .logo {
+padding: 19px 0 !important;
+}
+.swap:not([class^=3D"x_"]) .dark-desktop {
+display: none !important;
+}
+.swap:not([class^=3D"x_"]) .dark-xs {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap:not([class^=3D"x_"]) .logo {
+padding: 19px 0 !important;
+}
+}
+@media (prefers-color-scheme: light) and (max-width: 480px) {
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .light-desktop {
+display: none !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .light-xs {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+_:-webkit-full-screen,
+_::-webkit-full-page-media,
+_:future,
+:root body .swap .logo {
+padding: 20px 1px !important;
+}
+.swap:not([class^=3D"x_"]) .light-desktop {
+display: none !important;
+}
+.swap:not([class^=3D"x_"]) .light-xs {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap:not([class^=3D"x_"]) .logo {
+padding: 20px 1px !important;
+}
+}
+@media (max-width: 696px) {
+.column-group-1 .column-2 {
+max-width: calc(100% - 141px) !important;
+}
+@media (max-width: 679px) {}
+@media (max-width: 552px) {
+.side-space-0-at-552 {
+padding: 0 !important;
+}
+.br-0-at-552 {
+border-radius: 0 !important;
+}
+}
+@media (max-width: 519px) {
+.column-group-1 .column-1,
+.column-group-1 .column-2 {
+max-width: 100% !important;
+}
+.set-pr {
+padding-right: 16px !important;
+}
+}
+}
+@media (max-width: 480px) {
+.img-desktop {
+width: 0px !important;
+height: 0 !important;
+display: none !important;
+}
+.img-xs {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.set-pr {
+padding-right: 16px !important;
+}
+.xs-side-space-0 {
+padding: 0 !important;
+}
+.xs-side-space-left-16 {
+padding-left: 16px !important;
+}
+.xs-br-0 {
+border-radius: 0 !important;
+}
+.xs-hide {
+display: none !important;
+}
+.xs-block {
+display: block !important;
+}
+.xs-center {
+text-align: center !important;
+}
+.xs-centered {
+margin: 0 auto !important;
+}
+.xs-left {
+text-align: left !important;
+}
+.xs-full-w {
+width: 100% !important;
+}
+.xs-max-w {
+max-width: 100% !important;
+}
+.xs-height-auto {
+height: auto !important;
+}
+.xs-height-48 {
+height: 48px !important;
+}
+.xs-height-47 {
+height: 47px !important;
+}
+.xs-height-16 {
+height: 16px !important;
+}
+.xs-full-w-at-480 {
+width: 100% !important;
+}
+[data-ogsb] .swap .light-xs {
+display: none !important;
+}
+[data-ogsb] .swap .dark-desktop {
+display: none !important;
+}
+[data-ogsb] .swap .dark-xs {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+[data-ogsb] .swap .logo {
+padding: 19px 0 !important;
+}
+#MessageViewBody .sec-cta-bgc-dark-1 {
+background-color: #f8f8f8 !important;
+}
+#MessageViewBody .sec-cta-bgc-dark-2 {
+background-color: #ffffff !important;
+}
+#MessageViewBody .hybrid {
+display: none !important;
+}
+#MessageViewBody .light {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+#MessageViewBody .light-dark {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+#MessageViewBody .light-desktop {
+display: none !important;
+}
+#MessageViewBody .light-xs {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+#MessageViewBody .logo {
+padding: 20px 1px !important;
+}
+@media (max-width: 375px) {
+.xs-full-w-at-375 {
+width: 100% !important;
+}
+.content-card-img-d-none {
+display: none !important;
+}
+.content-card-arrow {
+padding-left: 8px !important;
+}
+}
+@media (min-width: 360px) and (max-width: 374px) {
+.content-card-img {
+min-width: 80px !important;
+}
+}
+@media (max-width: 359px) {
+.column-group-1 .column-1,
+.column-group-1 .column-2 {
+width: 100% !important;
+display: inline-block !important;
+}
+.set-pr {
+padding-right: 0px !important;
+}
+.xs-centered-at-359 {
+margin: 0 auto !important;
+}
+.content-card-img {
+display: none !important;
+}
+.content-card-arrow {
+padding-left: 8px !important;
+}
+}
+}
+</style>
+<style type=3D"text/css">
+
+@media (max-width: 480px) {
+.sec-cta-bgc-dark-1\0 {
+background-color: #f8f8f8 !important;
+}
+.sec-cta-bgc-dark-2\0 {
+background-color: #ffffff !important;
+}
+.swap .hybrid\0 {
+display: none !important;
+}
+.swap .light\0 {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap .light-dark\0 {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap .light-xs\0 {
+width: 100% !important;
+height: auto !important;
+display: block !important;
+}
+.swap .logo\0 {
+padding: 20px 1px !important;
+}
+}
+</style>
+<!--[if (mso)|(mso 16)]>
+<style type=3D"text/css">
+
+a {text-decoration:none;}
+.underlined {text-decoration:underline;}
+</style>
+<![endif]-->
+<!--[if (gte mso 9)|(lte IE 7)]>
+<style type=3D"text/css">
+
+.cta-min-w-240 {width:240px !important;}
+</style>
+<![endif]-->
+<!--[if !(lte mso 15)]>
+<style type=3D"text/css">
+
+.img-fix {padding:0 5px !important;}
+</style>
+<![endif]-->
+<!--[if mso]>
+<noscript>
+<xml>
+<o:OfficeDocumentSettings>
+<o:PixelsPerInch>96</o:PixelsPerInch>
+</o:OfficeDocumentSettings>
+</xml>
+</noscript>
+<![endif]-->
+</head>
+<body style=3D"margin:0 !important; padding:0;">
+<div style=3D"color:transparent;visibility:hidden;opacity:0;font-size:0px;bor=
+der:0;max-height:1px;width:1px;margin:0px;padding:0px;border-width:0px!import=
+ant;display:none!important;line-height:0px!important;"><img border=3D"0" widt=
+h=3D"1" height=3D"1" src=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIX=
+TUREFIXTUREFIXTURE~" alt=3D""/></div>
+
+
+<div style=3D"display:none">
+Pod=C3=ADvejte se na podrobnosti o p=C5=99ijat=C3=A9 platb=C4=9B.
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; =
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; =
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; =
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; =
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847;
+&#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847; &#8199;&#65=
+279;&#847; &#8199;&#65279;&#847; &#8199;&#65279;&#847;
+</div>
+<center style=3D"width:100%; table-layout:fixed; -webkit-text-size-adjust:non=
+e; -ms-text-size-adjust:100%;">
+<div style=3D"padding:0; margin:0;">
+<table class=3D"bgc-dark-1" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" =
+width=3D"100%" bgcolor=3D"#f8f8f8">
+<tr>
+<td align=3D"center">
+<div style=3D"max-width:680px; margin:0 auto;">
+<!--[if (gte mso 9)|(IE)]>
+<table style=3D"width:680px" border=3D"0" cellspacing=3D"0" cellpadding=3D"0">
+<tr>
+<td>
+<![endif]-->
+<table class=3D"bgc-dark-1" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" =
+width=3D"100%" bgcolor=3D"#f8f8f8">
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"552">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:552px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td height=3D"30"></td>
+</tr>
+<tr>
+<td align=3D"right" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-2" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#717171; font-size:18px; line-height:120%; letter-spacing:-0.16px=
+;">
+For&nbsp;English&nbsp;scroll&nbsp;down
+</span>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 15px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"490">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:490px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<!--[if !(mso)&!(IE)]><!-->
+<tr>
+<td class=3D"swap" align=3D"left">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0">
+<tr>
+<td class=3D"logo">
+<a href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFIXTUR=
+E~" target=3D"_blank" title=3D"www.kb.cz">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/8ff64afb-88d7-4ff7-ba1f-5=
+fea584f79f6" alt=3D"KB" title=3D"www.kb.cz" class=3D"light-desktop" style=3D"=
+display:none" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/09209f44-601c-4779-b937-3=
+965d2b68bc5" alt=3D"KB" title=3D"www.kb.cz" class=3D"dark-desktop" style=3D"d=
+isplay:none" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/207ace52-52b2-47e7-adae-9=
+0d823c5bd2e" alt=3D"KB" title=3D"www.kb.cz" class=3D"light-xs" style=3D"displ=
+ay:none" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/82ae0d62-6b3a-4c18-aa32-c=
+a70d533d132" alt=3D"KB" title=3D"www.kb.cz" class=3D"dark-xs" style=3D"displa=
+y:none" border=3D"0" width=3D"0" height=3D"0" />
+</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<!--<![endif]-->
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td class=3D"swap" align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0">
+<tr>
+<td class=3D"hybrid">
+<img src=3D"https://content.aimatch.com/tngcikbaseu/2/dee0a68e-883e-401b-9ed5=
+-aab9be91df2d" alt=3D"" title=3D"" style=3D"display:block; width:100%; height=
+:auto" border=3D"0" usemap=3D"#hero-map" />
+<!--[if !mso]><!-->
+<map name=3D"hero-map" id=3D"logo-active">
+<a rea href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFI=
+XTURE~" target=3D"_blank" alt=3D"www.kb.cz" title=3D"www.kb.cz" coords=3D"0,0=
+,152,80" shape=3D"rect" />
+</map>
+<!--<![endif]-->
+</td>
+</tr>
+<!--[if !(mso)&!(IE)]><!-->
+<tr>
+<td align=3D"center">
+<img src=3D"https://content.aimatch.com/tngcikbaseu/2/88ae4eb5-a871-4f38-980f=
+-3a82f92580cf" alt=3D"" title=3D"" class=3D"light" style=3D"display:block" bo=
+rder=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.aimatch.com/tngcikbaseu/2/5edc0ead-fc06-4c33-ad8a=
+-05cfb4e48733" alt=3D"" title=3D"" class=3D"dark" style=3D"display:block" bor=
+der=3D"0" width=3D"0" height=3D"0" />
+</td>
+</tr>
+<!--<![endif]-->
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:488px">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:105%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:32px; line-height:120%; letter-spacing:-0.48px=
+;">
+<strong style=3D"font-weight:600">P=C5=99ijali jsme platbu 30,00 K=C4=8D na&n=
+bsp;V=C3=A1=C5=A1 =C3=BA=C4=8Det</strong>
+</span>
+</td>
+</tr>
+<tr>
+<td height=3D"48"></td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.16px=
+;">
+Splatnost: <a class=3D"fix-blueLinks c-dark-1" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:400">20. 08. =
+2026</font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td height=3D"48"></td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"488">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Z =C3=BA=
+=C4=8Dtu</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">
+
+<br>123-1234567890/0100
+</font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Na =C3=
+=BA=C4=8Det</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">321-9876=
+543210/0100</font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Zpr=C3=
+=A1va pro p=C5=99=C3=ADjemce</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500"></font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Variabil=
+n=C3=AD symbol</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500"></font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Konstant=
+n=C3=AD symbol</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500"></font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Specific=
+k=C3=BD symbol</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500"></font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td height=3D"48"></td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"488">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:105%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:24px; line-height:120%; letter-spacing:-0.4px;=
+">
+<strong style=3D"font-weight:600">Chcete <font style=3D"line-height:inherit; =
+white-space:nowrap">s&nbsp;n=C4=9B=C4=8D&iacute;m</font> poradit?</strong>
+</span>
+</td>
+</tr>
+<tr>
+<td height=3D"8" style=3D"font-size:1px; line-height:1px;"><img src=3D"https:=
+//content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"552">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:552px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td class=3D"hover-td-w td active-td-w c-dark-1-contact" style=3D"padding-lef=
+t: 20px; padding-right: 20px; border-radius: 8px; ">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"488">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td width=3D"48" align=3D"left" valign=3D"top" style=3D"min-width:48px">
+<a href=3D"tel:00420955551505">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/172b3881-74ee-416d-b1c0-5=
+ac468edf6d4" alt=3D"" title=3D"" style=3D"display:block" border=3D"0" width=
+=3D"48" height=3D"24" />
+</a>
+</td>
+<td class=3D"c-dark-1-contact">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<a href=3D"tel:00420955551505" class=3D"c-dark-1 c-dark-1-contact" style=3D"f=
+ont-family:Inter, Arial, Helvetica, sans-serif; font-weight:500; color:#21212=
+1; font-size:16px; line-height:140%; letter-spacing:-0.24px; display:block; t=
+ext-decoration:none;">
+<font class=3D"c-dark-1 c-dark-1-contact" color=3D"#212121">Volat do KB</font>
+</a>
+</td>
+</tr>
+<tr>
+<td height=3D"4" style=3D"font-size:1px; line-height:1px;"><img src=3D"https:=
+//content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<a href=3D"tel:00420955551505" class=3D"c-dark-2" style=3D"font-family:Inter,=
+ Arial, Helvetica, sans-serif; color:#717171; font-size:14px; line-height:120=
+%; letter-spacing:-0.16px; display:block; text-decoration:none;">
+<font class=3D"c-dark-2" color=3D"#717171">+420 955 551 505</font>
+</a>
+</td>
+</tr>
+</table>
+</td>
+<td width=3D"8" align=3D"right" valign=3D"top" style=3D"min-width:8px">
+<a href=3D"tel:00420955551505">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/a519014a-5e75-4120-a9f8-d=
+52c8226513f" alt=3D"" title=3D"" class=3D"hybrid" style=3D"display:block" bor=
+der=3D"0" width=3D"8" height=3D"16" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/fe604bfd-7727-4532-97c0-7=
+0aafa3649e1" alt=3D"" title=3D"" class=3D"light" style=3D"display:block" bord=
+er=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/af07a860-7b7e-4b5c-aefa-4=
+bbd702e1d8e" alt=3D"" title=3D"" class=3D"dark" style=3D"display:block" borde=
+r=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"hover-td-w td active-td-w" style=3D"padding-left: 20px; padding-=
+right: 20px; border-radius: 8px; ">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"488">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td width=3D"48" align=3D"left" valign=3D"top" style=3D"min-width:48px">
+<a href=3D"mailto:kbplus@kb.cz" title=3D"kbplus@kb.cz">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/83aef7de-ca4c-46f0-9abe-4=
+f1046dcc0a5" alt=3D"" title=3D"kbplus@kb.cz" class=3D"hybrid" style=3D"displa=
+y:block" border=3D"0" width=3D"48" height=3D"24" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/83aef7de-ca4c-46f0-9abe-4=
+f1046dcc0a5" alt=3D"" title=3D"kbplus@kb.cz" class=3D"light" style=3D"display=
+:block" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/83aef7de-ca4c-46f0-9abe-4=
+f1046dcc0a5" alt=3D"" title=3D"kbplus@kb.cz" class=3D"dark" style=3D"display:=
+block" border=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<a href=3D"mailto:kbplus@kb.cz" class=3D"c-dark-1" title=3D"kbplus@kb.cz" sty=
+le=3D"font-family:Inter, Arial, Helvetica, sans-serif; font-weight:500; color=
+:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px; display:b=
+lock; text-decoration:none;">
+<font class=3D"c-dark-1" color=3D"#212121">Napsat e-mail</font>
+</a>
+</td>
+</tr>
+<tr>
+<td height=3D"4" style=3D"font-size:1px; line-height:1px;"><img src=3D"https:=
+//content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<a href=3D"mailto:kbplus@kb.cz" class=3D"c-dark-2" title=3D"kbplus@kb.cz" sty=
+le=3D"font-family:Inter, Arial, Helvetica, sans-serif; color:#717171; font-si=
+ze:14px; line-height:120%; letter-spacing:-0.16px; display:block; text-decora=
+tion:none;">
+<font class=3D"c-dark-2" color=3D"#717171">kbplus@kb.cz</font>
+</a>
+</td>
+</tr>
+</table>
+</td>
+<td width=3D"8" align=3D"right" valign=3D"top" style=3D"min-width:8px">
+<a href=3D"mailto:kbplus@kb.cz" title=3D"kbplus@kb.cz">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/a519014a-5e75-4120-a9f8-d=
+52c8226513f" alt=3D"" title=3D"" class=3D"hybrid" style=3D"display:block" bor=
+der=3D"0" width=3D"8" height=3D"16" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/fe604bfd-7727-4532-97c0-7=
+0aafa3649e1" alt=3D"" title=3D"" class=3D"light" style=3D"display:block" bord=
+er=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/af07a860-7b7e-4b5c-aefa-4=
+bbd702e1d8e" alt=3D"" title=3D"" class=3D"dark" style=3D"display:block" borde=
+r=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" />
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td height=3D"48"></td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px; font-size:1px;=
+ line-height:1px;">&nbsp;</td>
+</tr>
+<tr>
+<td height=3D"47"></td>
+</tr>
+<tr>
+<td class=3D"swap" align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0">
+<tr>
+<td class=3D"hybrid">
+<img src=3D"https://content.aimatch.com/tngcikbaseu/2/d6c06b2d-ab2a-4590-8608=
+-3e9f8e07c59e" alt=3D"" title=3D"" style=3D"display:block; width:100%; height=
+:auto" border=3D"0" usemap=3D"#hero-map" />
+<!--[if !mso]><!-->
+<map name=3D"hero-map" id=3D"logo-active">
+<a rea href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFI=
+XTURE~" target=3D"_blank" alt=3D"www.kb.cz" title=3D"www.kb.cz" coords=3D"0,0=
+,152,80" shape=3D"rect" />
+</map>
+<!--<![endif]-->
+</td>
+</tr>
+<!--[if !(mso)&!(IE)]><!-->
+<tr>
+<td align=3D"center">
+<img src=3D"https://content.aimatch.com/tngcikbaseu/2/88ae4eb5-a871-4f38-980f=
+-3a82f92580cf" alt=3D"" title=3D"" class=3D"light" style=3D"display:block" bo=
+rder=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.aimatch.com/tngcikbaseu/2/5edc0ead-fc06-4c33-ad8a=
+-05cfb4e48733" alt=3D"" title=3D"" class=3D"dark" style=3D"display:block" bor=
+der=3D"0" width=3D"0" height=3D"0" />
+</td>
+</tr>
+<!--<![endif]-->
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:488px">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:105%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:32px; line-height:120%; letter-spacing:-0.48px=
+;">
+<strong style=3D"font-weight:600">We have received the payment 30.00 CZK to y=
+our account</strong>
+</span>
+</td>
+</tr>
+<tr>
+<td height=3D"48"></td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.16px=
+;">
+Due date: <a class=3D"fix-blueLinks c-dark-1" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:400">08-20-20=
+26</font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td height=3D"48"></td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"488">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">From acc=
+ount</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">
+
+<br>123-1234567890/0100
+</font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">To accou=
+nt</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">321-9876=
+543210/0100</font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Message =
+for beneficiary</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500"></font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Variable=
+ symbol</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500"></font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Constant=
+ symbol</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500"></font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:12px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500">Specific=
+ symbol</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-1" color=3D"#212121" style=3D"font-weight:500"></font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td height=3D"48"></td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"488">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:105%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:24px; line-height:120%; letter-spacing:-0.4px;=
+">
+<strong style=3D"font-weight:600">We are here to help</strong>
+</span>
+</td>
+</tr>
+<tr>
+<td height=3D"8" style=3D"font-size:1px; line-height:1px;"><img src=3D"https:=
+//content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"552">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:552px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td class=3D"hover-td-w td active-td-w c-dark-1-contact" style=3D"padding-lef=
+t: 20px; padding-right: 20px; border-radius: 8px; ">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"488">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td width=3D"48" align=3D"left" valign=3D"top" style=3D"min-width:48px">
+<a href=3D"tel:00420955551515">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/172b3881-74ee-416d-b1c0-5=
+ac468edf6d4" alt=3D"" title=3D"" style=3D"display:block" border=3D"0" width=
+=3D"48" height=3D"24" />
+</a>
+</td>
+<td class=3D"c-dark-1-contact">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<a href=3D"tel:00420955551515" class=3D"c-dark-1 c-dark-1-contact" style=3D"f=
+ont-family:Inter, Arial, Helvetica, sans-serif; font-weight:500; color:#21212=
+1; font-size:16px; line-height:140%; letter-spacing:-0.24px; display:block; t=
+ext-decoration:none;">
+<font class=3D"c-dark-1 c-dark-1-contact" color=3D"#212121">Call KB</font>
+</a>
+</td>
+</tr>
+<tr>
+<td height=3D"4" style=3D"font-size:1px; line-height:1px;"><img src=3D"https:=
+//content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<a href=3D"tel:00420955551515" class=3D"c-dark-2" style=3D"font-family:Inter,=
+ Arial, Helvetica, sans-serif; color:#717171; font-size:14px; line-height:120=
+%; letter-spacing:-0.16px; display:block; text-decoration:none;">
+<font class=3D"c-dark-2" color=3D"#717171">+420 955 551 515</font>
+</a>
+</td>
+</tr>
+</table>
+</td>
+<td width=3D"8" align=3D"right" valign=3D"top" style=3D"min-width:8px">
+<a href=3D"tel:00420955551515">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/a519014a-5e75-4120-a9f8-d=
+52c8226513f" alt=3D"" title=3D"" class=3D"hybrid" style=3D"display:block" bor=
+der=3D"0" width=3D"8" height=3D"16" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/fe604bfd-7727-4532-97c0-7=
+0aafa3649e1" alt=3D"" title=3D"" class=3D"light" style=3D"display:block" bord=
+er=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/af07a860-7b7e-4b5c-aefa-4=
+bbd702e1d8e" alt=3D"" title=3D"" class=3D"dark" style=3D"display:block" borde=
+r=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td class=3D"hover-td-w td active-td-w" style=3D"padding-left: 20px; padding-=
+right: 20px; border-radius: 8px; ">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"488">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td class=3D"swap">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td width=3D"48" align=3D"left" valign=3D"top" style=3D"min-width:48px">
+<a href=3D"mailto:kbplus@kb.cz" title=3D"kbplus@kb.cz">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/83aef7de-ca4c-46f0-9abe-4=
+f1046dcc0a5" alt=3D"" title=3D"kbplus@kb.cz" class=3D"hybrid" style=3D"displa=
+y:block" border=3D"0" width=3D"48" height=3D"24" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/83aef7de-ca4c-46f0-9abe-4=
+f1046dcc0a5" alt=3D"" title=3D"kbplus@kb.cz" class=3D"light" style=3D"display=
+:block" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/83aef7de-ca4c-46f0-9abe-4=
+f1046dcc0a5" alt=3D"" title=3D"kbplus@kb.cz" class=3D"dark" style=3D"display:=
+block" border=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<a href=3D"mailto:kbplus@kb.cz" class=3D"c-dark-1" title=3D"kbplus@kb.cz" sty=
+le=3D"font-family:Inter, Arial, Helvetica, sans-serif; font-weight:500; color=
+:#212121; font-size:16px; line-height:140%; letter-spacing:-0.24px; display:b=
+lock; text-decoration:none;">
+<font class=3D"c-dark-1" color=3D"#212121">Send us an email</font>
+</a>
+</td>
+</tr>
+<tr>
+<td height=3D"4" style=3D"font-size:1px; line-height:1px;"><img src=3D"https:=
+//content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<a href=3D"mailto:kbplus@kb.cz" class=3D"c-dark-2" title=3D"kbplus@kb.cz" sty=
+le=3D"font-family:Inter, Arial, Helvetica, sans-serif; color:#717171; font-si=
+ze:14px; line-height:120%; letter-spacing:-0.16px; display:block; text-decora=
+tion:none;">
+<font class=3D"c-dark-2" color=3D"#717171">kbplus@kb.cz</font>
+</a>
+</td>
+</tr>
+</table>
+</td>
+<td width=3D"8" align=3D"right" valign=3D"top" style=3D"min-width:8px">
+<a href=3D"mailto:kbplus@kb.cz" title=3D"kbplus@kb.cz">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/a519014a-5e75-4120-a9f8-d=
+52c8226513f" alt=3D"" title=3D"" class=3D"hybrid" style=3D"display:block" bor=
+der=3D"0" width=3D"8" height=3D"16" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/fe604bfd-7727-4532-97c0-7=
+0aafa3649e1" alt=3D"" title=3D"" class=3D"light" style=3D"display:block" bord=
+er=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/af07a860-7b7e-4b5c-aefa-4=
+bbd702e1d8e" alt=3D"" title=3D"" class=3D"dark" style=3D"display:block" borde=
+r=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" />
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td height=3D"48"></td>
+</tr>
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px; font-size:1px;=
+ line-height:1px;">&nbsp;</td>
+</tr>
+<tr>
+<td height=3D"47"></td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:488px">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:105%;">
+<span class=3D"c-dark-1" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#212121; font-size:28px; line-height:120%; letter-spacing:-0.4px;=
+">
+<a href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFIXTUR=
+E~" target=3D"_blank" title=3D"www.kb.cz" class=3D"c-dark-1" style=3D"color:#=
+212121; text-decoration:none; font-weight:500">
+<font class=3D"c-dark-1" color=3D"#212121">kb.cz</font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td height=3D"22"></td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"padding:0 16px">
+<!--[if (gte mso 9)|(IE)]>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td align=3D"center">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:488px">
+<tr>
+<td>
+<![endif]-->
+<table style=3D"width:100%; max-width:488px" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0">
+<tr>
+<td class=3D"swap" align=3D"left">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0">
+<tr>
+<td width=3D"40">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td style=3D"padding-right:16px">
+<a href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFIXTUR=
+E~" target=3D"_blank" title=3D"https://cs-cz.facebook.com">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/0a1bc0d2-1e6e-45a2-82b9-e=
+9b911b29744" alt=3D"" title=3D"https://cs-cz.facebook.com" class=3D"hybrid" s=
+tyle=3D"display:block" border=3D"0" width=3D"24" height=3D"24" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/96e52d03-6d96-44e4-8cf7-6=
+9f0e3857c21" alt=3D"" title=3D"https://cs-cz.facebook.com" class=3D"light" st=
+yle=3D"display:block" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/8184de7a-b359-4d2b-8998-1=
+00eef194c6c" alt=3D"" title=3D"https://cs-cz.facebook.com" class=3D"dark" sty=
+le=3D"display:block" border=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+</tr>
+</table>
+</td>
+<td width=3D"40">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td style=3D"padding-right:16px">
+<a href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFIXTUR=
+E~" target=3D"_blank" title=3D"www.instagram.com">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/d8346524-ca05-41bd-8339-d=
+3d66954eb70" alt=3D"" title=3D"www.instagram.com" class=3D"hybrid" style=3D"d=
+isplay:block" border=3D"0" width=3D"24" height=3D"24" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/41cc53d9-71d9-467a-9f0b-a=
+19abb21ed30" alt=3D"" title=3D"www.instagram.com" class=3D"light" style=3D"di=
+splay:block" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/aa102150-20d7-417b-b7a1-f=
+7d7120561d9" alt=3D"" title=3D"www.instagram.com" class=3D"dark" style=3D"dis=
+play:block" border=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+</tr>
+</table>
+</td>
+<td width=3D"40">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td style=3D"padding-right:16px">
+<a href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFIXTUR=
+E~" target=3D"_blank" title=3D"www.linkedin.com">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/51414fc8-248b-4c42-b011-b=
+238f1868852" alt=3D"" title=3D"www.linkedin.com" class=3D"hybrid" style=3D"di=
+splay:block" border=3D"0" width=3D"24" height=3D"24" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/649075cd-217b-4c12-ad86-e=
+788e5b7a9cc" alt=3D"" title=3D"www.linkedin.com" class=3D"light" style=3D"dis=
+play:block" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/2253d7cd-4a18-4613-8cd4-7=
+f7a8f68795a" alt=3D"" title=3D"www.linkedin.com" class=3D"dark" style=3D"disp=
+lay:block" border=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+</tr>
+</table>
+</td>
+<td width=3D"40">
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td style=3D"padding-right:16px">
+<a href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFIXTUR=
+E~" target=3D"_blank" title=3D"https://twitter.com">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/4e9939ee-b79f-4948-8561-e=
+c31c9565b7c" alt=3D"" title=3D"https://twitter.com" class=3D"hybrid" style=3D=
+"display:block" border=3D"0" width=3D"24" height=3D"24" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/1718f847-029b-4f21-8788-1=
+9cc8c92f827" alt=3D"" title=3D"https://twitter.com" class=3D"light" style=3D"=
+display:block" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/4a33336e-eb15-4b5b-9118-a=
+4c40b01b51b" alt=3D"" title=3D"https://twitter.com" class=3D"dark" style=3D"d=
+isplay:block" border=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+</tr>
+</table>
+</td>
+<td width=3D"24">
+<a href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFIXTUR=
+E~" target=3D"_blank" title=3D"www.youtube.com">
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/f4e32616-0416-401e-a5ba-d=
+63255c57883" alt=3D"" title=3D"www.youtube.com" class=3D"hybrid" style=3D"dis=
+play:block" border=3D"0" width=3D"24" height=3D"24" />
+<!--[if !(mso)&!(IE)]><!-->
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/b43f3ca1-e34a-4516-8b1b-4=
+ec620f7ed47" alt=3D"" title=3D"www.youtube.com" class=3D"light" style=3D"disp=
+lay:block" border=3D"0" width=3D"0" height=3D"0" />
+<img src=3D"https://content.kbinfo.cz/tngcikbpteu/2/f4799dd4-93a9-48f6-82c7-1=
+52840c1ade7" alt=3D"" title=3D"www.youtube.com" class=3D"dark" style=3D"displ=
+ay:block" border=3D"0" width=3D"0" height=3D"0" />
+<!--<![endif]-->
+</a>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"32"></td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-2" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#717171; font-size:14px; line-height:120%; letter-spacing:-0.16px=
+;">
+Nikdy V&aacute;s nebudeme e&#8209;mailem =C5=BE&aacute;dat o&nbsp;zasl&aacute=
+;n&iacute; d=C5=AFv=C4=9Brn&yacute;ch informac&iacute;, jako jsou heslo, PIN =
+k&oacute;d nebo =C4=8D&iacute;slo platebn&iacute; karty, ani V&aacute;s nebud=
+eme odkazovat na str&aacute;nky, kde mus&iacute;te tyto &uacute;daje vyplnit.=
+ Bu=C4=8Fte pros&iacute;m ostra=C5=BEit&iacute;, a&nbsp;jakmile V&aacute;m ta=
+kov&yacute; e&#8209;mail p=C5=99ijde, dejte n&aacute;m v=C4=9Bd=C4=9Bt na <a =
+href=3D"mailto:kbplus@kb.cz" title=3D"kbplus@kb.cz" class=3D"c-dark-2" style=
+=3D"color:#717171; text-decoration:underline">
+<font class=3D"c-dark-2" color=3D"#717171">kbplus@kb.cz.</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td height=3D"32"></td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-2" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#717171; font-size:14px; line-height:120%; letter-spacing:-0.16px=
+;">
+<a class=3D"fix-blueLinks" style=3D"text-decoration:none">
+<font class=3D"c-dark-2" color=3D"#717171">Komer=C4=8Dn&iacute; banka, a. s.,=
+ I=C4=8CO: 45317054<br/>Na P=C5=99&iacute;kop=C4=9B 969/33, 114 07 Praha 1<br=
+/>B 1360 veden&aacute; u&nbsp;M=C4=9Bstsk&eacute;ho soudu v&nbsp;Praze</font>
+</a>
+</span>
+</td>
+</tr>
+<tr>
+<td height=3D"32"></td>
+</tr>
+<tr>
+<td>
+<table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" width=3D"100%">
+<tr>
+<td class=3D"line-dark" style=3D"border-top:#e5e5e5 solid 1px; font-size:1px;=
+ line-height:1px;">&nbsp;</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td height=3D"16" style=3D"font-size:1px; line-height:1px;"><img src=3D"https=
+://content.kbinfo.cz/tngcikbpteu/2/3d2cfedc-5e82-4c98-87e6-906a52329690" alt=
+=3D"" title=3D"" style=3D"display:block" border=3D"0" width=3D"1" height=3D"1=
+" /></td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"mso-line-height-rule:exactly; line-height:115%;">
+<span class=3D"c-dark-2" style=3D"font-family:Inter, Arial, Helvetica, sans-s=
+erif; color:#717171; font-size:14px; line-height:140%; letter-spacing:-0.24px=
+;">
+<a href=3D"https://link.kbinfo.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFIXTUR=
+E~" class=3D"c-dark-2" target=3D"_blank" title=3D"Zobrazit online" style=3D"c=
+olor:#717171; text-decoration:underline;">
+<font color=3D"#717171">Zobrazit online</font>
+</a>
+</span>
+</td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
+<![endif]-->
+</td>
+</tr>
+<tr>
+<td height=3D"48"></td>
+</tr>
+</table>
+<!--[if (gte mso 9)|(IE)]>
+</td>
+</tr>
+</table>
+<![endif]-->
+</div>
+</td>
+</tr>
+</table>
+</div>
+</center>
+
+<img border=3D"0" width=3D"1" height=3D"1" alt=3D"" src=3D"https://link.kbinf=
+o.cz/f/a/FIXTURE~~/AAAAARA~/FIXTUREFIXTUREFIXTURE~">
+</body><!--SASHTMLEditor-->
+</html>
+

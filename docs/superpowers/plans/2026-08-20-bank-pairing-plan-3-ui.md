@@ -1340,7 +1340,7 @@ Once Plans 1–3 are complete:
 
 - [ ] Full suite green, including `tests/reference-property-2024.test.ts` — this feature adds no allocation or reconciliation logic, so movement there means something leaked
 - [ ] `pnpm build`, `npx vite build` clean; CI green on the branch
-- [ ] `BANK_SECRET_KEY` and `CRON_SECRET` set on the Vercel project (all environments / production respectively) **before** merging, since merging to `main` migrates and deploys production
+- [ ] `SECRET_ENCRYPTION_KEY` and `CRON_SECRET` set on the Vercel project (all environments / production respectively) **before** merging, since merging to `main` migrates and deploys production
 - [ ] A real end-to-end run: point an integration at the actual mailbox, press **Synchronizovat**, and confirm a real KB notification lands as a payment on the right contract
 - [ ] PR opened against `main` with CI green and the branch up to date
 

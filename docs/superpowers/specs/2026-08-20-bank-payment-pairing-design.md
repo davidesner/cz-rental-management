@@ -379,7 +379,7 @@ type FetchMessages = (cfg: ImapConfig, cursor: Cursor, limit: number)
 `syncIntegration(db, orgId, integrationId, { fetchMessages, trigger })`:
 
 1. Open a `bank_sync_run` row.
-2. Decrypt `imapPasswordEnc`. A missing or malformed `BANK_SECRET_KEY` fails the run
+2. Decrypt `imapPasswordEnc`. A missing or malformed `SECRET_ENCRYPTION_KEY` fails the run
    loudly with a distinct error rather than attempting a connection.
 3. Fetch up to `MAX_MESSAGES_PER_RUN` messages from the cursor.
 4. For each message, **in its own DB transaction**:
@@ -530,14 +530,14 @@ Owner-only unless noted. The IMAP password is **write-only**: responses carry
 
 | Variable | Purpose |
 |---|---|
-| `BANK_SECRET_KEY` | 32 random bytes, base64 — AES-256-GCM key for IMAP passwords |
+| `SECRET_ENCRYPTION_KEY` | 32 random bytes, base64 — AES-256-GCM key for stored secrets the app must replay (currently IMAP passwords) |
 | `CRON_SECRET` | Vercel cron bearer token |
 
 ## Encryption
 
 `core/lib/crypto-box.ts`, using `node:crypto` only:
 
-- AES-256-GCM, key = `base64decode(BANK_SECRET_KEY)`, rejected unless exactly 32 bytes.
+- AES-256-GCM, key = `base64decode(SECRET_ENCRYPTION_KEY)`, rejected unless exactly 32 bytes.
 - A fresh random 12-byte IV per record; stored as `v1:<iv>:<tag>:<ciphertext>`,
   base64url, so a future scheme can coexist behind the version tag.
 - `open()` throws on any auth-tag mismatch — a tampered or key-mismatched row fails

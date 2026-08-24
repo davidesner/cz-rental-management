@@ -164,7 +164,7 @@ export async function testBankIntegration(
     cfg = await loadImapConfig(db, orgId, id, key);
   } catch (e) {
     if (e instanceof AppError) throw e;
-    return { ok: false, error: `nelze dešifrovat heslo — zkontroluj BANK_SECRET_KEY` };
+    return { ok: false, error: `nelze dešifrovat heslo — zkontroluj SECRET_ENCRYPTION_KEY` };
   }
   const result = await probeConnection(cfg);
   return result.ok ? { ok: true, mailboxExists: result.mailboxExists } : { ok: false, error: result.error };

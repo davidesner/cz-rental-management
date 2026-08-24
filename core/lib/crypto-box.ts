@@ -13,17 +13,17 @@ const IV_BYTES = 12; // 96-bit nonce, the size GCM is specified for
 const KEY_BYTES = 32;
 
 /**
- * Decode and validate the raw base64 key (from BANK_SECRET_KEY).
+ * Decode and validate the raw base64 key (from SECRET_ENCRYPTION_KEY).
  *
  * Deliberately takes the string rather than reading process.env itself: core/
  * is framework- and environment-free, and a bad key must fail at a call site
  * that can report it, not at module load.
  */
 export function loadKey(raw: string | undefined): Buffer {
-  if (!raw) throw new Error('BANK_SECRET_KEY is not set');
+  if (!raw) throw new Error('SECRET_ENCRYPTION_KEY is not set');
   const key = Buffer.from(raw, 'base64');
   if (key.length !== KEY_BYTES) {
-    throw new Error(`BANK_SECRET_KEY must decode to ${KEY_BYTES} bytes, got ${key.length}`);
+    throw new Error(`SECRET_ENCRYPTION_KEY must decode to ${KEY_BYTES} bytes, got ${key.length}`);
   }
   return key;
 }

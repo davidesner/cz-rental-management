@@ -8,7 +8,7 @@ import { bankIntegration, bankTransaction, membership, propertyAccess } from '..
 import { eq } from 'drizzle-orm';
 
 beforeAll(() => {
-  process.env['BANK_SECRET_KEY'] = randomBytes(32).toString('base64');
+  process.env['SECRET_ENCRYPTION_KEY'] = randomBytes(32).toString('base64');
   process.env['CRON_SECRET'] = 'test-cron-secret';
 });
 

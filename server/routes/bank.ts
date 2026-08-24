@@ -54,7 +54,7 @@ const StatusFilter = z.enum(['unmatched', 'matched', 'ambiguous', 'suspected_dup
 
 function bankKey(): Buffer {
   // Deliberately NOT wrapped in an AppError. A missing or malformed
-  // BANK_SECRET_KEY is a SERVER misconfiguration, and AppError('bad_request')
+  // SECRET_ENCRYPTION_KEY is a SERVER misconfiguration, and AppError('bad_request')
   // maps to HTTP 400 — which tells the client their request was malformed when
   // the deployment is the thing that is broken. core/errors.ts has no
   // 'internal' kind, so letting the plain Error propagate is the correct
@@ -63,7 +63,7 @@ function bankKey(): Buffer {
   // caller. cronRoutes() already calls loadKey bare for the identical failure,
   // so this also makes the two entry points report it the same way instead of
   // 400-here / 500-there during a real misconfiguration incident.
-  return loadKey(process.env['BANK_SECRET_KEY']);
+  return loadKey(process.env['SECRET_ENCRYPTION_KEY']);
 }
 
 export function bankRoutes() {
@@ -204,7 +204,7 @@ export function cronRoutes() {
 
     const results = await syncAllActiveIntegrations(c.get('db'), {
       fetchMessages: fetchMessagesOverImap,
-      key: loadKey(process.env['BANK_SECRET_KEY']),
+      key: loadKey(process.env['SECRET_ENCRYPTION_KEY']),
     });
     return c.json({ results });
   });

@@ -21,7 +21,7 @@
 - **The IMAP mailbox is opened read-only.** Never mark seen, move, or delete.
 - **Never fetch `sourceLink`.** It is a click-tracker.
 - **ESM import specifiers end in `.js`.**
-- **New env vars:** `BANK_SECRET_KEY` (32 bytes, base64), `CRON_SECRET`.
+- **New env vars:** `SECRET_ENCRYPTION_KEY` (32 bytes, base64), `CRON_SECRET`.
 - **Tests:** `TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres" pnpm test`
 - **Work on `feat/bank-payment-pairing`.** `main` is protected.
 
@@ -619,7 +619,7 @@ describe('bank-sync', () => {
       const c = await setup();
       const result = await syncIntegration(c.db, c.integrationId, { ...fakeImap([]), key: randomBytes(32) }, 'cron');
       expect(result.status).toBe('error');
-      expect(result.error).toMatch(/BANK_SECRET_KEY|decrypt/i);
+      expect(result.error).toMatch(/SECRET_ENCRYPTION_KEY|decrypt/i);
       await c.close();
     });
   });
@@ -884,7 +884,7 @@ export async function syncIntegration(
     try {
       password = open(integ.imapPasswordEnc, deps.key);
     } catch (e) {
-      throw new Error(`cannot decrypt IMAP password — check BANK_SECRET_KEY (${e instanceof Error ? e.message : String(e)})`);
+      throw new Error(`cannot decrypt IMAP password — check SECRET_ENCRYPTION_KEY (${e instanceof Error ? e.message : String(e)})`);
     }
 
     const cfg: ImapConfig = {
@@ -1262,7 +1262,7 @@ export async function testBankIntegration(
     cfg = await loadImapConfig(db, orgId, id, key);
   } catch (e) {
     if (e instanceof AppError) throw e;
-    return { ok: false, error: `nelze dešifrovat heslo — zkontroluj BANK_SECRET_KEY` };
+    return { ok: false, error: `nelze dešifrovat heslo — zkontroluj SECRET_ENCRYPTION_KEY` };
   }
   const result = await probeConnection(cfg);
   return result.ok ? { ok: true, mailboxExists: result.mailboxExists } : { ok: false, error: result.error };
@@ -1760,7 +1760,7 @@ import { bankIntegration, bankTransaction, membership, propertyAccess } from '..
 import { eq } from 'drizzle-orm';
 
 beforeAll(() => {
-  process.env['BANK_SECRET_KEY'] = randomBytes(32).toString('base64');
+  process.env['SECRET_ENCRYPTION_KEY'] = randomBytes(32).toString('base64');
   process.env['CRON_SECRET'] = 'test-cron-secret';
 });
 
@@ -2060,7 +2060,7 @@ const AssignBody = z.object({ contractId: z.string().min(1) });
 
 function bankKey(): Buffer {
   // Deliberately NOT wrapped in an AppError. A missing or malformed
-  // BANK_SECRET_KEY is a SERVER misconfiguration, and AppError('bad_request')
+  // SECRET_ENCRYPTION_KEY is a SERVER misconfiguration, and AppError('bad_request')
   // maps to HTTP 400 — which tells the client their request was malformed when
   // the deployment is the thing that is broken. core/errors.ts has no
   // 'internal' kind, so letting the plain Error propagate is the correct
@@ -2069,7 +2069,7 @@ function bankKey(): Buffer {
   // caller. cronRoutes() already calls loadKey bare for the identical failure,
   // so this also makes the two entry points report it the same way instead of
   // 400-here / 500-there during a real misconfiguration incident.
-  return loadKey(process.env['BANK_SECRET_KEY']);
+  return loadKey(process.env['SECRET_ENCRYPTION_KEY']);
 }
 
 export function bankRoutes() {
@@ -2201,7 +2201,7 @@ export function cronRoutes() {
 
     const results = await syncAllActiveIntegrations(c.get('db'), {
       fetchMessages: fetchMessagesOverImap,
-      key: loadKey(process.env['BANK_SECRET_KEY']),
+      key: loadKey(process.env['SECRET_ENCRYPTION_KEY']),
     });
     return c.json({ results });
   });
@@ -2303,13 +2303,14 @@ Two notes for whoever changes this later: the existing `/api/:path*` rewrite is 
 Append:
 
 ```bash
-# --- Bank payment collection --------------------------------------------------
-# AES-256-GCM key for IMAP passwords stored on bank_integration.
+# --- Secret encryption --------------------------------------------------------
+# AES-256-GCM key for stored secrets the app must replay (currently the IMAP
+# password on bank_integration).
 # Generate with: openssl rand -base64 32
-# Losing or changing it makes every stored password undecryptable — the sync
-# then fails loudly with "cannot decrypt IMAP password" and each integration
-# needs its password re-entered.
-BANK_SECRET_KEY=replace-me-with-openssl-rand-base64-32
+# Losing or changing it makes every stored secret undecryptable — for the bank
+# integration, the sync then fails loudly with "cannot decrypt IMAP password"
+# and each integration needs its password re-entered.
+SECRET_ENCRYPTION_KEY=replace-me-with-openssl-rand-base64-32
 
 # Bearer token Vercel Cron presents to GET /api/cron/bank-sync.
 # Vercel sets this header automatically once the env var exists on the project.
@@ -2328,10 +2329,10 @@ Append a new section:
 
 | Var | Kde | Jak vyrobit |
 |---|---|---|
-| `BANK_SECRET_KEY` | Vercel project env (all environments) + `.env` lokálně | `openssl rand -base64 32` |
+| `SECRET_ENCRYPTION_KEY` | Vercel project env (all environments) + `.env` lokálně | `openssl rand -base64 32` |
 | `CRON_SECRET` | Vercel project env (production) | `openssl rand -hex 32` |
 
-`BANK_SECRET_KEY` **musí být stejný ve všech prostředích, která čtou stejnou DB.**
+`SECRET_ENCRYPTION_KEY` **musí být stejný ve všech prostředích, která čtou stejnou DB.**
 Preview deploymenty mají vlastní Neon branch, takže tam může být jiný — ale integrace
 naklonované z produkčních dat pak nepůjdou dešifrovat a sync skončí chybou
 „cannot decrypt IMAP password". To je očekávané, ne bug.
@@ -2366,7 +2367,7 @@ zapnuté 2FA na Google účtu. Host `imap.gmail.com`, port 993.
 | Chyba | Co to znamená |
 |---|---|
 | `AUTHENTICATIONFAILED` | špatné heslo, nebo běžné heslo místo App Password |
-| `cannot decrypt IMAP password` | `BANK_SECRET_KEY` se změnil nebo chybí |
+| `cannot decrypt IMAP password` | `SECRET_ENCRYPTION_KEY` se změnil nebo chybí |
 | `unexpected_structure: …` | KB změnila šablonu e-mailu — potřeba upravit parser |
 
 U posledního případu zůstane zpráva v inboxu jako `parse_failed` se seznamem
@@ -2388,7 +2389,7 @@ gives the IMAP fetch headroom over the 10s default. The existing /api/:path*
 rewrite means the cron path needs no new function file.
 
 DEPLOY.md documents the three failure modes that actually happen, including
-that a preview with a different BANK_SECRET_KEY cannot decrypt cloned
+that a preview with a different SECRET_ENCRYPTION_KEY cannot decrypt cloned
 production integrations — expected, not a bug."
 ```
 

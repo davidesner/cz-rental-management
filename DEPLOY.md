@@ -267,10 +267,10 @@ Publish workflow: `cd mcp && pnpm build && npm publish --access public`. Source/
 
 | Var | Kde | Jak vyrobit |
 |---|---|---|
-| `BANK_SECRET_KEY` | Vercel project env (all environments) + `.env` lokálně | `openssl rand -base64 32` |
+| `SECRET_ENCRYPTION_KEY` | Vercel project env (all environments) + `.env` lokálně | `openssl rand -base64 32` |
 | `CRON_SECRET` | Vercel project env (production) | `openssl rand -hex 32` |
 
-`BANK_SECRET_KEY` **musí být stejný ve všech prostředích, která čtou stejnou DB.**
+`SECRET_ENCRYPTION_KEY` **musí být stejný ve všech prostředích, která čtou stejnou DB.**
 Preview deploymenty mají vlastní Neon branch, takže tam může být jiný — ale integrace
 naklonované z produkčních dat pak nepůjdou dešifrovat a sync skončí chybou
 „cannot decrypt IMAP password". To je očekávané, ne bug.
@@ -305,7 +305,7 @@ zapnuté 2FA na Google účtu. Host `imap.gmail.com`, port 993.
 | Chyba | Co to znamená |
 |---|---|
 | `AUTHENTICATIONFAILED` | špatné heslo, nebo běžné heslo místo App Password |
-| `cannot decrypt IMAP password` | `BANK_SECRET_KEY` se změnil nebo chybí |
+| `cannot decrypt IMAP password` | `SECRET_ENCRYPTION_KEY` se změnil nebo chybí |
 | `unexpected_structure: …` | KB změnila šablonu e-mailu — potřeba upravit parser |
 
 U posledního případu zůstane zpráva v inboxu jako `parse_failed` se seznamem

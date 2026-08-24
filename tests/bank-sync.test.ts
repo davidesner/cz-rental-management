@@ -550,7 +550,7 @@ describe('bank-sync', () => {
       const c = await setup();
       const result = await syncIntegration(c.db, c.integrationId, { ...fakeImap([]), key: randomBytes(32) }, 'cron');
       expect(result.status).toBe('error');
-      expect(result.error).toMatch(/BANK_SECRET_KEY|decrypt/i);
+      expect(result.error).toMatch(/SECRET_ENCRYPTION_KEY|decrypt/i);
       await c.close();
     });
   });

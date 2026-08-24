@@ -245,7 +245,7 @@ export async function syncIntegration(
     try {
       password = open(integ.imapPasswordEnc, deps.key);
     } catch (e) {
-      throw new Error(`cannot decrypt IMAP password — check BANK_SECRET_KEY (${e instanceof Error ? e.message : String(e)})`);
+      throw new Error(`cannot decrypt IMAP password — check SECRET_ENCRYPTION_KEY (${e instanceof Error ? e.message : String(e)})`);
     }
 
     const cfg: ImapConfig = {

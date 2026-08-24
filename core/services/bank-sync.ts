@@ -266,6 +266,11 @@ export async function syncIntegration(
       limit: MAX_MESSAGES_PER_RUN,
       sinceFallback: integ.lastSyncAt ?? lookback,
       deadline: now().getTime() + (deps.budgetMs ?? DEFAULT_BUDGET_MS),
+      // So MAX_MESSAGES_PER_RUN is spent on candidate notifications rather than
+      // on whatever else reached the folder. A BUDGET filter only — IMAP SEARCH
+      // FROM is a substring match on the raw header; the sender decision is
+      // parseKbPaymentNotification's, on the parsed address.
+      fromFilter: integ.fromFilter,
     });
     fetched = messages.length;
 

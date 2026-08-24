@@ -100,6 +100,10 @@ describe('bank-sync', () => {
 
     // The decrypted password reached the fetcher
     expect(d.calls[0]!.password).toBe(PASSWORD);
+    // The sender filter reaches the fetcher, which puts it in IMAP SEARCH — a
+    // BUDGET filter, so unrelated mail cannot starve MAX_MESSAGES_PER_RUN. The
+    // security check is the parser's, on the parsed address.
+    expect(d.calls[0]!.fromFilter).toBe('servis@kbinfo.cz');
 
     const [tx] = await c.db.select().from(bankTransaction);
     expect(tx!.status).toBe('matched');

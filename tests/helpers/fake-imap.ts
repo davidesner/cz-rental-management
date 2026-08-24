@@ -6,9 +6,12 @@ import type { FetchMessages, RawMessage } from '../../core/lib/imap-fetcher.js';
  * assert the decrypted password reached the fetcher.
  */
 export function fakeImap(messages: Array<{ uid: number; source: Buffer | string }>) {
-  const calls: Array<{ password: string; user: string; folder: string }> = [];
+  const calls: Array<{ password: string; user: string; folder: string; fromFilter: string }> = [];
   const fetchMessages: FetchMessages = async (cfg, cursor, opts) => {
-    calls.push({ password: cfg.password, user: cfg.user, folder: cfg.folder });
+    // fromFilter too: the real fetcher pushes it into IMAP SEARCH so the run's
+    // message budget is not spent on unrelated mail, and a sync that forgot to
+    // pass it would silently go back to downloading the whole folder.
+    calls.push({ password: cfg.password, user: cfg.user, folder: cfg.folder, fromFilter: opts.fromFilter });
     const after = cursor.lastUid ?? 0;
     const selected: RawMessage[] = messages
       .filter((m) => m.uid > after)

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { nextCursor, nextSearchRange } from '../core/lib/imap-fetcher.js';
+import {
+  nextCursor, nextSearchRange, searchCriteria, exceedsSizeCap, MAX_MESSAGE_BYTES,
+} from '../core/lib/imap-fetcher.js';
 
 const FALLBACK = new Date('2026-08-01T00:00:00Z');
 
@@ -64,5 +66,39 @@ describe('nextCursor', () => {
     expect(c).toEqual({ uidValidity: 111, lastUid: null });
     // Belt and braces: the two functions must agree about the same cursor.
     expect(nextSearchRange(c, 111, FALLBACK).kind).toBe('since');
+  });
+});
+
+// The sync search must carry the sender filter, exactly as probeConnection's
+// already did. Without it every message in the folder — spam included — spent
+// one of the run's 25 slots and was downloaded in full, so a busy folder never
+// caught up and payment notifications were delayed indefinitely.
+describe('searchCriteria', () => {
+  it('carries the sender filter in a uid-range search', () => {
+    expect(searchCriteria({ kind: 'uid', range: '43:*' }, 'servis@kbinfo.cz'))
+      .toEqual({ uid: '43:*', from: 'servis@kbinfo.cz' });
+  });
+
+  it('carries the sender filter in a date search', () => {
+    expect(searchCriteria({ kind: 'since', since: FALLBACK }, 'servis@kbinfo.cz'))
+      .toEqual({ since: FALLBACK, from: 'servis@kbinfo.cz' });
+  });
+});
+
+describe('exceedsSizeCap', () => {
+  it('accepts a real notification with room to spare', () => {
+    // The committed fixture is 77 905 bytes.
+    expect(exceedsSizeCap(77_905)).toBe(false);
+    expect(exceedsSizeCap(MAX_MESSAGE_BYTES)).toBe(false);
+  });
+
+  it('refuses a body the parser would refuse anyway, before downloading it', () => {
+    expect(exceedsSizeCap(MAX_MESSAGE_BYTES + 1)).toBe(true);
+  });
+
+  it('does not treat an unreported size as oversized', () => {
+    // A server that declines RFC822.SIZE must not cost us real mail; the
+    // parser's own caps still bound the work.
+    expect(exceedsSizeCap(undefined)).toBe(false);
   });
 });

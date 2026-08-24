@@ -6,7 +6,7 @@
 //
 // Verified working from a Vercel function (fra1, TLSv1.3, ~38 ms to Gmail) —
 // see the risk register in the design spec.
-import { ImapFlow, type MessageEnvelopeObject } from 'imapflow';
+import { ImapFlow, type MessageEnvelopeObject, type SearchObject } from 'imapflow';
 import { matchesFilters } from './kb-email-parser.js';
 
 export interface ImapConfig {
@@ -34,7 +34,28 @@ export interface FetchOpts {
   sinceFallback: Date | null;
   /** Epoch ms after which we stop fetching and commit what we have. */
   deadline: number;
+  /**
+   * The integration's `fromFilter`, pushed into IMAP SEARCH so the per-run
+   * message budget is spent on candidate notifications instead of whatever else
+   * landed in the folder.
+   *
+   * ⚠️ A BUDGET FILTER, NOT AUTHENTICATION. IMAP `SEARCH FROM` is a substring
+   * match on the raw header, so a display name containing the filter satisfies
+   * it. The security decision is `matchesFilters` in kb-email-parser.ts, which
+   * matches the PARSED address; this only decides what is worth downloading.
+   */
+  fromFilter: string;
 }
+
+/**
+ * Skip anything larger than this without downloading it.
+ *
+ * The real committed fixture is 77 905 bytes, so a genuine notification has ~13x
+ * headroom. Above the cap the body could not be parsed anyway (the parser caps
+ * the HTML part at 512 KiB), and downloading it would spend the run's wall clock
+ * on something we would then refuse.
+ */
+export const MAX_MESSAGE_BYTES = 1024 * 1024;
 
 export type FetchMessages = (
   cfg: ImapConfig,
@@ -96,6 +117,34 @@ export function nextCursor(
   return { uidValidity: serverUidValidity, lastUid };
 }
 
+/**
+ * The IMAP SEARCH criteria for one run.
+ *
+ * `from` is in the query exactly as `probeConnection` already does it. Without
+ * it, EVERY message in the folder consumed one of the run's `limit` slots and
+ * was fully downloaded, so a folder receiving more than `limit` messages a day
+ * never caught up — ordinary spam, or a deliberate flood, was enough to delay
+ * payment notifications indefinitely.
+ *
+ * Pure and exported because the fetch around it needs a live mailbox: this is
+ * the part a test can pin.
+ *
+ * ⚠️ A BUDGET FILTER, NOT AUTHENTICATION — see FetchOpts#fromFilter.
+ */
+export function searchCriteria(range: SearchRange, fromFilter: string): SearchObject {
+  return range.kind === 'uid'
+    ? { uid: range.range, from: fromFilter }
+    : { since: range.since, from: fromFilter };
+}
+
+/** True when the server-reported size means we must not download the body. */
+export function exceedsSizeCap(size: number | undefined): boolean {
+  // An unknown size is NOT treated as oversized: the parser's own caps still
+  // refuse an unreadable body, and refusing here would drop real mail whenever a
+  // server declined to report RFC822.SIZE.
+  return size !== undefined && size > MAX_MESSAGE_BYTES;
+}
+
 function clientFor(cfg: ImapConfig): ImapFlow {
   return new ImapFlow({
     host: cfg.host,
@@ -119,9 +168,7 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
     const uidValidity = Number(mailbox.uidValidity);
     const range = nextSearchRange(cursor, uidValidity, opts.sinceFallback);
 
-    const found = range.kind === 'uid'
-      ? await client.search({ uid: range.range }, { uid: true })
-      : await client.search({ since: range.since }, { uid: true });
+    const found = await client.search(searchCriteria(range, opts.fromFilter), { uid: true });
 
     // search() resolves to `false` (not null/undefined) when nothing matches,
     // so a plain `?? []` would not catch it — narrow it explicitly.
@@ -130,9 +177,27 @@ export const fetchMessagesOverImap: FetchMessages = async (cfg, cursor, opts) =>
     // processed, so a capped run resumes rather than skips.
     const selected = all.slice(0, opts.limit);
 
+    // Sizes first, in ONE round trip, so an oversized message is skipped
+    // without its body ever crossing the wire. A per-message size fetch would
+    // double the command count for every normal message to guard the rare one.
+    const sizes = new Map<number, number>();
+    if (selected.length > 0) {
+      for (const msg of await client.fetchAll(selected, { size: true }, { uid: true })) {
+        if (typeof msg.size === 'number') sizes.set(Number(msg.uid), msg.size);
+      }
+    }
+
     const messages: RawMessage[] = [];
     for (const uid of selected) {
       if (Date.now() > opts.deadline) break;
+      const size = sizes.get(uid);
+      if (exceedsSizeCap(size)) {
+        // Logged, not silent: this is the one place a genuine (if absurd)
+        // notification could be dropped. The parser would refuse a body this
+        // large anyway, so downloading it buys nothing.
+        console.warn(`[imap] skipping uid ${uid} in ${cfg.folder}: ${size} bytes exceeds the ${MAX_MESSAGE_BYTES} cap`);
+        continue;
+      }
       const msg = await client.fetchOne(String(uid), { source: true }, { uid: true });
       if (!msg || !msg.source) {
         // The message vanished between search() and fetchOne — imapflow resolves
@@ -208,6 +273,11 @@ function envelopeFromAddress(envelope: MessageEnvelopeObject | undefined): strin
  * `from` + `since` and only fetch headers for the (capped) matches to apply
  * the subject filter in code via `matchesFilters` — the exact predicate the
  * sync uses, so the probe and the sync cannot disagree.
+ *
+ * The server-side `from` search is a substring match on the raw header and is
+ * therefore only a coarse pre-filter; `matchesFilters` is what actually decides,
+ * on the parsed address. `fromMatches` vs `filterMatches` in the result is that
+ * distinction made visible.
  */
 export async function probeConnection(
   cfg: ImapConfig,

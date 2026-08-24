@@ -91,11 +91,15 @@ async function verifyContractInOrgIfSet(db: DB, orgId: string, contractId: strin
  *   only to enrich the conflict message (see "differing vs does not stop the
  *   duplicate guard" test in payment-duplicates.test.ts).
  *
- * `excludeId` exists for the mutate paths (`assignPaymentToContract`,
- * `updatePayment`): they change a row that ALREADY EXISTS, so without excluding
- * it, every such row would collide with its own fingerprint and the app would
- * refuse every edit. The insert path (`recordPayment` / `recordPaymentsBatch`)
- * never passes it — there is no existing row to exclude yet.
+ * `excludeId` is passed by both mutate paths (`assignPaymentToContract`,
+ * `updatePayment`) but, since the no-op short-circuit added in 3570d00, it no
+ * longer excludes anything in practice on either one: both skip this query
+ * entirely for a genuine no-op, and whenever it DOES run, at least one of
+ * contractId/amount/paidAt is guaranteed to differ from the row's own current
+ * values — so the row could never have matched its own fingerprint anyway.
+ * It stays belt-and-braces, not load-bearing. The insert path (`recordPayment`
+ * / `recordPaymentsBatch`) never passes it — there is no existing row to
+ * exclude yet.
  */
 export async function findPaymentByFingerprint(
   db: DB, orgId: string, contractId: string, amount: number, paidAt: string, excludeId?: string,

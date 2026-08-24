@@ -66,10 +66,12 @@ export function IntegrationDialog({ integration, kind, onClose, onSaved }: Props
         accountNumber: form.accountNumber.trim() === '' ? null : form.accountNumber.trim(),
         active: form.active,
       };
-      // kind is fixed at creation and never sent on an update — it doesn't
-      // come from the DB row but from the chooser (or, on edit, from the
-      // integration itself), so the seam is here rather than a hardcoded
-      // 'kb_email' literal.
+      // kind is fixed at creation and never sent on an update. NOTE: this
+      // client-side seam is not yet honoured server-side — `CreateIntegration`
+      // in server/routes/bank.ts has no `kind` field, so zod strips it before
+      // it reaches the service, and core/services/bank-integration.ts still
+      // hardcodes `kind: 'kb_email'` on insert. Sending it here is forward
+      // groundwork for when a second kind exists, not a working seam today.
       if (!editing) body['kind'] = kind;
       // Only send the password when it was actually typed — an omitted field
       // leaves the stored one untouched, which is what makes editing safe.

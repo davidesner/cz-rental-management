@@ -337,10 +337,12 @@ describe('payment duplicate detection', () => {
       await client.close();
     });
 
-    // THE self-exclusion regression test: without `excludeId`, this no-op patch
-    // would find the row's OWN fingerprint and refuse itself, making every edit
-    // impossible. If `excludeId` is ever dropped from findPaymentByFingerprint
-    // (or not threaded through here), this test fails.
+    // This is the isNoOp short-circuit's regression test, not `excludeId`'s: a
+    // genuine no-op patch (merged values equal the row's own current values)
+    // skips findPaymentByFingerprint entirely (see 3570d00), before
+    // `excludeId` would ever come into play. `excludeId` is still passed
+    // through on the paths that do reach the query, but it protects nothing
+    // on THIS scenario — the isNoOp check already kept the query from running.
     it('does not self-conflict on a no-op patch setting amount to the value it already has', async () => {
       const { db, client, orgId, propertyId, contractId } = await seedTwoContracts();
       const p = await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'a' });

@@ -135,8 +135,34 @@ async function findDuplicateFor(db: DB, orgId: string, input: PaymentInput) {
  * explicit decision — true whether the caller is inserting, assigning or
  * editing, since `allowDuplicate` is that explicit decision in all three.
  */
+/**
+ * Normalize a bank-symbol-shaped field on write: trim, and blank (after
+ * trimming) becomes `null`.
+ *
+ * Same convention as `core/services/payment-rule.ts#blankToNull` (the
+ * pairing-rule write path) — kept as a small local copy rather than an
+ * import because the two callers have no other shared dependency and this
+ * is a two-line pure function, but the SEMANTICS must not drift: `""` and
+ * `null` mean the same thing ("no symbol") everywhere in this feature, and a
+ * caller that persists them differently is what let `duplicateMessage` render
+ * a dangling `, VS ` label for a row whose `vs` was `""` rather than `null`.
+ */
+function blankToNull(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const t = v.trim();
+  return t === '' ? null : t;
+}
+
+/**
+ * Defensive on top of write-time normalization, not instead of it: a row
+ * written before `blankToNull` existed (or by some path that skipped it) can
+ * still have `vs = ''` in the database. Treating only `null` as absent would
+ * render a dangling `, VS ` — trim-and-check here so a legacy blank string
+ * degrades the same way `null` does.
+ */
 function duplicateMessage(hit: { id: string; source: string; vs: string | null }, money: { amount: number; paidAt: string }): string {
-  const vs = hit.vs === null ? '' : `, VS ${hit.vs}`;
+  const hitVs = hit.vs?.trim();
+  const vs = hitVs ? `, VS ${hitVs}` : '';
   return `na tomto pronájmu už je zapsaná platba ${(money.amount / 100).toLocaleString('cs-CZ')} Kč`
     + ` k datu ${money.paidAt} (${hit.id}, zdroj ${hit.source}${vs}) — shoda podle pronájmu, částky a data,`
     + ' ne podle externalId, takže jde o jiný záznam o stejných penězích.'
@@ -170,10 +196,10 @@ export async function recordPayment(db: DB, orgId: string, allowedPropertyIds: s
     amount: input.amount,
     paidAt: input.paidAt,
     counterparty: input.counterparty ?? null,
-    counterpartyAccount: input.counterpartyAccount ?? null,
-    vs: input.vs ?? null,
-    ks: input.ks ?? null,
-    ss: input.ss ?? null,
+    counterpartyAccount: blankToNull(input.counterpartyAccount),
+    vs: blankToNull(input.vs),
+    ks: blankToNull(input.ks),
+    ss: blankToNull(input.ss),
     externalId: input.externalId ?? null,
     statementRef: input.statementRef ?? null,
     source: input.source,
@@ -237,10 +263,10 @@ export async function recordPaymentsBatch(db: DB, orgId: string, allowedProperty
         amount: input.amount,
         paidAt: input.paidAt,
         counterparty: input.counterparty ?? null,
-        counterpartyAccount: input.counterpartyAccount ?? null,
-        vs: input.vs ?? null,
-        ks: input.ks ?? null,
-        ss: input.ss ?? null,
+        counterpartyAccount: blankToNull(input.counterpartyAccount),
+        vs: blankToNull(input.vs),
+        ks: blankToNull(input.ks),
+        ss: blankToNull(input.ss),
         externalId: input.externalId ?? null,
         statementRef: input.statementRef ?? null,
         source: input.source,
@@ -442,8 +468,14 @@ export async function updatePayment(
     }
   }
   const cleaned: Record<string, unknown> = {};
+  // vs/ks/ss/counterpartyAccount go through blankToNull, same as the insert
+  // path — an `undefined` key is still "not touched" (skipped below), but a
+  // key the caller DID send, even as `''` or whitespace, must land as `null`.
+  const NORMALIZED_KEYS = new Set(['counterpartyAccount', 'vs', 'ks', 'ss']);
   for (const key of ['contractId', 'amount', 'paidAt', 'counterparty', 'counterpartyAccount', 'vs', 'ks', 'ss', 'statementRef', 'description', 'note'] as const) {
-    if ((patch as any)[key] !== undefined) cleaned[key] = (patch as any)[key];
+    const value = (patch as any)[key];
+    if (value === undefined) continue;
+    cleaned[key] = NORMALIZED_KEYS.has(key) ? blankToNull(value) : value;
   }
   if (Object.keys(cleaned).length === 0) return getPayment(db, orgId, id, allowedPropertyIds);
   await db.update(payment).set(cleaned).where(and(eq(payment.id, id), eq(payment.orgId, orgId)));

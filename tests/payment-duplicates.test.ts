@@ -180,6 +180,45 @@ describe('payment duplicate detection', () => {
         .rejects.toMatchObject({ kind: 'conflict' });
       await client.close();
     });
+
+    // A bare `z.string()` on the route accepts `''`, and `''` vs `null` must
+    // not be two different ways to say "no symbol" — that split is exactly
+    // what let duplicateMessage render a dangling `, VS ` label.
+    it('normalizes a whitespace-only vs to null', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seed();
+      const p = await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'a', vs: '   ' });
+
+      expect(p.vs).toBeNull();
+      const [stored] = await db.select().from(payment);
+      expect(stored!.vs).toBeNull();
+      await client.close();
+    });
+
+    it('names no VS at all in the conflict message when the existing payment has none', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seed();
+      // No vs at all — hit.vs is null in the conflict message.
+      await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'a' });
+
+      await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'b' })
+        .then(() => { throw new Error('expected a conflict'); })
+        .catch((e: Error) => expect(e.message).not.toMatch(/VS/));
+      await client.close();
+    });
+
+    it('does not render a dangling ", VS " for a legacy row whose vs is an empty string, not null', async () => {
+      const { db, client, orgId, propertyId, contractId } = await seed();
+      // Bypasses recordPayment's own normalization on purpose — this simulates a
+      // row written before blankToNull existed (or by some path that skipped
+      // it), which is exactly the case duplicateMessage must defend against.
+      await db.insert(payment).values({
+        id: createId(), orgId, contractId, ...MONEY, vs: '', source: 'bank',
+      });
+
+      await recordPayment(db, orgId, [propertyId], { contractId, ...MONEY, externalId: 'b' })
+        .then(() => { throw new Error('expected a conflict'); })
+        .catch((e: Error) => expect(e.message).not.toMatch(/VS/));
+      await client.close();
+    });
   });
 
   describe('recordPaymentsBatch', () => {

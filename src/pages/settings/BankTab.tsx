@@ -8,7 +8,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
 import { IntegrationDialog, type BankIntegration } from './IntegrationDialog';
+import { IntegrationMethodChooser, type BankIntegrationKind } from './IntegrationMethodChooser';
 import { TransactionInbox } from './TransactionInbox';
+
+// Closed: nothing shown. Chooser: "Nová integrace" — pick a collection
+// method first (today there is exactly one). Form: the actual IntegrationDialog,
+// either for a freshly chosen kind (create) or an existing row (edit, kind
+// fixed).
+type DialogState =
+  | { mode: 'closed' }
+  | { mode: 'chooser' }
+  | { mode: 'form'; integration: BankIntegration | null; kind: BankIntegrationKind };
 
 type TestBankIntegrationResult =
   | { ok: true; mailboxExists: number; fromMatches: number; filterMatches: number; truncated: boolean; sinceDays: number }
@@ -48,14 +58,16 @@ export function BankTab() {
     queryFn: () => api.get<{ bankIntegrations: BankIntegration[] }>('/api/bank-integrations'),
   });
 
-  const [dialog, setDialog] = useState<{ open: boolean; target: BankIntegration | null }>({ open: false, target: null });
+  const [dialog, setDialog] = useState<DialogState>({ mode: 'closed' });
   const [notice, setNotice] = useState<{ kind: 'ok' | 'warn' | 'err'; text: string } | null>(null);
 
-  // ?action=new opens the create dialog on load — the deep link the MCP
-  // bank_integrations_setup_url tool hands to the user.
+  // ?action=new opens the chooser on load — the deep link the MCP
+  // bank_integrations_setup_url tool hands to the user. With one method the
+  // chooser is a single-item confirmation, but it's still the right first
+  // step: it's where a future second method would need to be picked.
   useEffect(() => {
     if (params.get('action') !== 'new') return;
-    setDialog({ open: true, target: null });
+    setDialog({ mode: 'chooser' });
     const next = new URLSearchParams(params);
     next.delete('action');
     setParams(next, { replace: true });
@@ -117,7 +129,7 @@ export function BankTab() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Bankovní integrace</h2>
-        <Button onClick={() => setDialog({ open: true, target: null })}>Nová integrace</Button>
+        <Button onClick={() => setDialog({ mode: 'chooser' })}>Nová integrace</Button>
       </div>
 
       {notice && (
@@ -172,7 +184,7 @@ export function BankTab() {
                 <TableCell className="text-right whitespace-nowrap space-x-2">
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => { setNotice(null); test.mutate(i.id); }}>Test</Button>
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => { setNotice(null); sync.mutate(i.id); }}>Synchronizovat</Button>
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => setDialog({ open: true, target: i })}>Upravit</Button>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => setDialog({ mode: 'form', integration: i, kind: i.kind })}>Upravit</Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -198,10 +210,18 @@ export function BankTab() {
 
       <TransactionInbox />
 
-      {dialog.open && (
+      {dialog.mode === 'chooser' && (
+        <IntegrationMethodChooser
+          onClose={() => setDialog({ mode: 'closed' })}
+          onSelect={(kind) => setDialog({ mode: 'form', integration: null, kind })}
+        />
+      )}
+
+      {dialog.mode === 'form' && (
         <IntegrationDialog
-          integration={dialog.target}
-          onClose={() => setDialog({ open: false, target: null })}
+          integration={dialog.integration}
+          kind={dialog.kind}
+          onClose={() => setDialog({ mode: 'closed' })}
           onSaved={invalidate}
         />
       )}

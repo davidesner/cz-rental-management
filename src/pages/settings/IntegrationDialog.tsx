@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { BankIntegrationKind } from './IntegrationMethodChooser';
 
 export interface BankIntegration {
   id: string;
-  kind: 'kb_email';
+  kind: BankIntegrationKind;
   name: string;
   imapHost: string;
   imapPort: number;
@@ -26,11 +27,16 @@ export interface BankIntegration {
 
 interface Props {
   integration: BankIntegration | null; // null = create
+  // The method chosen in IntegrationMethodChooser (create), or the existing
+  // integration's own kind (edit) — kind is fixed once created. Only
+  // 'kb_email' exists today; a future kind is where a branch in this
+  // component would go.
+  kind: BankIntegrationKind;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function IntegrationDialog({ integration, onClose, onSaved }: Props) {
+export function IntegrationDialog({ integration, kind, onClose, onSaved }: Props) {
   const editing = integration !== null;
   const [form, setForm] = useState({
     name: integration?.name ?? 'KB — notifikace',
@@ -60,6 +66,11 @@ export function IntegrationDialog({ integration, onClose, onSaved }: Props) {
         accountNumber: form.accountNumber.trim() === '' ? null : form.accountNumber.trim(),
         active: form.active,
       };
+      // kind is fixed at creation and never sent on an update — it doesn't
+      // come from the DB row but from the chooser (or, on edit, from the
+      // integration itself), so the seam is here rather than a hardcoded
+      // 'kb_email' literal.
+      if (!editing) body['kind'] = kind;
       // Only send the password when it was actually typed — an omitted field
       // leaves the stored one untouched, which is what makes editing safe.
       if (form.imapPassword !== '') body['imapPassword'] = form.imapPassword;

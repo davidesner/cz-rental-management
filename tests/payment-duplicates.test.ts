@@ -326,9 +326,14 @@ describe('payment duplicate detection', () => {
 
       // Editing amount on an unassigned payment: no contract to fingerprint
       // against, so this must not throw even though another unassigned row
-      // shares the same amount/date.
-      const edited = await updatePayment(db, orgId, p.id, [propertyId], { amount: MONEY.amount });
+      // shares the same amount/date. The patch must be a REAL change
+      // (MONEY.amount + 1) — patching the amount back to its own current
+      // value would make isNoOp true and skip the guard block before the
+      // `mergedContractId !== null` branch this test claims to exercise is
+      // ever reached, so the test would pass whether or not that branch works.
+      const edited = await updatePayment(db, orgId, p.id, [propertyId], { amount: MONEY.amount + 1 });
       expect(edited.id).toBe(p.id);
+      expect(edited.amount).toBe(MONEY.amount + 1);
       await client.close();
     });
 

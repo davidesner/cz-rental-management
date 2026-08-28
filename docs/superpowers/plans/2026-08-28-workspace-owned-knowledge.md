@@ -842,3 +842,36 @@ reálné pracovní složky, které je mimo rozsah tohohle plánu.
 
 CI (`test`, `typecheck`, `build`) je TypeScript-only a `claude-plugin/`
 nepokrývá; musí ale zůstat zelená, protože se do ní nesahá.
+
+---
+
+## Po merge: jednorázová migrace (mimo seznam úloh)
+
+Není součástí pluginu ani žádné úlohy výše — plugin se píše, jako by to tak bylo
+vždycky. Tohle je jednorázový úklid jediné existující instalace.
+
+**Cíl: `~/.claude/skills/rental-management/` po dokončení neexistuje.** Všechno
+user-owned z ní je přestěhované do pracovní složky, všechno template-owned
+zahodit (žije v pluginu).
+
+- [ ] **Inventura první.** Vypsat celý strom `~/.claude/skills/rental-management/`
+      a klasifikovat každý soubor: user-owned (stěhuje se) vs template-owned
+      (zahodit) vs smetí (`__pycache__`, `.DS_Store`). Nic nemazat před přesunem.
+- [ ] **Per-property znalost** → `_agent/` u dokumentů, podle skutečných jmen složek:
+      `properties/kejruv-park/` → `<workspace>/KP/_agent/`,
+      `properties/central-park/` → `<workspace>/CentralPark/_agent/`.
+      Stěhuje se `README.md`, `*_parser.py`, `fixtures/`.
+- [ ] **`generate_pdf_<rok>.py` → `pdf-<rok>.json`.** Z každého property skriptu
+      vytáhnout `RECONCILIATION` dict a zapsat jako JSON (Decimal → desetinné
+      číslo, tuply → pole). Python soubor pak zahodit — kód pro PDF je v pluginu.
+      Ověřit rovnost výstupu: vygenerovat PDF starou i novou cestou a porovnat.
+- [ ] **Smluvní šablony** `contracts/templates/` → `<workspace>/_agent/smlouvy/`
+      včetně `INDEX.md`; cesty v INDEXu přepsat na nové umístění.
+- [ ] **Napsat `<workspace>/AGENTS.md`** — mapping musí zachytit, že se složky
+      nejmenují jako slugy (`Kejrův Park` → `KP/`, `Central Park` → `CentralPark/`
+      atd.). Nic se nepřejmenovává.
+- [ ] **Upravit `<workspace>/README.md`** — tabulku nemovitostí odstranit,
+      odkázat na `AGENTS.md` (jinak se ty dvě kopie rozejdou).
+- [ ] **Regression** — spustit fixtures proti přestěhovaným parserům; fail = STOP.
+- [ ] **Teprve pak smazat** `~/.claude/skills/rental-management/` i případný
+      symlink. Předtím ověřit, že v ní nezůstal soubor, který nemá kopii jinde.

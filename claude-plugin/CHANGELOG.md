@@ -5,6 +5,22 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 1.0.0 — 2026-08-28
+
+### Changed — BREAKING
+
+- **Plugin už nekopíruje šablonu skillu.** `templates/skill/` zrušeno; obsah se rozpadl na tři skilly v `skills/`: `rocni-vyuctovani`, `smlouvy`, `init`. Skilly žijí v pluginu v jediné kopii a aktualizují se s ním.
+- **Znalost o nemovitosti se přestěhovala k dokumentům.** Metodika, parsery a fixtures nežijí v `~/.claude/skills/.../properties/<slug>/`, ale v `<nemovitost>/_agent/` v pracovní složce uživatele.
+- **Rozlišení nemovitosti přes `AGENTS.md`.** Skill už neodvozuje `slug → properties/<slug>/`; čte mapping název → složka z `AGENTS.md` v kořeni pracovní složky. Default konvence zůstává „složka = slug", ale existující archiv se kvůli pluginu nemusí přejmenovávat.
+- **PDF generátor je CLI entry point, ne knihovna.** Místo per-property `generate_pdf_<year>.py`, který importoval `build_pdf()` relativní cestou, se spouští `generate_reconciliation_pdf.py --data <json> --out <dir>` a nemovitost dodává jen data. Odstraňuje závislost na cestě do plugin cache, jejíž součástí je číslo verze.
+- **Naučené Typst šablony a `INDEX.md`** se zapisují do `_agent/smlouvy/` v pracovní složce, ne do pluginu, kde je update přepisoval.
+
+### Removed
+
+- `commands/update.md` — merge šablony do lokální kopie. Není co mergovat.
+- `.template-version` a kontrola verze šablony na začátku konverzace.
+- Kroky „najdi template → zkopíruj → symlinkuj" z `commands/init.md`.
+
 ## 0.3.3 — 2026-08-22
 
 ### Changed

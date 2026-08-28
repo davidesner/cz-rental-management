@@ -1,16 +1,28 @@
 # rental-management — Claude Code plugin
 
-Plugin pro správu pronájmu — pomáhá s ročním vyúčtováním nájemcům přes Claude Code + MCP backend.
+Plugin pro správu pronájmu — pomáhá s ročním vyúčtováním nájemcům a s generováním smluv přes Claude Code + MCP backend.
 
 ## Co plugin obsahuje
 
-- **`/rental-management:init` command** (`commands/init.md`) — bootstrapuje lokální workflow skill z přibalené šablony
-- **`/rental-management:update` command** (`commands/update.md`) — synchronizuje lokální skill s aktuální template verzí (zachovává `properties/` a `fixtures/`)
-- **Šablona workflow skillu** (`templates/skill/`) — kostra pro user-owned skill, kterou si nainstaluješ a budeš rozvíjet lokálně
+- **Skill `rocni-vyuctovani`** — roční vyúčtování: parsování podkladů (SVJ, elektřina, bankovní výpisy), adjustmenty, zápis přes MCP, PDF pro nájemce
+- **Skill `smlouvy`** — generování a reformat smluv a dodatků přes Typst (learn template z existujícího dokumentu / render z uložené šablony)
+- **Skill `init`** + **`/rental-management:init` command** — založí pracovní složku s dokumenty, nebo přerovná existující
 
 ## Filozofie
 
-Plugin **neposkytuje** workflow skill přímo. Místo toho ti pomůže udělat **vlastní lokální kopii**, kterou si budeš upravovat (parsery per nemovitost, fixtures, pravidla). Tím se na update pluginu neztratí tvoje data.
+**Plugin nese postup. Pracovní složka nese znalost, data a výstupy.**
+
+Nic se z pluginu do pracovní složky nekopíruje. Skilly v něm žijí v jediné kopii a aktualizují se jeho updatem, takže neexistuje žádný merge ani synchronizace šablony.
+
+Co vlastníš ty, žije u tvých dokumentů:
+
+| Kde | Co |
+|---|---|
+| `AGENTS.md` v kořeni | konvence + mapping název nemovitosti → složka |
+| `<nemovitost>/_agent/` | metodika vyúčtování, parsery, fixtures, `pdf-<rok>.json` |
+| `_agent/smlouvy/` | naučené Typst šablony + `INDEX.md` |
+
+Update pluginu se téhle znalosti nemůže dotknout — neleží v něm.
 
 ## Instalace
 
@@ -20,44 +32,35 @@ Plugin **neposkytuje** workflow skill přímo. Místo toho ti pomůže udělat *
 claude --plugin-dir /path/to/rental-management/claude-plugin
 ```
 
-V Claude Code session pak invokuj setup:
-
-```
-/rental-management:init
-```
-
-Plugin se zeptá kam nainstalovat tvůj lokální skill, případně pomůže s `.mcp.json` konfigem.
-
-## Update lokálního skillu
-
-Po `git pull` pluginu (nebo po update přes marketplace) spusť:
-
-```
-/rental-management:update
-```
-
-Sync detekuje co se v template změnilo, ukáže per-soubor diff, nabídne overwrite / manual merge / skip. `properties/` a `fixtures/` jsou user-owned — nikdy se jich nedotkne.
-
 ### Marketplace (až bude publikovaný)
 
 ```
 /plugin install rental-management
 ```
 
-## Po instalaci lokálního skillu
+## První spuštění
 
-- Lokální skill žije defaultně v `~/.claude/skills/rental-management/`
-- Claude Code ho automaticky discover-uje
-- Při prvním použití pro konkrétní property tě skill provede **learning mode** — vytvoří `properties/<slug>/` se vším co potřebuje (parsery, pravidla, fixtures)
-- Při dalším použití pro tu stejnou property už použije uložené parsery automaticky
+```
+/rental-management:init
+```
+
+Skill `init` se zeptá, jestli zakládáš novou pracovní složku, nebo chceš přerovnat tu, kterou už máš. Založí `AGENTS.md`, kostru složek per nemovitost, a volitelně `.mcp.json` s napojením na backend.
+
+Pak už jen řekni, co chceš — „spočítej vyúčtování <nemovitost>", „vyrob dodatek". Skilly se aktivují samy.
+
+## Jak to funguje dál
+
+- Při prvním vyúčtování konkrétní nemovitosti tě skill provede **learning mode** — společně vytvoříte `<nemovitost>/_agent/` s metodikou a parsery
+- Při dalším použití pro tu stejnou nemovitost už použije uložené parsery automaticky
+- Pokud se tvoje složky nejmenují jako slugy nemovitostí, zapiš mapping do `AGENTS.md` — přejmenovávat archiv není potřeba
 
 ## Update
 
-Plugin → můžeš pravidelně updatovat (např. `git pull`). Lokální skill se neudělá automaticky — spusť znovu `init` skill a vyber **merge** mode (zachová tvoje `properties/`, jen updatne sdílené části jako `SKILL.md` template).
+`git pull` (nebo update přes marketplace) a hotovo. Skilly se aktualizují s pluginem; v pracovní složce se nic neděje.
 
 ## MCP backend
 
-Plugin spoléhá na běžící `rental-management` MCP server, který je publikovaný jako samostatný npm balíček [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp) a spouští se přes `npx` (není potřeba clone repa). Plugin `init` skill ti pomůže s `.mcp.json` konfigurací:
+Plugin spoléhá na běžící `rental-management` MCP server, který je publikovaný jako samostatný npm balíček [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp) a spouští se přes `npx` (není potřeba clone repa). Skill `init` ti pomůže s `.mcp.json` konfigurací:
 
 ```json
 {
@@ -73,3 +76,5 @@ Plugin spoléhá na běžící `rental-management` MCP server, který je publiko
   }
 }
 ```
+
+`.mcp.json` obsahuje token — nedávej ho do gitu.

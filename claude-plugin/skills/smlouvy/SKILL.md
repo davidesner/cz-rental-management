@@ -1,4 +1,5 @@
 ---
+name: smlouvy
 description: Generování a reformat smluv a dodatků pro rental-management. Dva režimy — "learn template" (vyrobí Typst šablonu z existujícího PDF/DOCX dokumentu), "render document" (z uložené šablony + dat z MCP vyrobí čistý PDF). Aktivuj když user řekne "vyrob smlouvu", "udělej dodatek", "učeš tu starou smlouvu", "vytvoř template z dokumentu" apod.
 ---
 
@@ -22,9 +23,10 @@ Předpokládá MCP server `rental-management` připojený.
 
 ## Konvence
 
-- **Templates** žijí v `properties/<slug>/contracts/templates/` (per-property) NEBO `contracts/templates/` (sdílené napříč properties). Sdílené má přednost při nejasnosti.
+- **Šablony** žijí v pracovní složce: `_agent/smlouvy/` (sdílené napříč nemovitostmi) NEBO `<složka>/_agent/smlouvy/` (per-property). Sdílené má přednost při nejasnosti. Pracovní složku a mapping název → složka najdeš v `AGENTS.md` v jejím kořeni.
+- **`templates/lease-cs.typ` v tomto skillu** je generic reference starting point. Čti ji, needituj — je součástí pluginu a naučené šablony do něj nepatří.
 - **Variable convention**: `{{namespace.field}}` syntaxe (mustache-style). Skill string-replace before compile, ne native Typst inputs (jednodušší debug).
-- **Output**: PDF + `.typ` source vedle sebe. User volí kam uložit (default: cwd, nebo `properties/<slug>/contracts/<year>/`).
+- **Output**: PDF + `.typ` source vedle sebe, default `<složka>/najem/<rok>-<najemce>/`.
 - **Naming**: `<TENANT>-<KIND>_<descriptor>_<lang>.pdf`, např. `NOVAK-DODATEK_5-od-7_26_CZ.pdf` (kebab/snake mix podle stylu user).
 - **Verze**: každý render zapiše do `.typ` source vedle PDF — pak reformat / drobné úpravy se dělají v `.typ` a recompile.
 
@@ -93,10 +95,10 @@ Use case: user má DOCX/PDF (např. starou smlouvu, vzor od právníka, dodatek 
    Ukaž `/tmp/preview-1.jpg` user. Pokud OK, pokračuj.
 
 6. **Ulož template** — zeptej se kam:
-   - Default: `contracts/templates/<name>.typ` (sdílené)
-   - Per-property: `properties/<slug>/contracts/templates/<name>.typ`
+   - Default: `_agent/smlouvy/<name>.typ` (sdílené napříč nemovitostmi)
+   - Per-property: `<složka>/_agent/smlouvy/<name>.typ`
 
-7. **Update template index** — udržuj `contracts/templates/INDEX.md` s `name | kind | language | description | path` aby skill snadno našel template později.
+7. **Update template index** — udržuj `_agent/smlouvy/INDEX.md` s `name | kind | language | description | path` aby skill snadno našel template později. Pokud INDEX.md ještě neexistuje, založ ho i s hlavičkou tabulky.
 
 ---
 
@@ -109,7 +111,7 @@ Use case: user řekne "vyrob dodatek pro <property> s novým nájmem od 2026-07-
    - "<property name>" → property slug
    - Lang: zeptej se (cz/en), default cz
 
-2. **Najdi template** — `contracts/templates/INDEX.md` nebo glob `**/*.typ` co matchne kind+lang. Pokud víc, ukaž user možnosti.
+2. **Najdi template** — `_agent/smlouvy/INDEX.md` nebo glob `**/*.typ` co matchne kind+lang. Pokud víc, ukaž user možnosti.
 
 3. **Načti data z MCP**:
    ```
@@ -152,7 +154,7 @@ Use case: user řekne "vyrob dodatek pro <property> s novým nájmem od 2026-07-
    ```
    Ukaž preview-1.jpg user. Pokud chce změny → edit `.typ` přímo, recompile.
 
-8. **Save final** — zeptej se kam (default: cwd nebo `properties/<slug>/contracts/<year>/`). Přesuň PDF + `.typ` source tam.
+8. **Save final** — zeptej se kam (default: `<složka>/najem/<rok>-<najemce>/`). Přesuň PDF + `.typ` source tam.
 
 ---
 
@@ -194,7 +196,7 @@ Když user řekne "ulož template" nebo "tohle si pamatuj":
 
 1. **Ukaž preview a placeholders** — krátké shrnutí co se uloží
 2. **Počkej na explicitní "ano"**
-3. **Zapiš** do `contracts/templates/<name>.typ` (nebo per-property)
+3. **Zapiš** do `_agent/smlouvy/<name>.typ` (nebo per-property do `<složka>/_agent/smlouvy/`) — **nikdy** do pluginu
 4. **Update INDEX.md** — řádek s `name | kind | language | description | path`
 
 ## Tipy

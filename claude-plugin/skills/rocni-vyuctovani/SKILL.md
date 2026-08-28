@@ -1,4 +1,5 @@
 ---
+name: rocni-vyuctovani
 description: Roční vyúčtování pronájmu pro nájemníka — parsuje SVJ vyúčtování, faktury za elektřinu, bankovní výpisy; spočítá adjustmenty (FO odečet, solar credit); zapíše přes MCP. Aktivuj když user řekne "vyúčtování", "rozpočítat nájem", "process bills", "spočítej <property name>" apod.
 ---
 
@@ -8,40 +9,34 @@ Workflow pro roční vyúčtování pronájmu. Předpokládá MCP server `rental
 
 ## Když začínáš
 
-**0. Check template updates** (rychlá kontrola, ~2s):
+**Sister skill — smlouvy**: pokud user požaduje vyrobit/reformat smlouvu nebo dodatek, použij skill `smlouvy` (workflow A — learn template z existujícího PDF/DOCX, workflow B — render z uložené šablony + dat z MCP). Vyúčtování a smlouvy mohou koexistovat ve stejné konverzaci.
 
-Tento skill je lokální kopie šablony z `rental-management` pluginu. Než začneš workflow, ověř že parent plugin nemá novější verzi šablony:
-
-- Pokud existuje `.template-version` v této skill složce, porovnej s `<plugin>/.claude-plugin/plugin.json#version`
-- Pokud plugin novější → upozorni user: "Plugin má novější template verzi (X → Y). Spusť `/rental-management:update` před pokračováním?" — počkej na user rozhodnutí
-- Pokud `.template-version` neexistuje (skill nikdy nesynchronizován) → upozorni jednou stejně
-- Pokud verze shodují / plugin path nedetekovatelný → pokračuj bez upozornění
-
-Tato kontrola se dělá **jednou na začátku konverzace**, ne před každou MCP operací.
-
-**Sister skill — Contract documents**: pokud user požaduje vyrobit/reformat smlouvu nebo dodatek, použij sub-skill v `contracts/SKILL.md` (workflow A — learn template z existujícího PDF/DOCX, workflow B — render z uložené šablony + dat z MCP). Reconciliation a contracts mohou koexistovat ve stejné konverzaci.
-
-1. **Identifikuj property**:
+1. **Najdi pracovní složku** — kořen s `AGENTS.md`, který popisuje strukturu (typicky cwd nebo některý z jeho rodičů). Pokud ho nenajdeš, zeptej se user na cestu; pokud složka ještě neexistuje, nasměruj ho na skill `init`.
+2. **Přečti `AGENTS.md`** — obsahuje konvence a mapping název nemovitosti → složka.
+3. **Identifikuj property**:
    - Z user promptu (jméno nemovitosti)
    - Nebo přes MCP `properties_list` a zeptej se user
-2. **Slug** = property name kebab-cased (např. "Smetanovy Sady" → `smetanovy-sady`)
-3. **Hledej `properties/<slug>/`** v této skill složce (tj. relativně k tomuto SKILL.md):
-   - **Pokud existuje**: čti `properties/<slug>/README.md`, použij tamní parsery a pravidla
+4. **Resolvuj složku**:
+   - Pokud `AGENTS.md` má explicitní mapping pro tuhle property, použij ho
+   - Jinak default konvence: složka se jmenuje jako slug (property name kebab-cased, např. "<Property Name>" → `<property-name>`)
+   - **Nikdy neodvozuj slug, když `AGENTS.md` říká něco jiného** — uživatel může mít archiv pojmenovaný po svém a nemá ho kvůli nám přejmenovávat
+5. **Hledej `<složka>/_agent/`**:
+   - **Pokud existuje**: čti `<složka>/_agent/README.md`, použij tamní parsery a pravidla
    - **Pokud ne**: vstoupíš do **learning mode** (níže)
 
 ## Learning mode (nová property)
 
 Když property folder neexistuje:
 
-1. **Vytvoř** `properties/<slug>/` a v ní `README.md`
+1. **Vytvoř** `<složka>/_agent/` a v ní `README.md`
 2. **Zapiš metodiku** — viz [Co patří / nepatří do property README](#co-patří--nepatří-do-property-readme) níže
 3. **Pro každý typ dokumentu** (SVJ vyúčtování, elektřina, bank statement):
    - Požádej user o ukázku
    - Pochop strukturu, ukaž extraction draft, počkej na confirm
-   - Pokud parsing potřebuje Python (PDF tabulky, OCR, …), napiš `properties/<slug>/<source>_parser.py`
-   - Pro deterministické výpočty (solar credit, FO odečet, proporce) napiš `properties/<slug>/compute_<source>.py`
+   - Pokud parsing potřebuje Python (PDF tabulky, OCR, …), napiš `<složka>/_agent/<source>_parser.py`
+   - Pro deterministické výpočty (solar credit, FO odečet, proporce) napiš `<složka>/_agent/compute_<source>.py`
 4. **Po úspěšném draft reconciliation** se zeptej user: "Mám uložit tyhle parsery + pravidla pro příště?"
-5. **Pokud yes**: zapiš parsery, případně `properties/<slug>/fixtures/<year>-<source>.{input,expected}.json` (pro regression)
+5. **Pokud yes**: zapiš parsery, případně `<složka>/_agent/fixtures/<year>-<source>.{input,expected}.json` (pro regression)
 
 ## Co patří / nepatří do property README
 
@@ -67,25 +62,24 @@ Property README je **metodický dokument** (recept na vyúčtování), ne snapsh
 
 ## Computation guard
 
-**LLM NIKDY nepočítá v hlavě.** Pro každou aritmetiku (součet, násobení, proporce) volej Python skript v `scripts/` nebo `properties/<slug>/`.
+**LLM NIKDY nepočítá v hlavě.** Pro každou aritmetiku (součet, násobení, proporce) volej Python skript ze `scripts/` v tomto skillu nebo z `<složka>/_agent/`.
 
 Pokud skript neexistuje a potřebuješ matiku → napiš ho jako deterministický Python (krátký, čistý, otestovatelný).
 
 ## Konvence (kam co dát)
 
-- `scripts/` — sdílené Python skripty napříč properties (vytvoř pouze když se pattern opakuje pro 2+ properties)
-  - `generate_reconciliation_pdf.py` — generic 5-stránkový PDF template (souhrn + per-kind sheets + payment instruction). Property scripts importují `build_pdf()` a předají `RECONCILIATION` dict. Schema dokumentován v hlavičce souboru.
-- `properties/<slug>/README.md` — **povinné, vždy** — metodika (parsing notes, koncept pravidel). NE specifické sazby/jména/datumy — viz sekce výše.
-- `properties/<slug>/*.py` — **pouze když je potřeba** (negeneruj prázdné placeholdery). Sazby a hodnoty čti z parametrů / MCP, nehardcoduj.
-- `properties/<slug>/generate_pdf_<year>.py` — naimportuje template ze `scripts/`, doplní `RECONCILIATION` dict pro daný rok (hodnoty z MCP/podkladů, ne hardcoded sazby)
-- `properties/<slug>/fixtures/` — jakmile máš parser/compute, ulož sample input + expected output pro regression. Per-year snapshoty (input + expected reconciliation result) jsou OK — fixují stav v čase, neslouží jako reference pro budoucí výpočty.
+- `scripts/generate_reconciliation_pdf.py` — v **tomto skillu** (v pluginu), ne v pracovní složce. Generic 5-stránkový PDF (souhrn + per-kind sheets + payment instruction), spouští se jako CLI — viz krok 10 workflow. Nekopíruj ho do pracovní složky.
+- `<složka>/_agent/README.md` — **povinné, vždy** — metodika (parsing notes, koncept pravidel). NE specifické sazby/jména/datumy — viz sekce výše.
+- `<složka>/_agent/*.py` — **pouze když je potřeba** (negeneruj prázdné placeholdery). Sazby a hodnoty čti z parametrů / MCP, nehardcoduj.
+- `<složka>/_agent/pdf-<rok>.json` — data pro PDF daného roku (hodnoty z MCP a podkladů, ne hardcoded sazby). Schema viz `scripts/example-pdf-data.json` v tomto skillu.
+- `<složka>/_agent/fixtures/` — jakmile máš parser/compute, ulož sample input + expected output pro regression. Per-year snapshoty (input + expected reconciliation result) jsou OK — fixují stav v čase, neslouží jako reference pro budoucí výpočty.
 
 ## Workflow ročního vyúčtování
 
 1. **Sběr dokumentů** — SVJ vyúčtování PDF, faktury elektřina, bank statement za období
 2. **Parse** — generic extractory (volný text → JSON) nebo property-specific parsery
 3. **Compute** — Python skripty pro adjustmenty (solar, FO odečet, proporce)
-4. **Regression test** — pokud `properties/<slug>/fixtures/` existují, spusť je proti current parsery; **fail = STOP a oznam user**
+4. **Regression test** — pokud `<složka>/_agent/fixtures/` existují, spusť je proti current parsery; **fail = STOP a oznam user**
 5. **MCP zápis** (idempotentní přes `externalId` / `documentRef`):
    - `record_payments` (z bank statementu, s SHA hash jako externalId)
    - **Zkontroluj response** — `record_payments` může vrátit i `duplicates`, ne jen `created`/`existing`:
@@ -97,7 +91,15 @@ Pokud skript neexistuje a potřebuješ matiku → napiš ho jako deterministick�
 7. **Compute reconciliation** přes MCP `compute_reconciliation`
 8. **Prezentuj user** breakdown (per kind: paid vs cost vs diff) + celkový rozdíl
 9. **Počkej na confirm** než navrhneš `finalize`
-10. **Generuj PDF pro nájemce** — pomocí `scripts/generate_reconciliation_pdf.py` (import) + property-specific `generate_pdf_<year>.py` (data)
+10. **Generuj PDF pro nájemce** — naplň `<složka>/_agent/pdf-<rok>.json` podle schematu v `scripts/example-pdf-data.json` a spusť generátor z tohoto skillu:
+
+    ```bash
+    python3 <cesta-k-tomuto-skillu>/scripts/generate_reconciliation_pdf.py \
+        --data <složka>/_agent/pdf-<rok>.json \
+        --out  <složka>/vyuctovani/<rok>/
+    ```
+
+    Cestu ke skriptu si odvoď od umístění tohoto `SKILL.md` — nehardcoduj ji a nekopíruj skript do pracovní složky.
 
 ## Period matching pravidlo
 
@@ -153,7 +155,7 @@ Před `compute_reconciliation` volej `cost_statements_list` pro property a před
 Když user řekne "ulož parser" / "ulož pravidlo":
 1. **Ukaž diff/preview** přesně čeho se zápis dotkne
 2. **Počkej na explicitní "ano"** (nikdy ne implicitně)
-3. Piš do `properties/<slug>/...` v této skill složce — **nikdy** ne do nějakého upstream/plugin místa
+3. Piš do `<složka>/_agent/...` v pracovní složce — **nikdy** do pluginu
 4. Po zápisu spusť regression (pokud fixtures existují) jako sanity check
 
 ## Tipy pro Python skripty

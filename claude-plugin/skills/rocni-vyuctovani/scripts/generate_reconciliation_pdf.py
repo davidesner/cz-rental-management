@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Generate roční vyúčtování PDF for tenant.
 
-Reusable template. To use:
-1. Copy this file to `properties/<slug>/generate_pdf_<year>.py`
-2. Fill in the RECONCILIATION dict below with property/year specific data
-3. Run: python3 generate_pdf_<year>.py
+Reusable entry point. Použití:
+1. Připrav JSON s daty (schema viz example-pdf-data.json)
+2. Spusť: python3 generate_reconciliation_pdf.py --data <data.json> --out <adresář>
+
+Tenhle soubor se nekopíruje do pracovní složky — žije v pluginu a spouští se
+odsud. Do pracovní složky patří jen ten JSON s daty.
 
 Layout: 5 pages
 - Page 1: Header, identification, big result box, summary table, notes
@@ -17,6 +19,9 @@ All amounts are Decimal; format with fmt_kc().
 Czech char rendering requires a Unicode TTF font (macOS Arial used by default).
 On other systems, override BASE_FONT_PATH / BASE_FONT_BOLD_PATH.
 """
+import argparse
+import json
+import sys
 from decimal import Decimal
 from pathlib import Path
 from reportlab.lib.pagesizes import A4
@@ -32,157 +37,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 
 # =============================================================================
-# CONFIG — fill this in per property/year
+# Data se načítají z JSON (--data). Schema viz example-pdf-data.json.
 # =============================================================================
-
-RECONCILIATION = {
-    "output_path": "Vyuctovani_<Property>_<Year>.pdf",
-    "title": "ROČNÍ VYÚČTOVÁNÍ PRONÁJMU",
-    "period_human": "1. ledna 2025 – 31. prosince 2025",
-    "footer_text": "Roční vyúčtování 2025 — <Property>, <Address>",
-    "issued_at_human": "<dd. mm. yyyy>",
-
-    "identification": [
-        # (label, value) pairs for page 1 header block
-        ("Nemovitost:", "<address + unit numbers>"),
-        ("Pronajímatel:", "<name, address>"),
-        ("Nájemce:", "<name(s) + responsibility note>"),
-        ("Smlouva:", "<period + renewal note>"),
-        ("VS SVJ:", "<variable symbol>"),
-        ("Vystaveno:", "<date>"),
-    ],
-
-    # Big result box on page 1 and last page
-    "result": {
-        "label_p1": "PŘEPLATEK NÁJEMCE",           # or "NEDOPLATEK NÁJEMCE"
-        "amount_kc": Decimal("0.00"),
-        "subtitle_p1": "k vrácení nájemci na účet <acct>",
-        "label_pN": "K vrácení nájemci",            # or "K doplacení"
-    },
-
-    # Summary table on page 1
-    "summary": {
-        # (label, cost, paid, diff) — diff positive = tenant overpaid = refund
-        "items": [
-            ("Nájem", Decimal("0"), Decimal("0"), Decimal("0")),
-            ("Služby (SVJ)", Decimal("0"), Decimal("0"), Decimal("0")),
-            ("Elektřina", Decimal("0"), Decimal("0"), Decimal("0")),
-        ],
-        # Optional: rows here automatically summed to CELKEM row
-        "notes_html": [
-            # Each entry rendered as a • bullet, HTML <b> tags allowed
-            "<b>Nájem:</b> ...",
-            "<b>Služby:</b> ...",
-            "<b>Elektřina:</b> ...",
-            "<b>Platby:</b> ...",
-        ],
-    },
-
-    # Sheets (one per kind, page each)
-    "sheets": [
-        # Each sheet is a dict; supported "type"s:
-        #   "services"   — SVJ-style with breakdown by unit, FO odečet, calc
-        #   "electricity_monthly" — 12 monthly invoices table + calc
-        #   "payments"   — list of monthly payments + alokace + notes
-        # Or use "type":"custom" and pass "blocks": [Paragraph|Table|...]
-        {
-            "type": "services",
-            "title": "LIST 1 – SLUŽBY (SVJ <provider>)",
-            "intro": "Podklad: <provider>, Detail vyúčtování ...",
-            "units_table": {
-                "header": ["Jednotka", "Náklady SVJ", "Předepsané zálohy", "Přeplatek SVJ"],
-                "rows": [
-                    # (unit, cost, advance, diff)
-                    ("Byt KP1-253", Decimal("0"), Decimal("0"), Decimal("0")),
-                ],
-                "totals_label": "SOUČET (vlastník)",
-            },
-            "fo_intro": "Část záloh SVJ tvoří investiční výdaje pronajímatele ...",
-            "fo_components": [
-                # (label, monthly_kc)
-                ("Fond oprav", Decimal("0")),
-                ("Správa SVJ", Decimal("0")),
-                ("Odměny statutár", Decimal("0")),
-                ("Pojištění domu", Decimal("0")),
-                ("Ostatní režie", Decimal("0")),
-            ],
-            "fo_total_monthly": Decimal("0"),
-            "fo_total_yearly": Decimal("0"),
-            "calc": {
-                # Final calculation block
-                "lines": [
-                    # (label, amount) — last line is highlighted as result
-                    ("Hrubé náklady SVJ (vč. FO)", Decimal("0")),
-                    ("minus: Odečet FO + režie (pronajímatel)", Decimal("0")),
-                    ("Skutečný náklad nájemce", Decimal("0")),
-                    ("minus: Zaplacené zálohy", Decimal("0")),
-                ],
-                "result_label": "PŘEPLATEK SLUŽBY",
-                "result_amount": Decimal("0"),
-            },
-        },
-        {
-            "type": "electricity_monthly",
-            "title": "LIST 2 – ELEKTŘINA (PRE + solar)",
-            "intro_paragraphs": [
-                "Dodavatel: PRE, sazba ...",
-                "<b>Solar (FVE):</b> ...",
-            ],
-            "table_header": ["Měsíc", "Faktura PRE", "kWh\nfakturováno",
-                            "kWh\nsolar", "PRE (Kč)", "Solar (Kč)", "Celkem (Kč)"],
-            "rows": [
-                # (month, invoice, kwh_net, solar_kwh, pre_kc, solar_kc, total_kc)
-                ("01/2025", "...", 0, 0, Decimal("0"), Decimal("0"), Decimal("0")),
-            ],
-            "totals_label": "CELKEM",
-            "calc": {
-                "lines": [
-                    ("Faktury PRE (12 měsíců)", Decimal("0")),
-                    ("+ Úhrada pronajímateli za solar", Decimal("0")),
-                    ("Skutečný náklad nájemce", Decimal("0")),
-                    ("minus: Zaplacené zálohy", Decimal("0")),
-                ],
-                "result_label": "PŘEPLATEK ELEKTŘINA",
-                "result_amount": Decimal("0"),
-            },
-        },
-        {
-            "type": "payments",
-            "title": "LIST 3 – PLATBY NÁJEMCE",
-            "intro": "Přijaté platby na účet ...",
-            "table_header": ["Měsíc", "Datum platby", "Částka (Kč)",
-                            "Očekáváno", "Rozdíl", "Poznámka"],
-            "rows": [
-                # (month, date_human, amount, expected, diff, note)
-                ("01/2025", "...", Decimal("0"), Decimal("0"), Decimal("0"), ""),
-            ],
-            "totals_label": "CELKEM",
-            "extra_sections": [
-                # (heading, body) pairs
-                ("Alokace plateb", "Z přijatých ... Kč je ..."),
-                ("Lednová srážka", "Nájemce v lednu ..."),
-            ],
-        },
-    ],
-
-    "payment_instruction": {
-        "title": "VRÁCENÍ PŘEPLATKU",  # or "DOPLACENÍ NEDOPLATKU"
-        "details": [
-            # (label, value)
-            ("Příjemce:", "..."),
-            ("Účet:", "..."),
-            ("Částka:", "..."),
-            ("Variabilní symbol:", "..."),
-            ("Splatnost:", "do 30 dnů od doručení vyúčtování"),
-        ],
-        "reklamace_text": "Případné nesrovnalosti ...",
-        "documents": [
-            # Bullet list of supporting documents
-            "...",
-        ],
-    },
-}
-
 # =============================================================================
 # Layout (generic; usually no need to edit below)
 # =============================================================================
@@ -631,5 +487,44 @@ def build_pdf(R):
     print(f"PDF vytvořeno: {out}")
 
 
+# ---------- CLI ----------
+
+def load_reconciliation(path):
+    """Načti JSON s daty vyúčtování.
+
+    Desetinná čísla → Decimal (fmt_kc na tom stojí). Celá čísla zůstávají int,
+    takže počty (kWh, indexy) se nerozbijí.
+    """
+    path = Path(path)
+    with path.open(encoding="utf-8") as fh:
+        return json.load(fh, parse_float=Decimal)
+
+
+def resolve_output_path(data, out_dir):
+    """Kam se PDF zapíše. --out přebije adresář, jméno souboru zůstává z dat."""
+    output_path = Path(data["output_path"])
+    if out_dir is None:
+        return output_path
+    return Path(out_dir) / output_path.name
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Vyrob PDF ročního vyúčtování z JSON dat."
+    )
+    parser.add_argument("--data", required=True, type=Path,
+                        help="JSON s daty vyúčtování (schema: example-pdf-data.json)")
+    parser.add_argument("--out", type=Path, default=None,
+                        help="adresář pro výstup; jméno souboru bere z --data")
+    args = parser.parse_args(argv)
+
+    data = load_reconciliation(args.data)
+    target = resolve_output_path(data, args.out)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    data["output_path"] = str(target)
+    build_pdf(data)
+    return 0
+
+
 if __name__ == "__main__":
-    build_pdf(RECONCILIATION)
+    sys.exit(main())

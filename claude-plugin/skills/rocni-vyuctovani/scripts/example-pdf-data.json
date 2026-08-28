@@ -1,0 +1,139 @@
+{
+  "output_path": "Vyuctovani_<Property>_<Year>.pdf",
+  "title": "ROČNÍ VYÚČTOVÁNÍ PRONÁJMU",
+  "period_human": "1. ledna <YYYY> – 31. prosince <YYYY>",
+  "footer_text": "Roční vyúčtování <YYYY> — <Property>, <Address>",
+  "issued_at_human": "<dd. mm. yyyy>",
+
+  "_schema_identification": "pole dvojic [label, value] do hlavičky strany 1",
+  "identification": [
+    ["Nemovitost:", "<address + unit numbers>"],
+    ["Pronajímatel:", "<name, address>"],
+    ["Nájemce:", "<name(s) + responsibility note>"],
+    ["Smlouva:", "<period + renewal note>"],
+    ["VS SVJ:", "<variable symbol>"],
+    ["Vystaveno:", "<date>"]
+  ],
+
+  "_schema_result": "velký box na straně 1 a na poslední straně",
+  "result": {
+    "label_p1": "PŘEPLATEK NÁJEMCE",
+    "amount_kc": 0.00,
+    "subtitle_p1": "k vrácení nájemci na účet <acct>",
+    "label_pN": "K vrácení nájemci"
+  },
+
+  "summary": {
+    "_schema_items": "[label, cost, paid, diff]; diff kladný = přeplatek nájemce; CELKEM se dopočítá",
+    "items": [
+      ["Nájem", 0.00, 0.00, 0.00],
+      ["Služby (SVJ)", 0.00, 0.00, 0.00],
+      ["Elektřina", 0.00, 0.00, 0.00]
+    ],
+    "_schema_notes_html": "každá položka jako • odrážka, <b> povoleno",
+    "notes_html": [
+      "<b>Nájem:</b> ...",
+      "<b>Služby:</b> ...",
+      "<b>Elektřina:</b> ...",
+      "<b>Platby:</b> ..."
+    ]
+  },
+
+  "_schema_sheets": "jeden list na kind; type: services | electricity_monthly | payments",
+  "sheets": [
+    {
+      "type": "services",
+      "title": "LIST 1 – SLUŽBY (SVJ <provider>)",
+      "intro": "Podklad: <provider>, Detail vyúčtování ...",
+      "units_table": {
+        "header": ["Jednotka", "Náklady SVJ", "Předepsané zálohy", "Přeplatek SVJ"],
+        "_schema_rows": "[unit, cost, advance, diff]",
+        "rows": [
+          ["<unit-id>", 0.00, 0.00, 0.00]
+        ],
+        "totals_label": "SOUČET (vlastník)"
+      },
+      "fo_intro": "Část záloh SVJ tvoří investiční výdaje pronajímatele ...",
+      "_schema_fo_components": "[label, monthly_kc]",
+      "fo_components": [
+        ["Fond oprav", 0.00],
+        ["Správa SVJ", 0.00],
+        ["Odměny statutár", 0.00],
+        ["Pojištění domu", 0.00],
+        ["Ostatní režie", 0.00]
+      ],
+      "fo_total_monthly": 0.00,
+      "fo_total_yearly": 0.00,
+      "calc": {
+        "_schema_lines": "[label, amount]; poslední řádek se zvýrazní jako výsledek",
+        "lines": [
+          ["Hrubé náklady SVJ (vč. FO)", 0.00],
+          ["minus: Odečet FO + režie (pronajímatel)", 0.00],
+          ["Skutečný náklad nájemce", 0.00],
+          ["minus: Zaplacené zálohy", 0.00]
+        ],
+        "result_label": "PŘEPLATEK SLUŽBY",
+        "result_amount": 0.00
+      }
+    },
+    {
+      "type": "electricity_monthly",
+      "title": "LIST 2 – ELEKTŘINA (<provider> + solar)",
+      "intro_paragraphs": [
+        "Dodavatel: <provider>, sazba ...",
+        "<b>Solar (FVE):</b> ..."
+      ],
+      "table_header": ["Měsíc", "Faktura", "kWh\nfakturováno", "kWh\nsolar",
+                       "Dodavatel (Kč)", "Solar (Kč)", "Celkem (Kč)"],
+      "_schema_rows": "[month, invoice, kwh_net, solar_kwh, supplier_kc, solar_kc, total_kc] — kWh jsou celá čísla, částky desetinné",
+      "rows": [
+        ["01/<YYYY>", "<invoice-id>", 0, 0, 0.00, 0.00, 0.00]
+      ],
+      "totals_label": "CELKEM",
+      "calc": {
+        "lines": [
+          ["Faktury dodavatele (12 měsíců)", 0.00],
+          ["+ Úhrada pronajímateli za solar", 0.00],
+          ["Skutečný náklad nájemce", 0.00],
+          ["minus: Zaplacené zálohy", 0.00]
+        ],
+        "result_label": "PŘEPLATEK ELEKTŘINA",
+        "result_amount": 0.00
+      }
+    },
+    {
+      "type": "payments",
+      "title": "LIST 3 – PLATBY NÁJEMCE",
+      "intro": "Přijaté platby na účet ...",
+      "table_header": ["Měsíc", "Datum platby", "Částka (Kč)", "Očekáváno",
+                       "Rozdíl", "Poznámka"],
+      "_schema_rows": "[month, date_human, amount, expected, diff, note]",
+      "rows": [
+        ["01/<YYYY>", "<dd. mm.>", 0.00, 0.00, 0.00, ""]
+      ],
+      "totals_label": "CELKEM",
+      "_schema_extra_sections": "[heading, body]",
+      "extra_sections": [
+        ["Alokace plateb", "Z přijatých ... Kč je ..."],
+        ["<další poznámka>", "..."]
+      ]
+    }
+  ],
+
+  "payment_instruction": {
+    "title": "VRÁCENÍ PŘEPLATKU",
+    "_schema_details": "[label, value]",
+    "details": [
+      ["Příjemce:", "<name>"],
+      ["Účet:", "<account>"],
+      ["Částka:", "<amount>"],
+      ["Variabilní symbol:", "<vs>"],
+      ["Splatnost:", "do 30 dnů od doručení vyúčtování"]
+    ],
+    "reklamace_text": "Případné nesrovnalosti ...",
+    "_schema_documents": "odrážkový seznam podkladů",
+    "documents": [
+      "<podklad>"
+    ]
+  }
+}

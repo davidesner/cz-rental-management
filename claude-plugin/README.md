@@ -8,21 +8,15 @@ Plugin pro správu pronájmu — pomáhá s ročním vyúčtováním nájemcům 
 - **Skill `smlouvy`** — generování a reformat smluv a dodatků přes Typst (learn template z existujícího dokumentu / render z uložené šablony)
 - **Skill `init`** + **`/rental-management:init` command** — založí pracovní složku s dokumenty, nebo přerovná existující
 
-## Filozofie
+## Kde co žije
 
-**Plugin nese postup. Pracovní složka nese znalost, data a výstupy.**
-
-Nic se z pluginu do pracovní složky nekopíruje. Skilly v něm žijí v jediné kopii a aktualizují se jeho updatem, takže neexistuje žádný merge ani synchronizace šablony.
-
-Co vlastníš ty, žije u tvých dokumentů:
+Plugin nese postup, tvoje pracovní složka znalost, data a výstupy:
 
 | Kde | Co |
 |---|---|
 | `AGENTS.md` v kořeni | konvence + mapping název nemovitosti → složka |
 | `<nemovitost>/_agent/` | metodika vyúčtování, parsery, fixtures, `pdf-<rok>.json` |
 | `_agent/smlouvy/` | naučené Typst šablony + `INDEX.md` |
-
-Update pluginu se téhle znalosti nemůže dotknout — neleží v něm.
 
 ## Instalace
 
@@ -52,11 +46,11 @@ Pak už jen řekni, co chceš — „spočítej vyúčtování <nemovitost>", �
 
 - Při prvním vyúčtování konkrétní nemovitosti tě skill provede **learning mode** — společně vytvoříte `<nemovitost>/_agent/` s metodikou a parsery
 - Při dalším použití pro tu stejnou nemovitost už použije uložené parsery automaticky
-- Pokud se tvoje složky nejmenují jako slugy nemovitostí, zapiš mapping do `AGENTS.md` — přejmenovávat archiv není potřeba
+- Pokud se tvoje složky nejmenují jako slugy nemovitostí, zapiš mapping do `AGENTS.md`
 
 ## Update
 
-`git pull` (nebo update přes marketplace) a hotovo. Skilly se aktualizují s pluginem; v pracovní složce se nic neděje.
+`git pull`, nebo update přes marketplace.
 
 ## MCP backend
 

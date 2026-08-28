@@ -201,15 +201,13 @@ Detailní vysvětlení v [`CLAUDE.md`](./CLAUDE.md) a `core/services/reconciliat
 
 ## Claude Code plugin: architektura skillů
 
-Nejvýraznější designové rozhodnutí pluginu: **plugin nese postup, složka uživatele nese znalost.** Nic se mezi nimi nekopíruje, takže není co mergovat.
-
-Skilly žijí v pluginu v jediné kopii a aktualizují se s ním. Co vlastní uživatel — metodika per nemovitost, parsery, fixtury, naučené smluvní šablony — leží vedle dokumentů, které popisuje, v jeho vlastní pracovní složce. Update pluginu se toho nemůže dotknout, protože to tam není.
+Plugin obsahuje tři skilly. To, co se naučí a vyrobí, žije v pracovní složce uživatele, vedle dokumentů, kterých se to týká.
 
 ```mermaid
 flowchart TB
     M[Plugin marketplace<br/>nebo local --plugin-dir] -->|instalace| P
 
-    subgraph P["claude-plugin/ — POSTUP · jediná kopie, updatuje se s pluginem"]
+    subgraph P["claude-plugin/"]
         direction LR
         SK1[skills/rocni-vyuctovani/<br/>SKILL.md + scripts/]
         SK2[skills/smlouvy/<br/>SKILL.md + templates/]
@@ -218,13 +216,13 @@ flowchart TB
 
     P --> AGENT{{Claude Code session<br/>agent invokuje skill}}
 
-    AGENT -->|"init: založí kostru,<br/>nekopíruje nic"| AG
+    AGENT -->|init: založí kostru| AG
     AGENT -->|resolvuje nemovitost| AG
     AGENT -->|"learning mode:<br/>zapisuje metodiku"| UD
     AGENT -->|čte dokumenty| DOC
     AGENT -->|ukládá naučené šablony| SM
 
-    subgraph WS["&lt;pracovní složka&gt;/ — ZNALOST + DATA · user-owned, nikdy nepřepsané"]
+    subgraph WS["&lt;pracovní složka&gt;/"]
         direction LR
         AG[AGENTS.md<br/>název → složka]
         UD["&lt;nemovitost&gt;/_agent/<br/>metodika, parsery,<br/>fixtures, pdf-&lt;rok&gt;.json"]
@@ -233,17 +231,9 @@ flowchart TB
     end
 ```
 
-### Proč zrovna takhle
-
-Vedly k tomu tři problémy, všechny plynoucí ze staršího modelu, kde plugin kopíroval šablonu do `~/.claude/skills/`:
-
-1. **Merge mašinérie.** Ta kopie mísila template-owned soubory s user-owned, takže `update` command musel rozdíl vlastnictví rekonstruovat ze seznamu cest a nabízet per-soubor diff/overwrite/skip. Fyzické rozdělení z toho smazalo 125 řádků.
-2. **Znalost odtržená od dat.** Metodika a parsery žily pod `~/.claude/`, zatímco dokumenty, které parsují, ve složce uživatele. Per-property PDF skripty už tehdy měly natvrdo absolutní `OUTPUT_DIR` mířící zpátky tam — datová složka byla domovem vždycky.
-3. **Jiné harnessy.** Nástroje, které nenačítají `~/.claude` (Claude Cowork, ChatGPT Work), na tu znalost nedosáhly, přestože pracují přímo nad složkou s dokumenty.
-
 ### Jak se resolvuje nemovitost
 
-Skill **neodvozuje** `slug → properties/<slug>/`. Čte `AGENTS.md` v kořeni pracovní složky, který mapuje název nemovitosti → složka. Default konvence je „složka se jmenuje jako slug", ale mapping má přednost — takže existující archiv s vlastním pojmenováním se nikdy nemusí přejmenovávat.
+Skill čte `AGENTS.md` v kořeni pracovní složky, který mapuje název nemovitosti → složka. Default konvence je, že se složka jmenuje jako slug nemovitosti; kde se to liší, platí mapping — takže si existující archiv nechá vlastní pojmenování.
 
 ### Jak znalost přirůstá
 
@@ -255,7 +245,7 @@ Při prvním zpracování dokumentů pro novou nemovitost vstoupí skill do **le
 ├── README.md                      ← lidský rozcestník
 ├── _agent/smlouvy/                ← naučené Typst šablony + INDEX.md
 └── <nemovitost>/
-    ├── _agent/                    ← USER-OWNED, roste jak se Claude učí
+    ├── _agent/                    ← roste, jak se Claude učí
     │   ├── README.md              ← metodika pro tuhle nemovitost
     │   ├── electricity_parser.py  ← pokud potřeba parsovat PDF
     │   ├── pdf-<rok>.json         ← data pro PDF nájemci
@@ -265,11 +255,11 @@ Při prvním zpracování dokumentů pro novou nemovitost vstoupí skill do **le
     └── vyuctovani/<rok>/          ← výstup nájemci
 ```
 
-Per-property data — osobní a někdy citlivá — se do pluginu ani do jeho git historie nikdy nedostanou, protože tam plugin nic nepíše.
+Per-property data jsou osobní a někdy citlivá a zůstávají ve složce uživatele — mimo tenhle repozitář i jeho git historii.
 
-### Generování PDF: entry point, ne knihovna
+### Generování PDF
 
-Sdílený PDF generátor zůstává v pluginu a spouští se odtamtud. Složky nemovitostí drží **data, ne kód**:
+Generátor bere data nemovitosti jako JSON a vyrobí PDF pro nájemce:
 
 ```bash
 python3 <plugin>/skills/rocni-vyuctovani/scripts/generate_reconciliation_pdf.py \
@@ -277,13 +267,13 @@ python3 <plugin>/skills/rocni-vyuctovani/scripts/generate_reconciliation_pdf.py 
     --out  <nemovitost>/vyuctovani/<rok>/
 ```
 
-Dřív per-property Python soubor importoval `build_pdf()` chůzí nahoru po stromě. Jakmile jsou obě věci v různých stromech, ta chůze se rozbije — a absolutní cesta taky, protože součástí cesty do plugin cache je číslo verze. Obrácení toku tu vazbu odstraňuje úplně.
+Schema datového souboru je zdokumentované v `scripts/example-pdf-data.json`.
 
 ### Skilly
 
 - **`rocni-vyuctovani`** — roční vyúčtování pronájmu (načíst dokumenty → parse → compute → reconcile přes MCP → vyrobit PDF pro nájemníka).
 - **`smlouvy`** — Typst-based generování smluv a dodatků. Dva módy: *learn template* z existujícího DOCX/PDF, *render document* z uložené šablony + dat z MCP.
-- **`init`** — založí novou pracovní složku, nebo přerovná existující hromadu dokumentů do struktury výše. Nekopíruje nic.
+- **`init`** — založí novou pracovní složku, nebo přerovná existující hromadu dokumentů do struktury výše.
 
 ---
 

@@ -202,15 +202,13 @@ Detailed explanations in [`CLAUDE.md`](./CLAUDE.md) and `core/services/reconcili
 
 ## Claude Code plugin: skill architecture
 
-The plugin's most distinctive design choice: **the plugin carries the procedure, the user's folder carries the knowledge.** Nothing is copied between them, so there is nothing to merge.
-
-The skills ship in the plugin in a single copy and update with it. What the user owns — methodology per property, parsers, fixtures, learned contract templates — lives next to the documents it describes, in their own working folder. A plugin update cannot touch it, because it isn't there.
+The plugin ships three skills. What they learn and produce lives in the user's own working folder, beside the documents it describes.
 
 ```mermaid
 flowchart TB
     M[Plugin marketplace<br/>or local --plugin-dir] -->|install| P
 
-    subgraph P["claude-plugin/ — PROCEDURE · single copy, updates with the plugin"]
+    subgraph P["claude-plugin/"]
         direction LR
         SK1[skills/rocni-vyuctovani/<br/>SKILL.md + scripts/]
         SK2[skills/smlouvy/<br/>SKILL.md + templates/]
@@ -219,13 +217,13 @@ flowchart TB
 
     P --> AGENT{{Claude Code session<br/>agent invokes a skill}}
 
-    AGENT -->|"init: scaffolds,<br/>copies nothing"| AG
+    AGENT -->|init: scaffolds the folder| AG
     AGENT -->|resolves property| AG
     AGENT -->|"learning mode:<br/>writes methodology"| UD
     AGENT -->|reads documents| DOC
     AGENT -->|saves learned templates| SM
 
-    subgraph WS["&lt;workspace&gt;/ — KNOWLEDGE + DATA · user-owned, never overwritten"]
+    subgraph WS["&lt;workspace&gt;/"]
         direction LR
         AG[AGENTS.md<br/>name → folder mapping]
         UD["&lt;property&gt;/_agent/<br/>methodology, parsers,<br/>fixtures, pdf-&lt;year&gt;.json"]
@@ -234,17 +232,9 @@ flowchart TB
     end
 ```
 
-### Why this shape
-
-Three problems drove it, all traceable to the old model where the plugin copied a template into `~/.claude/skills/`:
-
-1. **Merge machinery.** That copy mixed template-owned files with user-owned ones, so an `update` command had to reconstruct the ownership split from a list of paths and offer per-file diff/overwrite/skip. Splitting them physically deleted 125 lines of it.
-2. **Knowledge divorced from data.** Methodology and parsers lived under `~/.claude/`, while the documents they parse lived in the user's folder. The per-property PDF scripts already hardcoded an absolute `OUTPUT_DIR` pointing back there — the data folder was always the real home.
-3. **Other harnesses.** Tools that don't load `~/.claude` (Claude Cowork, ChatGPT Work) couldn't read or edit that knowledge, despite operating directly on the document folder.
-
 ### Resolving a property
 
-The skill does **not** derive `slug → properties/<slug>/`. It reads `AGENTS.md` in the workspace root, which maps property name → folder. The default convention is "folder is named as the slug", but the mapping wins — so an existing archive with its own naming never has to be renamed.
+The skill reads `AGENTS.md` in the workspace root, which maps property name → folder. The default convention is that a folder is named as the property's slug; where the two differ, the mapping wins — so an existing archive keeps its own naming.
 
 ### How knowledge accumulates
 
@@ -256,7 +246,7 @@ The first time the user processes documents for a new property, the skill enters
 ├── README.md                      ← human index
 ├── _agent/smlouvy/                ← learned Typst templates + INDEX.md
 └── <property>/
-    ├── _agent/                    ← USER-OWNED, grows as Claude learns
+    ├── _agent/                    ← grows as Claude learns
     │   ├── README.md              ← per-property methodology
     │   ├── electricity_parser.py  ← if PDF parsing needed
     │   ├── pdf-<year>.json        ← data for the tenant PDF
@@ -266,11 +256,11 @@ The first time the user processes documents for a new property, the skill enters
     └── vyuctovani/<year>/         ← output for the tenant
 ```
 
-Per-property data — personal and sometimes sensitive — never enters the plugin or its git history, because the plugin never writes there.
+Per-property data is personal and sometimes sensitive, and stays in the user's folder — outside this repo and its git history.
 
-### PDF generation: entry point, not library
+### PDF generation
 
-The shared PDF generator stays in the plugin and runs from there. Property folders hold **data, not code**:
+The generator takes the property's data as JSON and writes the tenant PDF:
 
 ```bash
 python3 <plugin>/skills/rocni-vyuctovani/scripts/generate_reconciliation_pdf.py \
@@ -278,13 +268,13 @@ python3 <plugin>/skills/rocni-vyuctovani/scripts/generate_reconciliation_pdf.py 
     --out  <property>/vyuctovani/<year>/
 ```
 
-Earlier, a per-property Python file imported `build_pdf()` by walking up the tree. Once the two live in different trees that walk breaks — and an absolute path would break too, since the plugin cache path contains the version number. Inverting the flow removes the coupling entirely.
+Schema for the data file is documented in `scripts/example-pdf-data.json`.
 
 ### Skills
 
 - **`rocni-vyuctovani`** — annual rental reconciliation (read documents → parse → compute → reconcile via MCP → produce PDF for tenant).
 - **`smlouvy`** — Typst-based contract and amendment generation. Two modes: *learn template* from existing DOCX/PDF, *render document* from saved template + MCP data.
-- **`init`** — scaffolds a new workspace, or reorganizes an existing pile of documents into the structure above. Copies nothing.
+- **`init`** — scaffolds a new workspace, or reorganizes an existing pile of documents into the structure above.
 
 ---
 

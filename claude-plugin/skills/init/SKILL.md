@@ -7,8 +7,6 @@ description: Založ nebo přerovnej pracovní složku pro správu nemovitostí �
 
 Připraví složku, ve které uživatel drží dokumenty ke svým nemovitostem. Skilly `rocni-vyuctovani` a `smlouvy` pak nad touhle strukturou pracují.
 
-**Nic se nekopíruje z pluginu.** Skilly zůstávají v pluginu; do pracovní složky patří jen to, co vlastní uživatel.
-
 ## Dva režimy
 
 Zeptej se hned na začátku, který to je:

@@ -24,7 +24,7 @@ Předpokládá MCP server `rental-management` připojený.
 ## Konvence
 
 - **Šablony** žijí v pracovní složce: `_agent/smlouvy/` (sdílené napříč nemovitostmi) NEBO `<složka>/_agent/smlouvy/` (per-property). Sdílené má přednost při nejasnosti. Pracovní složku a mapping název → složka najdeš v `AGENTS.md` v jejím kořeni.
-- **`templates/lease-cs.typ` v tomto skillu** je generic reference starting point. Čti ji, needituj — je součástí pluginu a naučené šablony do něj nepatří.
+- **`templates/lease-cs.typ` v tomto skillu** je generic reference starting point — čti ji jako výchozí bod, naučené šablony ukládej do pracovní složky.
 - **Variable convention**: `{{namespace.field}}` syntaxe (mustache-style). Skill string-replace before compile, ne native Typst inputs (jednodušší debug).
 - **Output**: PDF + `.typ` source vedle sebe, default `<složka>/najem/<rok>-<najemce>/`.
 - **Naming**: `<TENANT>-<KIND>_<descriptor>_<lang>.pdf`, např. `NOVAK-DODATEK_5-od-7_26_CZ.pdf` (kebab/snake mix podle stylu user).
@@ -196,7 +196,7 @@ Když user řekne "ulož template" nebo "tohle si pamatuj":
 
 1. **Ukaž preview a placeholders** — krátké shrnutí co se uloží
 2. **Počkej na explicitní "ano"**
-3. **Zapiš** do `_agent/smlouvy/<name>.typ` (nebo per-property do `<složka>/_agent/smlouvy/`) — **nikdy** do pluginu
+3. **Zapiš** do `_agent/smlouvy/<name>.typ` (nebo per-property do `<složka>/_agent/smlouvy/`)
 4. **Update INDEX.md** — řádek s `name | kind | language | description | path`
 
 ## Tipy

@@ -23,7 +23,7 @@ pnpm mcp
 
 - **Monorepo with three entrypoints**: `api/` (Vercel serverless), `server/` (Node dev server), `mcp/` (standalone MCP server, stdio, runs at the user — NEVER deployed).
 - **`core/` is framework-free**. All business logic lives in `core/services/*.ts` + `core/lib/*.ts` and is unit-testable in isolation. Routes (`server/routes/`) and MCP tools (`mcp/tools/`) are thin shells calling into `core/`.
-- **Plugin nese postup, pracovní složka uživatele nese znalost.** `claude-plugin/skills/` se do uživatelovy složky nikdy nekopíruje; metodika a parsery per nemovitost žijí v `<nemovitost>/_agent/` u dokumentů, nemovitost se resolvuje přes `AGENTS.md` v kořeni té složky. Nepřidávej do pluginu nic, co má vlastnit uživatel.
+- **`claude-plugin/skills/` obsahuje postup, pracovní složka uživatele znalost.** Metodika a parsery per nemovitost žijí v `<nemovitost>/_agent/` u dokumentů; nemovitost se resolvuje přes `AGENTS.md` v kořeni pracovní složky.
 - **DB client auto-switches pool size** based on `process.env.VERCEL` (`core/db/client.ts`). Don't add another switch — extend that one.
 
 ## Domain rules (REQUIRED knowledge)

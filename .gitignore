@@ -20,3 +20,7 @@ coverage/
 .vercel
 .env*.local
 test-results/
+
+# Python (skill scripts)
+__pycache__/
+*.pyc

@@ -288,17 +288,17 @@ Dřív per-property Python soubor importoval `build_pdf()` chůzí nahoru po str
 ---
 
 
-## MCP server (časem samostatný balíček)
+## MCP server
 
-`mcp/` běží jako stdio proces na stroji uživatele. Vystavuje jeden tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) a autentizuje se proti hostovanému API přes per-user token.
+Publikovaný jako samostatný npm balíček: [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp). Běží jako stdio proces na stroji uživatele přes `npx` — není potřeba klonovat repo. Vystavuje jeden tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) a autentizuje se proti API přes per-user token.
 
 ```jsonc
-// ~/.claude/mcp.json
+// .mcp.json
 {
   "mcpServers": {
     "rental-management": {
-      "command": "pnpm", "args": ["mcp"],
-      "cwd": "/path/to/rental-management",
+      "command": "npx",
+      "args": ["-y", "@esnerda/cz-rental-management-mcp@latest"],
       "env": {
         "RENTAL_API_URL": "https://your-app.vercel.app",
         "RENTAL_API_TOKEN": "<from /settings/api-tokens>"
@@ -308,9 +308,10 @@ Dřív per-property Python soubor importoval `build_pdf()` chůzí nahoru po str
 }
 ```
 
-Časem to bude publikované jako npm balíček konzumovatelný přes `npx`, takže user nebude muset mít naklonovaný repo lokálně.
+Zdroj je v [`mcp/`](./mcp). Pro lokální vývoj backendu spustí `pnpm mcp` ten samý server ze zdrojáků přes `tsx`. Publikace: `cd mcp && pnpm build && npm publish --access public`.
 
 ---
+
 
 ## Dokumentace
 

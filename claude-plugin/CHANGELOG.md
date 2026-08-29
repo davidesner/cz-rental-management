@@ -5,6 +5,12 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 1.0.1 — 2026-08-28
+
+### Changed
+
+- Formulace v `README.md` a ve všech třech `SKILL.md` popisují layout tak, jak je, místo aby ho vymezovaly proti dřívějšímu modelu s kopírováním šablony. Věty typu „nekopíruj do pracovní složky" nebo „nikdy do pluginu" zmizely — pro nového uživatele popisovaly situaci, která pro něj nikdy neexistovala. Historie přechodu zůstává v záznamu 1.0.0 níže, kam patří.
+
 ## 1.0.0 — 2026-08-28
 
 ### Changed — BREAKING

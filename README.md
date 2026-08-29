@@ -182,7 +182,7 @@ mcp/                  → Standalone MCP server (separate concern)
   tools/              → One file per resource exposing MCP tools
 tests/                → Vitest integration + service tests (fresh-DB per test)
 drizzle/              → Generated SQL migrations
-claude-plugin/        → Claude Code plugin (workflow skill)
+claude-plugin/        → Claude Code plugin (skills: vyúčtování, smlouvy, init)
 ```
 
 `core/` is the heart — every route handler and MCP tool is a thin shell calling into `core/services/*.ts`. The same business logic backs HTTP and MCP. UI (`src/`) talks only to `/api`.
@@ -202,84 +202,82 @@ Detailed explanations in [`CLAUDE.md`](./CLAUDE.md) and `core/services/reconcili
 
 ## Claude Code plugin: skill architecture
 
-The plugin's most distinctive design choice: **the user owns the workflow skill**. The plugin ships a *template* that the user copies into their local skill directory once. The local copy then grows over time as Claude Code learns each property's documents and parsing rules — without that knowledge ever flowing back to the plugin.
+The plugin ships three skills. What they learn and produce lives in the user's own working folder, beside the documents it describes.
 
 ```mermaid
 flowchart TB
-    M[Plugin marketplace<br/>or local --plugin-dir] -->|claude install rental-management| P
+    M[Plugin marketplace<br/>or local --plugin-dir] -->|install| P
 
-    subgraph P[claude-plugin/]
+    subgraph P["claude-plugin/"]
         direction LR
-        CMD[commands/<br/>• init.md<br/>• update.md]
-        TPL[templates/skill/<br/>• SKILL.md<br/>• contracts/<br/>• scripts/]
-        VER[(plugin.json<br/>#version)]
+        SK1[skills/rocni-vyuctovani/<br/>SKILL.md + scripts/]
+        SK2[skills/smlouvy/<br/>SKILL.md + templates/]
+        SK3[skills/init/<br/>SKILL.md]
     end
 
-    P -->|"/rental-management:init"<br/>one-time bootstrap| US
+    P --> AGENT{{Claude Code session<br/>agent invokes a skill}}
 
-    subgraph US[~/.claude/skills/rental-management/]
+    AGENT -->|init: scaffolds the folder| AG
+    AGENT -->|resolves property| AG
+    AGENT -->|"learning mode:<br/>writes methodology"| UD
+    AGENT -->|reads documents| DOC
+    AGENT -->|saves learned templates| SM
+
+    subgraph WS["&lt;workspace&gt;/"]
         direction LR
-        SK[SKILL.md<br/>contracts/<br/>scripts/<br/>.template-version]
-        UD[properties/&lt;slug&gt;/<br/>fixtures/<br/>━━━━━━━━━━━━━<br/>USER-OWNED<br/>grows as Claude learns]
+        AG[AGENTS.md<br/>name → folder mapping]
+        UD["&lt;property&gt;/_agent/<br/>methodology, parsers,<br/>fixtures, pdf-&lt;year&gt;.json"]
+        DOC["&lt;property&gt;/<br/>svj/ energie/ banka/<br/>najem/ vyuctovani/"]
+        SM[_agent/smlouvy/<br/>learned templates]
     end
-
-    US -->|Claude Code session<br/>auto-discovers skill| AGENT[Agent invokes workflow]
-    AGENT -->|learn mode: new property| UD
-    AGENT -->|render mode: existing| UD
-
-    P -.->|"plugin.json bumps<br/>→ /rental-management:update"| MERGE{Per-file<br/>3-way diff}
-    MERGE -->|template-owned files| SK
-    MERGE -.->|properties/ + fixtures/<br/>NEVER touched| UD
 ```
 
-### What the two flows do
+### Resolving a property
 
-**`/rental-management:init`** (run once after installing the plugin):
-1. Asks the user where to install (default `~/.claude/skills/rental-management/`).
-2. Copies the plugin's `templates/skill/` tree to that location.
-3. Optionally helps set up `.mcp.json` so Claude Code can find the MCP server.
-4. Writes `.template-version` marker (tracks which plugin version was synced).
+The skill reads `AGENTS.md` in the workspace root, which maps property name → folder. The default convention is that a folder is named as the property's slug; where the two differ, the mapping wins — so an existing archive keeps its own naming.
 
-**`/rental-management:update`** (run after the plugin updates):
-1. Compares `.template-version` in the local skill with current plugin version.
-2. If newer: per-file diff for template-owned files (`SKILL.md`, `scripts/*`, `contracts/*`).
-3. User chooses per file: **overwrite** / **manual merge** (`*.template-new` written alongside) / **skip**.
-4. **`properties/` and `fixtures/` are explicitly never touched** — user-owned data.
-5. Bumps `.template-version` marker.
+### How knowledge accumulates
 
-### How the skill "self-updates as it learns"
-
-The plugin template seeds the skeleton. The local skill then accumulates per-property knowledge inside `properties/<slug>/`:
+The first time the user processes documents for a new property, the skill enters **learning mode**: it asks about document structure, writes parsers as Python scripts, and saves regression fixtures — all into `<property>/_agent/`, beside the documents. Subsequent reconciliations reuse them automatically.
 
 ```
-~/.claude/skills/rental-management/
-├── SKILL.md                       ← from template (updated via /update)
-├── contracts/                     ← from template
-├── scripts/                       ← from template
-├── .template-version              ← sync marker
-└── properties/                    ← USER-OWNED (never overwritten)
-    ├── <property-a>/
+<workspace>/
+├── AGENTS.md                      ← conventions + name → folder mapping
+├── README.md                      ← human index
+├── _agent/smlouvy/                ← learned Typst templates + INDEX.md
+└── <property>/
+    ├── _agent/                    ← grows as Claude learns
     │   ├── README.md              ← per-property methodology
     │   ├── electricity_parser.py  ← if PDF parsing needed
-    │   ├── compute_solar.py       ← if domain math needed
+    │   ├── pdf-<year>.json        ← data for the tenant PDF
     │   └── fixtures/              ← regression test data
-    └── <property-b>/
-        └── ...
+    ├── svj/  energie/  banka/     ← inputs
+    ├── najem/<year>-<tenant>/     ← contracts + amendments
+    └── vyuctovani/<year>/         ← output for the tenant
 ```
 
-The first time the user processes documents for a new property, Claude enters **learning mode**: it asks about document structure, writes parsers/computers as Python scripts, and saves regression fixtures. Subsequent reconciliations for the same property reuse those parsers automatically.
+Per-property data is personal and sometimes sensitive, and stays in the user's folder — outside this repo and its git history.
 
-This separation means:
-- Plugin updates (new SKILL.md sections, new shared scripts) can flow safely.
-- Per-property data (which is personal and sometimes sensitive) stays out of the plugin and out of git history.
-- A user can fork the local skill freely without losing template-updateability.
+### PDF generation
 
-### Sub-skills
+The generator takes the property's data as JSON and writes the tenant PDF:
 
-- **Root skill** (`SKILL.md`) — annual rental reconciliation workflow (read documents → parse → compute → reconcile via MCP → produce PDF for tenant).
-- **`contracts/SKILL.md`** — Typst-based contract and amendment document generation. Two modes: *learn template* from existing DOCX/PDF, *render document* from saved template + MCP data.
+```bash
+python3 <plugin>/skills/rocni-vyuctovani/scripts/generate_reconciliation_pdf.py \
+    --data <property>/_agent/pdf-<year>.json \
+    --out  <property>/vyuctovani/<year>/
+```
+
+Schema for the data file is documented in `scripts/example-pdf-data.json`.
+
+### Skills
+
+- **`rocni-vyuctovani`** — annual rental reconciliation (read documents → parse → compute → reconcile via MCP → produce PDF for tenant).
+- **`smlouvy`** — Typst-based contract and amendment generation. Two modes: *learn template* from existing DOCX/PDF, *render document* from saved template + MCP data.
+- **`init`** — scaffolds a new workspace, or reorganizes an existing pile of documents into the structure above.
 
 ---
+
 
 ## MCP server
 
@@ -310,8 +308,9 @@ Source lives in [`mcp/`](./mcp). For local backend dev `pnpm mcp` runs the same 
 - [`CLAUDE.md`](./CLAUDE.md) — orientation for AI agents and contributors
 - [`DEPLOY.md`](./DEPLOY.md) — Vercel + Neon deployment checklist
 - [`claude-plugin/CHANGELOG.md`](./claude-plugin/CHANGELOG.md) — plugin release notes
-- [`claude-plugin/templates/skill/SKILL.md`](./claude-plugin/templates/skill/SKILL.md) — end-user workflow skill
-- [`claude-plugin/templates/skill/contracts/SKILL.md`](./claude-plugin/templates/skill/contracts/SKILL.md) — contracts sub-skill
+- [`claude-plugin/skills/rocni-vyuctovani/SKILL.md`](./claude-plugin/skills/rocni-vyuctovani/SKILL.md) — annual reconciliation skill
+- [`claude-plugin/skills/smlouvy/SKILL.md`](./claude-plugin/skills/smlouvy/SKILL.md) — contracts skill
+- [`claude-plugin/skills/init/SKILL.md`](./claude-plugin/skills/init/SKILL.md) — workspace scaffolding skill
 
 ---
 

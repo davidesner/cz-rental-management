@@ -181,7 +181,7 @@ mcp/                  → Standalone MCP server (samostatná concern)
   tools/              → Jeden soubor per resource vystavující MCP tooly
 tests/                → Vitest integration + service testy (fresh DB per test)
 drizzle/              → Generované SQL migrace
-claude-plugin/        → Claude Code plugin (workflow skill)
+claude-plugin/        → Claude Code plugin (skilly: vyúčtování, smlouvy, init)
 ```
 
 `core/` je srdce — každý route handler a MCP tool je tenká slupka volající `core/services/*.ts`. Stejná business logika pohání HTTP i MCP. UI (`src/`) mluví jen s `/api`.
@@ -199,98 +199,96 @@ Detailní vysvětlení v [`CLAUDE.md`](./CLAUDE.md) a `core/services/reconciliat
 
 ---
 
-## Claude Code plugin: architektura skillu
+## Claude Code plugin: architektura skillů
 
-Nejvýraznější designové rozhodnutí pluginu: **workflow skill vlastní uživatel**. Plugin posílá *šablonu*, kterou si user jednorázově zkopíruje do svého lokálního skill adresáře. Lokální kopie pak roste, jak Claude Code učí dokumenty a parsovací pravidla konkrétní nemovitosti — aniž by ta znalost kdy putovala zpátky do pluginu.
+Plugin obsahuje tři skilly. To, co se naučí a vyrobí, žije v pracovní složce uživatele, vedle dokumentů, kterých se to týká.
 
 ```mermaid
 flowchart TB
-    M[Plugin marketplace<br/>nebo local --plugin-dir] -->|claude install rental-management| P
+    M[Plugin marketplace<br/>nebo local --plugin-dir] -->|instalace| P
 
-    subgraph P[claude-plugin/]
+    subgraph P["claude-plugin/"]
         direction LR
-        CMD[commands/<br/>• init.md<br/>• update.md]
-        TPL[templates/skill/<br/>• SKILL.md<br/>• contracts/<br/>• scripts/]
-        VER[(plugin.json<br/>#version)]
+        SK1[skills/rocni-vyuctovani/<br/>SKILL.md + scripts/]
+        SK2[skills/smlouvy/<br/>SKILL.md + templates/]
+        SK3[skills/init/<br/>SKILL.md]
     end
 
-    P -->|"/rental-management:init"<br/>jednorázový bootstrap| US
+    P --> AGENT{{Claude Code session<br/>agent invokuje skill}}
 
-    subgraph US[~/.claude/skills/rental-management/]
+    AGENT -->|init: založí kostru| AG
+    AGENT -->|resolvuje nemovitost| AG
+    AGENT -->|"learning mode:<br/>zapisuje metodiku"| UD
+    AGENT -->|čte dokumenty| DOC
+    AGENT -->|ukládá naučené šablony| SM
+
+    subgraph WS["&lt;pracovní složka&gt;/"]
         direction LR
-        SK[SKILL.md<br/>contracts/<br/>scripts/<br/>.template-version]
-        UD[properties/&lt;slug&gt;/<br/>fixtures/<br/>━━━━━━━━━━━━━<br/>USER-OWNED<br/>roste jak se Claude učí]
+        AG[AGENTS.md<br/>název → složka]
+        UD["&lt;nemovitost&gt;/_agent/<br/>metodika, parsery,<br/>fixtures, pdf-&lt;rok&gt;.json"]
+        DOC["&lt;nemovitost&gt;/<br/>svj/ energie/ banka/<br/>najem/ vyuctovani/"]
+        SM[_agent/smlouvy/<br/>naučené šablony]
     end
-
-    US -->|Claude Code session<br/>auto-discover skill| AGENT[Agent invokuje workflow]
-    AGENT -->|learn mode: nová property| UD
-    AGENT -->|render mode: existující| UD
-
-    P -.->|"plugin.json se bumpne<br/>→ /rental-management:update"| MERGE{Per-file<br/>3-way diff}
-    MERGE -->|template-owned soubory| SK
-    MERGE -.->|properties/ + fixtures/<br/>NEVER touched| UD
 ```
 
-### Co dva flows dělají
+### Jak se resolvuje nemovitost
 
-**`/rental-management:init`** (spustit jednou po instalaci pluginu):
-1. Zeptá se, kam nainstalovat (default `~/.claude/skills/rental-management/`).
-2. Zkopíruje plugin `templates/skill/` strom na to místo.
-3. Volitelně pomůže nastavit `.mcp.json`, ať Claude Code najde MCP server.
-4. Zapíše `.template-version` marker (sleduje verzi pluginu, se kterou bylo synchronizováno).
+Skill čte `AGENTS.md` v kořeni pracovní složky, který mapuje název nemovitosti → složka. Default konvence je, že se složka jmenuje jako slug nemovitosti; kde se to liší, platí mapping — takže si existující archiv nechá vlastní pojmenování.
 
-**`/rental-management:update`** (spustit po update pluginu):
-1. Porovná `.template-version` v lokálním skillu s aktuální verzí pluginu.
-2. Pokud novější: per-file diff pro template-owned soubory (`SKILL.md`, `scripts/*`, `contracts/*`).
-3. User vybírá per soubor: **overwrite** / **manual merge** (`*.template-new` napsaný vedle) / **skip**.
-4. **`properties/` a `fixtures/` se explicitně nikdy nedotknou** — user-owned data.
-5. Bumpne `.template-version` marker.
+### Jak znalost přirůstá
 
-### Jak se skill "samoupdatuje, jak se učí"
-
-Plugin template nasází kostru. Lokální skill pak akumuluje per-property znalost uvnitř `properties/<slug>/`:
+Při prvním zpracování dokumentů pro novou nemovitost vstoupí skill do **learning mode**: ptá se na strukturu dokumentu, píše parsery jako Python skripty a ukládá regression fixtury — všechno do `<nemovitost>/_agent/`, vedle dokumentů. Další vyúčtování je použijí automaticky.
 
 ```
-~/.claude/skills/rental-management/
-├── SKILL.md                       ← ze šablony (update přes /update)
-├── contracts/                     ← ze šablony
-├── scripts/                       ← ze šablony
-├── .template-version              ← sync marker
-└── properties/                    ← USER-OWNED (nikdy nepřepsané)
-    ├── <property-a>/
-    │   ├── README.md              ← per-property metodika
+<pracovní složka>/
+├── AGENTS.md                      ← konvence + mapping název → složka
+├── README.md                      ← lidský rozcestník
+├── _agent/smlouvy/                ← naučené Typst šablony + INDEX.md
+└── <nemovitost>/
+    ├── _agent/                    ← roste, jak se Claude učí
+    │   ├── README.md              ← metodika pro tuhle nemovitost
     │   ├── electricity_parser.py  ← pokud potřeba parsovat PDF
-    │   ├── compute_solar.py       ← pokud potřeba doménová matematika
+    │   ├── pdf-<rok>.json         ← data pro PDF nájemci
     │   └── fixtures/              ← regression test data
-    └── <property-b>/
-        └── ...
+    ├── svj/  energie/  banka/     ← vstupy
+    ├── najem/<rok>-<najemce>/     ← smlouvy + dodatky
+    └── vyuctovani/<rok>/          ← výstup nájemci
 ```
 
-Při prvním zpracování dokumentů pro novou nemovitost Claude vstoupí do **learning mode**: ptá se na strukturu dokumentu, píše parsery/kalkulátory jako Python skripty a ukládá regression fixtury. Další reconciliace pro tu samou nemovitost ty parsery použijí automaticky.
+Per-property data jsou osobní a někdy citlivá a zůstávají ve složce uživatele — mimo tenhle repozitář i jeho git historii.
 
-Tahle separace znamená:
-- Plugin updaty (nové sekce v SKILL.md, nové sdílené skripty) můžou bezpečně téct dolů.
-- Per-property data (osobní a někdy citlivá) zůstávají mimo plugin i mimo git history.
-- User si může lokální skill libovolně forkovat bez ztráty schopnosti dostávat template updaty.
+### Generování PDF
 
-### Sub-skilly
+Generátor bere data nemovitosti jako JSON a vyrobí PDF pro nájemce:
 
-- **Root skill** (`SKILL.md`) — workflow ročního vyúčtování (read documents → parse → compute → reconcile přes MCP → vyrobit PDF pro nájemníka).
-- **`contracts/SKILL.md`** — Typst-based generování smluv a dodatků. Dva módy: *learn template* z existujícího DOCX/PDF, *render document* z uložené šablony + dat z MCP.
+```bash
+python3 <plugin>/skills/rocni-vyuctovani/scripts/generate_reconciliation_pdf.py \
+    --data <nemovitost>/_agent/pdf-<rok>.json \
+    --out  <nemovitost>/vyuctovani/<rok>/
+```
+
+Schema datového souboru je zdokumentované v `scripts/example-pdf-data.json`.
+
+### Skilly
+
+- **`rocni-vyuctovani`** — roční vyúčtování pronájmu (načíst dokumenty → parse → compute → reconcile přes MCP → vyrobit PDF pro nájemníka).
+- **`smlouvy`** — Typst-based generování smluv a dodatků. Dva módy: *learn template* z existujícího DOCX/PDF, *render document* z uložené šablony + dat z MCP.
+- **`init`** — založí novou pracovní složku, nebo přerovná existující hromadu dokumentů do struktury výše.
 
 ---
 
-## MCP server (časem samostatný balíček)
 
-`mcp/` běží jako stdio proces na stroji uživatele. Vystavuje jeden tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) a autentizuje se proti hostovanému API přes per-user token.
+## MCP server
+
+Publikovaný jako samostatný npm balíček: [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp). Běží jako stdio proces na stroji uživatele přes `npx` — není potřeba klonovat repo. Vystavuje jeden tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) a autentizuje se proti API přes per-user token.
 
 ```jsonc
-// ~/.claude/mcp.json
+// .mcp.json
 {
   "mcpServers": {
     "rental-management": {
-      "command": "pnpm", "args": ["mcp"],
-      "cwd": "/path/to/rental-management",
+      "command": "npx",
+      "args": ["-y", "@esnerda/cz-rental-management-mcp@latest"],
       "env": {
         "RENTAL_API_URL": "https://your-app.vercel.app",
         "RENTAL_API_TOKEN": "<from /settings/api-tokens>"
@@ -300,17 +298,19 @@ Tahle separace znamená:
 }
 ```
 
-Časem to bude publikované jako npm balíček konzumovatelný přes `npx`, takže user nebude muset mít naklonovaný repo lokálně.
+Zdroj je v [`mcp/`](./mcp). Pro lokální vývoj backendu spustí `pnpm mcp` ten samý server ze zdrojáků přes `tsx`. Publikace: `cd mcp && pnpm build && npm publish --access public`.
 
 ---
+
 
 ## Dokumentace
 
 - [`CLAUDE.md`](./CLAUDE.md) — orientace pro AI agenty a contributory
 - [`DEPLOY.md`](./DEPLOY.md) — Vercel + Neon deployment checklist
 - [`claude-plugin/CHANGELOG.md`](./claude-plugin/CHANGELOG.md) — release notes pluginu
-- [`claude-plugin/templates/skill/SKILL.md`](./claude-plugin/templates/skill/SKILL.md) — end-user workflow skill
-- [`claude-plugin/templates/skill/contracts/SKILL.md`](./claude-plugin/templates/skill/contracts/SKILL.md) — contracts sub-skill
+- [`claude-plugin/skills/rocni-vyuctovani/SKILL.md`](./claude-plugin/skills/rocni-vyuctovani/SKILL.md) — skill ročního vyúčtování
+- [`claude-plugin/skills/smlouvy/SKILL.md`](./claude-plugin/skills/smlouvy/SKILL.md) — skill pro smlouvy
+- [`claude-plugin/skills/init/SKILL.md`](./claude-plugin/skills/init/SKILL.md) — skill pro založení pracovní složky
 
 ---
 

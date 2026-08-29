@@ -19,7 +19,7 @@ Workflow pro roční vyúčtování pronájmu. Předpokládá MCP server `rental
 4. **Resolvuj složku**:
    - Pokud `AGENTS.md` má explicitní mapping pro tuhle property, použij ho
    - Jinak default konvence: složka se jmenuje jako slug (property name kebab-cased, např. "<Property Name>" → `<property-name>`)
-   - **Nikdy neodvozuj slug, když `AGENTS.md` říká něco jiného** — uživatel může mít archiv pojmenovaný po svém a nemá ho kvůli nám přejmenovávat
+   - Kde se mapping a konvence liší, **platí mapping**
 5. **Hledej `<složka>/_agent/`**:
    - **Pokud existuje**: čti `<složka>/_agent/README.md`, použij tamní parsery a pravidla
    - **Pokud ne**: vstoupíš do **learning mode** (níže)
@@ -68,7 +68,7 @@ Pokud skript neexistuje a potřebuješ matiku → napiš ho jako deterministick�
 
 ## Konvence (kam co dát)
 
-- `scripts/generate_reconciliation_pdf.py` — v **tomto skillu** (v pluginu), ne v pracovní složce. Generic 5-stránkový PDF (souhrn + per-kind sheets + payment instruction), spouští se jako CLI — viz krok 10 workflow. Nekopíruj ho do pracovní složky.
+- `scripts/generate_reconciliation_pdf.py` — generic 5-stránkový PDF (souhrn + per-kind sheets + payment instruction), spouští se jako CLI z tohoto skillu — viz krok 10 workflow.
 - `<složka>/_agent/README.md` — **povinné, vždy** — metodika (parsing notes, koncept pravidel). NE specifické sazby/jména/datumy — viz sekce výše.
 - `<složka>/_agent/*.py` — **pouze když je potřeba** (negeneruj prázdné placeholdery). Sazby a hodnoty čti z parametrů / MCP, nehardcoduj.
 - `<složka>/_agent/pdf-<rok>.json` — data pro PDF daného roku (hodnoty z MCP a podkladů, ne hardcoded sazby). Schema viz `scripts/example-pdf-data.json` v tomto skillu.
@@ -99,7 +99,7 @@ Pokud skript neexistuje a potřebuješ matiku → napiš ho jako deterministick�
         --out  <složka>/vyuctovani/<rok>/
     ```
 
-    Cestu ke skriptu si odvoď od umístění tohoto `SKILL.md` — nehardcoduj ji a nekopíruj skript do pracovní složky.
+    Cestu ke skriptu si odvoď od umístění tohoto `SKILL.md`, nehardcoduj ji.
 
 ## Period matching pravidlo
 
@@ -155,7 +155,7 @@ Před `compute_reconciliation` volej `cost_statements_list` pro property a před
 Když user řekne "ulož parser" / "ulož pravidlo":
 1. **Ukaž diff/preview** přesně čeho se zápis dotkne
 2. **Počkej na explicitní "ano"** (nikdy ne implicitně)
-3. Piš do `<složka>/_agent/...` v pracovní složce — **nikdy** do pluginu
+3. Piš do `<složka>/_agent/...` v pracovní složce
 4. Po zápisu spusť regression (pokud fixtures existují) jako sanity check
 
 ## Tipy pro Python skripty

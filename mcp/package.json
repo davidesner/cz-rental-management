@@ -33,6 +33,16 @@
   ],
   "license": "MIT",
   "author": "David Esner <david@keboola.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/davidesner/cz-rental-management.git",
+    "directory": "mcp"
+  },
+  "homepage": "https://github.com/davidesner/cz-rental-management/tree/main/mcp#readme",
+  "bugs": "https://github.com/davidesner/cz-rental-management/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   }

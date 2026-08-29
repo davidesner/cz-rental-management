@@ -48,7 +48,7 @@ Each resource exposes idempotent list/get/create/update/delete tools where appli
 
 ## Source
 
-Source lives in the [`mcp/`](https://github.com/esnerda/rental_management/tree/main/mcp) directory of the rental-management monorepo.
+Source lives in the [`mcp/`](https://github.com/davidesner/cz-rental-management/tree/main/mcp) directory of the rental-management monorepo.
 
 ## License
 

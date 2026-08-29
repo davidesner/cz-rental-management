@@ -21,7 +21,7 @@ pnpm mcp
 
 ## Architecture (the non-obvious bits)
 
-- **Monorepo with three entrypoints**: `api/` (Vercel serverless), `server/` (Node dev server), `mcp/` (standalone MCP server, stdio, runs at the user — NEVER deployed).
+- **Monorepo with three entrypoints**: `api/` (Vercel serverless), `server/` (Node dev server), `mcp/` (standalone MCP server, stdio, runs at the user — never deployed to a server, but published to npm as `@esnerda/cz-rental-management-mcp`).
 - **`core/` is framework-free**. All business logic lives in `core/services/*.ts` + `core/lib/*.ts` and is unit-testable in isolation. Routes (`server/routes/`) and MCP tools (`mcp/tools/`) are thin shells calling into `core/`.
 - **`claude-plugin/skills/` obsahuje postup, pracovní složka uživatele znalost.** Metodika a parsery per nemovitost žijí v `<nemovitost>/_agent/` u dokumentů; nemovitost se resolvuje přes `AGENTS.md` v kořeni pracovní složky.
 - **DB client auto-switches pool size** based on `process.env.VERCEL` (`core/db/client.ts`). Don't add another switch — extend that one.
@@ -48,6 +48,7 @@ pnpm mcp
 
 - Add a field: schema → `pnpm db:generate` → edit migration SQL if needed → `pnpm db:migrate` → update service, route, MCP tool, UI page, test. Test with `freshDb()` helper.
 - **`claude-plugin/` changes**: bump `claude-plugin/.claude-plugin/plugin.json#version` (semver: patch = text fix, minor = new skill/command, major = workflow break) + add `claude-plugin/CHANGELOG.md` entry.
+- **`mcp/` changes = a release.** Bump `mcp/package.json#version` + the matching literal in the `FastMCP` constructor in `mcp/index.ts` (CI fails on drift via `pnpm check:mcp-version`) + add an `mcp/CHANGELOG.md` entry. On merge to `main` the `release-mcp` job publishes to npm and tags `mcp-v<version>`; leaving the version alone is how you merge without releasing. Auth is an npm trusted publisher bound to `ci.yml` — **there is no npm token in this repo, and moving the job to another workflow file breaks publishing** until the binding is updated on npmjs.com.
 - **No real PII in code or docs.** Use `<placeholder>` style for names/addresses/amounts in examples and tests.
 - **Don't commit `.mcp.json`** — contains API tokens.
 - **Don't compute money in the LLM head.** Write Python scripts (`claude-plugin/skills/rocni-vyuctovani/scripts/`) for arithmetic. The plugin skill explicitly forbids in-head math.

@@ -15,10 +15,12 @@ on:
   push:
     branches: ['**']
 
-# Superseded commits on the same branch stop wasting a runner.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded commits on a feature branch stop wasting a runner. On main they must
+  # not: this workflow publishes to npm, and cancelling a run mid-`npm publish` would
+  # leave a release half-done with no clean way to retry the same version number.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   NODE_VERSION: '22'
@@ -92,6 +94,11 @@ jobs:
       # tests/, mcp/, scripts/, src/.
       - name: Type-check
         run: pnpm build
+      # The version the MCP server reports over the protocol is a literal in
+      # mcp/index.ts, unlinked to mcp/package.json. Since a version bump is what
+      # triggers a release, a forgotten literal would otherwise ship silently.
+      - name: Check MCP version literal
+        run: node scripts/check-mcp-version.mjs
 
   build:
     name: build
@@ -109,3 +116,92 @@ jobs:
       # already owns; this proves the Vite production build itself succeeds.
       - name: Build frontend
         run: pnpm exec vite build
+
+  # Publishing @esnerda/cz-rental-management-mcp to npm.
+  #
+  # Lives in this workflow rather than its own so it can gate on `needs` — a separate
+  # workflow would have to reach across via `workflow_run`, which is more machinery for
+  # the same guarantee. It also means the npm trusted publisher is bound to `ci.yml`;
+  # if this job ever moves to another file, that binding has to move with it or the
+  # OIDC exchange starts failing.
+  release-mcp:
+    name: release-mcp
+    needs: [test, typecheck, build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      # The OIDC token npm exchanges for publish rights. This is what replaces an
+      # NPM_TOKEN secret — there is deliberately no npm credential in this repo.
+      id-token: write
+      # `gh release create` writes a tag and a release.
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      # Node 22 ships npm 10.x; trusted publishing needs >= 11.5.1. Without this the
+      # publish falls back to looking for a token and fails on a missing credential.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
+      # mcp/package.json#version is the release trigger. Most merges to main don't
+      # touch it, and those must end green rather than red — so this asks npm whether
+      # this exact version already exists instead of assuming.
+      - name: Decide whether to publish
+        id: decide
+        run: |
+          version=$(node -p "require('./mcp/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if npm view "@esnerda/cz-rental-management-mcp@$version" version >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "$version is already on npm — no release in this merge."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "$version is not on npm — releasing it."
+          fi
+
+      - name: Install dependencies
+        if: steps.decide.outputs.publish == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # Explicit, even though `prepublishOnly` would build too: a compile error should
+      # name itself here rather than surface as a failed publish.
+      - name: Build the package
+        if: steps.decide.outputs.publish == 'true'
+        working-directory: mcp
+        run: pnpm build
+
+      # No registry auth is configured anywhere in this job on purpose. npm exchanges
+      # the Actions OIDC token for publish rights against the trusted publisher set on
+      # npmjs.com (davidesner/cz-rental-management, workflow ci.yml), and generates
+      # provenance attestations automatically as part of that exchange.
+      - name: Publish to npm
+        if: steps.decide.outputs.publish == 'true'
+        working-directory: mcp
+        run: npm publish
+
+      # After the publish, so a tag never claims a release that didn't reach npm.
+      - name: Tag the release
+        if: steps.decide.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.decide.outputs.version }}
+        run: |
+          notes=$(awk -v v="$VERSION" '
+            $0 ~ "^## " v "( |$)" { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' mcp/CHANGELOG.md)
+          if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
+            notes="No CHANGELOG entry for $VERSION — see mcp/CHANGELOG.md."
+          fi
+          printf '%s\n\nhttps://www.npmjs.com/package/@esnerda/cz-rental-management-mcp/v/%s\n' \
+            "$notes" "$VERSION" > /tmp/release-notes.md
+          gh release create "mcp-v$VERSION" \
+            --title "MCP $VERSION" \
+            --notes-file /tmp/release-notes.md \
+            --target "$GITHUB_SHA"

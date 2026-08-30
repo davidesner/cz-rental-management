@@ -5,6 +5,23 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 1.1.0 — 2026-08-30
+
+### Changed
+
+- **`init` už nezapisuje `.mcp.json` do pracovní složky.** Místo návodu na jeden
+  konkrétní soubor nese skill jen tvar konfigurace serveru — stdio, `npx -y
+  @esnerda/cz-rental-management-mcp@latest`, `RENTAL_API_URL` + `RENTAL_API_TOKEN` —
+  a nechá agenta zapsat ji tam, kam u daného klienta patří (Claude Code, Cowork,
+  Codex, jiný). Workspace bývá na Google Drivu nebo sdíleném disku, takže tam
+  credentials nepatří; scope má být uživatelský, ne vázaný na složku.
+- `init` nabízí napojení na MCP i v režimu B (přerovnání existující složky), ne
+  jen při zakládání nové.
+
+### Fixed
+
+- `skills/rocni-vyuctovani` popis už neobsahuje `<property name>` — validátor pluginu čte lomené závorky jako XML tag a odmítne celý plugin nainstalovat („SKILL.md description cannot contain XML tags"). Placeholder je teď `[nemovitost]`.
+
 ## 1.0.1 — 2026-08-28
 
 ### Changed

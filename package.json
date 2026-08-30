@@ -8,6 +8,7 @@
     "dev:web": "vite",
     "mcp": "tsx mcp/index.ts",
     "build": "tsc --noEmit",
+    "check:mcp-version": "node scripts/check-mcp-version.mjs",
     "vercel-build": "tsc --noEmit && pnpm migrate:deploy && vite build",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -27,7 +27,7 @@ if (!apiToken) {
 const client = new RentalApiClient(apiUrl, apiToken);
 const server = new FastMCP({
   name: 'rental-management',
-  version: '0.2.0',
+  version: '0.3.0',
 });
 
 addMeTools(server, client);

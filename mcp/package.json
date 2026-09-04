@@ -1,6 +1,6 @@
 {
   "name": "@esnerda/cz-rental-management-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server for the Czech rental-management app — exposes property/contract/payment/cost-statement/reconciliation tools over stdio. Speaks to a rental-management REST backend.",
   "type": "module",
   "bin": {

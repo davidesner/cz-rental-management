@@ -11,12 +11,11 @@ coverage/
 .vscode/
 *.tgz
 
-# Claude Code — locally installed skills + their lockfile
-.claude/skills/
+# Claude Code — per-machine state only: locally installed skills, local
+# permission overrides, and worktrees created inside the repo (a nested
+# checkout `git add -A` would otherwise commit whole).
+.claude/
 /skills-lock.json
-# Git worktrees created inside the repo; `git add -A` would otherwise commit a
-# whole nested checkout.
-.claude/worktrees/
 .vercel
 .env*.local
 test-results/

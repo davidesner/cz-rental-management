@@ -41,3 +41,90 @@ describe('contract utilities (SCD2)', () => {
     await client.close();
   });
 });
+
+describe('contract utility update (in-place)', () => {
+  it('fixes a stale note without opening a new SCD2 row', async () => {
+    const { client, app, cookie, contract } = await setup();
+    const created = (await (await app.request(`/api/contracts/${contract.id}/utilities`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ kind: 'electricity', validFrom: '2024-09-20', monthlyAdvance: 120000, note: 'záloha dle staré smlouvy' }),
+    })).json() as any).utility;
+
+    const res = await app.request(`/api/contracts/${contract.id}/utilities/${created.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ note: 'záloha dle <dokument>' }),
+    });
+    expect(res.status).toBe(200);
+    const updated = (await res.json() as any).utility;
+    expect(updated.note).toBe('záloha dle <dokument>');
+    // in-place: identity + temporal window untouched
+    expect(updated.id).toBe(created.id);
+    expect(updated.kind).toBe('electricity');
+    expect(updated.validFrom).toBe('2024-09-20');
+    expect(updated.validTo).toBeNull();
+    expect(updated.monthlyAdvance).toBe(120000);
+
+    const rows = (await (await app.request(`/api/contracts/${contract.id}/utilities`, { headers: { cookie } })).json() as any).utilities;
+    expect(rows).toHaveLength(1);
+    await client.close();
+  });
+
+  it('corrects a mistyped advance and clears a note with null', async () => {
+    const { client, app, cookie, contract } = await setup();
+    const created = (await (await app.request(`/api/contracts/${contract.id}/utilities`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ kind: 'gas', validFrom: '2024-09-20', monthlyAdvance: 99999, note: 'překlep' }),
+    })).json() as any).utility;
+
+    const updated = (await (await app.request(`/api/contracts/${contract.id}/utilities/${created.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ monthlyAdvance: 100000, note: null }),
+    })).json() as any).utility;
+    expect(updated.monthlyAdvance).toBe(100000);
+    expect(updated.note).toBeNull();
+    await client.close();
+  });
+
+  it('empty patch is a no-op', async () => {
+    const { client, app, cookie, contract } = await setup();
+    const created = (await (await app.request(`/api/contracts/${contract.id}/utilities`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ kind: 'internet', validFrom: '2024-10-01', monthlyAdvance: 50000, note: 'x' }),
+    })).json() as any).utility;
+
+    const res = await app.request(`/api/contracts/${contract.id}/utilities/${created.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json() as any).utility).toMatchObject({ id: created.id, monthlyAdvance: 50000, note: 'x' });
+    await client.close();
+  });
+
+  it('404s for a utility row belonging to another contract', async () => {
+    const { client, app, cookie, contract } = await setup();
+    const created = (await (await app.request(`/api/contracts/${contract.id}/utilities`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ kind: 'electricity', validFrom: '2024-09-20', monthlyAdvance: 120000 }),
+    })).json() as any).utility;
+
+    // second contract in the same org — the row is not part of it
+    const p2 = (await (await app.request('/api/properties', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ name: 'KP2' }),
+    })).json() as any).property;
+    const t2 = (await (await app.request('/api/tenants', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ name: 'SB2' }),
+    })).json() as any).tenant;
+    const other = (await (await app.request('/api/contracts', {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ propertyId: p2.id, tenantId: t2.id, startDate: '2024-09-20' }),
+    })).json() as any).contract;
+
+    const res = await app.request(`/api/contracts/${other.id}/utilities/${created.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ note: 'nope' }),
+    });
+    expect(res.status).toBe(404);
+    await client.close();
+  });
+});

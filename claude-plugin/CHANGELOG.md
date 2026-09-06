@@ -5,7 +5,7 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
-## 1.1.0 — 2026-09-06
+## 1.2.0 — 2026-09-06
 
 ### Added
 
@@ -18,6 +18,23 @@ Verzování dle [semver](https://semver.org/):
 
 - **Šablony teď výslovně přiznávají právo na úroky z jistoty.** § 2254 odst. 2 OZ dává nájemci úroky z jistoty od jejího poskytnutí a § 2235 odst. 1 OZ říká, že se k ujednáním zkracujícím nájemcova práva u nájmu bytu nepřihlíží. `lease-cs.typ` o jistotě dosud mlčel a mlčení stačí, protože zákon platí i bez ujednání; nově to ale říká nahlas, aby se z generic starting pointu nedala odvodit opačná klauzule. `lease-en.typ` to má od začátku. Sazba se záměrně nefixuje — doktrína se neshoduje a nižší sjednaná sazba by stejně byla neúčinná.
 - **Workflow A nově hlídá klauzuli „jistota není úročena".** Staré vzory ji běžně obsahují; skill na ni při učení šablony z existujícího dokumentu upozorní, aby se nepřenesla dál a aby uživatel věděl, že na jeho podepsaných smlouvách nárok na úrok běží dál.
+
+## 1.1.0 — 2026-08-30
+
+### Changed
+
+- **`init` už nezapisuje `.mcp.json` do pracovní složky.** Místo návodu na jeden
+  konkrétní soubor nese skill jen tvar konfigurace serveru — stdio, `npx -y
+  @esnerda/cz-rental-management-mcp@latest`, `RENTAL_API_URL` + `RENTAL_API_TOKEN` —
+  a nechá agenta zapsat ji tam, kam u daného klienta patří (Claude Code, Cowork,
+  Codex, jiný). Workspace bývá na Google Drivu nebo sdíleném disku, takže tam
+  credentials nepatří; scope má být uživatelský, ne vázaný na složku.
+- `init` nabízí napojení na MCP i v režimu B (přerovnání existující složky), ne
+  jen při zakládání nové.
+
+### Fixed
+
+- `skills/rocni-vyuctovani` popis už neobsahuje `<property name>` — validátor pluginu čte lomené závorky jako XML tag a odmítne celý plugin nainstalovat („SKILL.md description cannot contain XML tags"). Placeholder je teď `[nemovitost]`.
 
 ## 1.0.1 — 2026-08-28
 

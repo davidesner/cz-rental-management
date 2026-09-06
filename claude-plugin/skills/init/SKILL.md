@@ -1,6 +1,6 @@
 ---
 name: init
-description: Založ nebo přerovnej pracovní složku pro správu nemovitostí — AGENTS.md, kostra složek per byt, volitelně .mcp.json. Aktivuj když user řekne "založ složku na byty", "nastav rental management", "přerovnej mi tyhle dokumenty" apod.
+description: Založ nebo přerovnej pracovní složku pro správu nemovitostí — AGENTS.md, kostra složek per byt, volitelně napojení na MCP backend. Aktivuj když user řekne "založ složku na byty", "nastav rental management", "přerovnej mi tyhle dokumenty" apod.
 ---
 
 # Init: pracovní složka pro správu nemovitostí
@@ -73,7 +73,7 @@ Prefix `_` znamená „meta, ne dokumenty" a řadí složku nahoru. `_agent/` m�
    ```
 
 4. **Napiš `AGENTS.md`** podle šablony níže.
-5. **Nabídni `.mcp.json`** (viz níže).
+5. **Nabídni napojení na MCP** (viz níže).
 
 ## Režim B — přerovnání existující složky
 
@@ -82,7 +82,8 @@ Prefix `_` znamená „meta, ne dokumenty" a řadí složku nahoru. `_agent/` m�
 3. **Přesouvej, nikdy nemaž.** Použij `git mv` pokud je složka ve verzovacím systému, jinak `mv`. Co nezařadíš, nech na místě a vypiš to na konci.
 4. **Nepřejmenovávej identifikátory od zdroje** — faktury a výpisy si nechávají jméno, které jim dal vystavovatel; parsery na ně můžou globovat. Popisně přejmenovávej jen neprůhledné názvy (`scan001.pdf`).
 5. **Napiš `AGENTS.md`.** Pokud se složky nejmenují jako slugy (běžné u existujícího archivu), zapiš do něj explicitní mapping — přejmenovávat není potřeba.
-6. Na konci ukaž souhrn: co se přesunulo, co zůstalo nezařazené.
+6. **Nabídni napojení na MCP** (viz níže).
+7. Na konci ukaž souhrn: co se přesunulo, co zůstalo nezařazené.
 
 ## Šablona `AGENTS.md`
 
@@ -139,26 +140,29 @@ je závazná — když se od konvence liší, platí tabulka.
 
 Konkrétní nemovitosti a stavy doplň podle toho, co ti user řekl. Neuváděj jména nájemců ani částky — ty patří do MCP.
 
-## Volitelně: `.mcp.json`
+## Volitelně: napojení na MCP backend
 
-Zeptej se, jestli má založit napojení na backend. Pokud ano, zeptej se na API URL a token (generuje se v aplikaci na `/settings/api-tokens`) a zapiš do `<workspace>/.mcp.json`:
+Zeptej se, jestli má user připojit backend `rental-management`. Bez něj skilly
+`rocni-vyuctovani` a `smlouvy` nemají odkud číst částky ani kam je zapsat.
 
-```json
-{
-  "mcpServers": {
-    "rental-management": {
-      "command": "npx",
-      "args": ["-y", "@esnerda/cz-rental-management-mcp@latest"],
-      "env": {
-        "RENTAL_API_URL": "<URL>",
-        "RENTAL_API_TOKEN": "<TOKEN>"
-      }
-    }
-  }
-}
-```
+Co server potřebuje:
 
-**`.mcp.json` obsahuje token — připomeň, ať ho user nedává do gitu.**
+- **transport**: stdio — klient ho spouští jako lokální proces
+- **command**: `npx`, argumenty `-y @esnerda/cz-rental-management-mcp@latest`
+- **env**: `RENTAL_API_URL` (adresa backendu) a `RENTAL_API_TOKEN`
+  (token si user vygeneruje v aplikaci na `/settings/api-tokens`)
+
+Zjisti, jakého klienta user používá, a zapiš tuhle konfiguraci v jeho nativním
+tvaru na místo, kam u něj patří. Klient, který umí jen vzdálené konektory přes
+HTTP, lokální stdio server nespustí — tam je potřeba hostovaný backend.
+
+**Konfigurace nepatří do workspace.** Workspace bývá na Google Drivu nebo jiném
+sdíleném disku a token do něj nepatří. Navíc konfigurace vázaná na složku
+znamená, že server naběhne jen tehdy, když je klient spuštěný přesně odtud.
+Vyber scope platný pro uživatele, ne pro složku.
+
+Na konci nech user klienta restartovat a ověř, že tooly odpovídají — třeba
+`properties_list`.
 
 ## Na závěr
 

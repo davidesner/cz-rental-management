@@ -91,6 +91,9 @@ tuto
     Nájemce se zavazuje uhradit na účet pronajímatele č. účtu {{landlord.bankAccount}}
     do {{deposit.dueDate}} částku ve výši *{{deposit.amount}} Kč* jako jistotu
     k zajištění nájemného a k úhradě jiných svých závazků vzniklých v souvislosti s nájmem.
+    Nájemce má podle § 2254 odst. 2 občanského zákoníku právo na úroky z jistoty
+    od jejího poskytnutí alespoň ve výši zákonné sazby; pronajímatel je vyplatí
+    spolu s vrácením jistoty.
   ]
 ]
 

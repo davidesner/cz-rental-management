@@ -128,3 +128,24 @@ describe('contract utility update (in-place)', () => {
     await client.close();
   });
 });
+
+describe('contract utility update — immutable columns', () => {
+  it('ignores kind and validFrom sent in the patch body', async () => {
+    const { client, app, cookie, contract } = await setup();
+    const created = (await (await app.request(`/api/contracts/${contract.id}/utilities`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ kind: 'electricity', validFrom: '2024-09-20', monthlyAdvance: 120000 }),
+    })).json() as any).utility;
+
+    const updated = (await (await app.request(`/api/contracts/${contract.id}/utilities/${created.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ monthlyAdvance: 130000, kind: 'gas', validFrom: '2025-01-01', validTo: '2025-06-01' }),
+    })).json() as any).utility;
+
+    expect(updated.monthlyAdvance).toBe(130000);
+    expect(updated.kind).toBe('electricity');
+    expect(updated.validFrom).toBe('2024-09-20');
+    expect(updated.validTo).toBeNull();
+    await client.close();
+  });
+});

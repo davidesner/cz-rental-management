@@ -9,6 +9,16 @@ Bump verze v `mcp/package.json` je zároveň spouštěč releasu — po mergi do
 publikuje job `release-mcp` v `.github/workflows/ci.yml` balíček na npm. Verze
 v konstruktoru `FastMCP` v `mcp/index.ts` musí sedět, jinak CI failne.
 
+## 0.3.0 — 2026-09-04
+
+### Added
+
+- `contract_utilities_update` — oprava existujícího řádku média na místě (překlep
+  v záloze, zastaralá poznámka). `kind` a `validFrom` zůstávají neměnné, protože
+  určují pozici řádku v per-kind SCD2 řetězci; skutečná změna od data patří dál
+  do `contract_utilities_add`. Do teď šel řádek média jen založit, takže stará
+  poznámka se nedala přepsat — jen překrýt novým řádkem.
+
 ## 0.2.0 — 2026-08-29
 
 První verze publikovaná na npm. `0.1.0` na registry nikdy nebyla — existovala jen

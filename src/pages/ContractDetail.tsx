@@ -260,14 +260,15 @@ function validAt<T extends { validFrom: string; validTo?: string | null }>(rows:
 interface PodminkyTableProps {
   terms: ContractTerm[];
   utilities: Utility[];
-  onEditTerm?: (term: ContractTerm) => void;
+  /** Opens the edit dialog for a timeline date (terms row and/or utility rows starting that day). */
+  onEditRow?: (date: string) => void;
   /** True while the terms/utilities queries feeding this table haven't returned data yet. */
   isPending: boolean;
   isError: boolean;
   onRetry: () => void;
 }
 
-function PodminkyTable({ terms, utilities, onEditTerm, isPending, isError, onRetry }: PodminkyTableProps) {
+function PodminkyTable({ terms, utilities, onEditRow, isPending, isError, onRetry }: PodminkyTableProps) {
   const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
 
   // Which utility kinds appear at all in this contract
@@ -279,7 +280,7 @@ function PodminkyTable({ terms, utilities, onEditTerm, isPending, isError, onRet
     ...utilities.map(u => u.validFrom),
   ])).sort();
 
-  const cols = 8 + presentKinds.length + (onEditTerm ? 1 : 0);
+  const cols = 8 + presentKinds.length + (onEditRow ? 1 : 0);
 
   return (
     <div className="overflow-x-auto">
@@ -295,7 +296,7 @@ function PodminkyTable({ terms, utilities, onEditTerm, isPending, isError, onRet
             <TableHead>Zdroj</TableHead>
             <TableHead>Doklad</TableHead>
             <TableHead>Poznámka</TableHead>
-            {onEditTerm && <TableHead className="w-12"></TableHead>}
+            {onEditRow && <TableHead className="w-12"></TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -351,15 +352,13 @@ function PodminkyTable({ terms, utilities, onEditTerm, isPending, isError, onRet
                 <TableCell className="text-xs text-muted-foreground max-w-md truncate" title={noteParts.join(' · ')}>
                   {noteParts.join(' · ') || '—'}
                 </TableCell>
-                {onEditTerm && (
+                {onEditRow && (
                   <TableCell className="w-12">
-                    {activeTerm && activeTerm.validFrom === d && (
-                      <button
-                        className="text-xs text-muted-foreground hover:text-primary px-1"
-                        onClick={() => onEditTerm(activeTerm)}
-                        title="Upravit"
-                      >Upravit</button>
-                    )}
+                    <button
+                      className="text-xs text-muted-foreground hover:text-primary px-1"
+                      onClick={() => onEditRow(d)}
+                      title="Upravit"
+                    >Upravit</button>
                   </TableCell>
                 )}
               </TableRow>
@@ -996,7 +995,7 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
         {presentKinds.length > 0 && (
           <div className="space-y-2">
             <p className="text-sm font-medium">Energie</p>
-            <p className="text-xs text-muted-foreground">Ponech prázdné = beze změny. Vymazání hodnoty energii neodstraní (pro odstranění je potřeba backend podpora).</p>
+            <p className="text-xs text-muted-foreground">Ponech prázdné = beze změny. Vymazání hodnoty energii neodstraní (mazání řádku zatím není podporované). Opravu existujícího řádku dělej přes Upravit v tabulce.</p>
             {presentKinds.map(k => (
               <div key={k}>
                 <Label className="text-sm">{UTILITY_LABEL[k]} (Kč)</Label>
@@ -1059,42 +1058,84 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
 
 interface EditPodminkyDialogProps {
   contractId: string;
-  term: ContractTerm;
+  /** Timeline date being edited. */
+  date: string;
+  terms: ContractTerm[];
+  utilities: Utility[];
   onClose: () => void;
   onUpdated: () => void;
 }
 
-function EditPodminkyDialog({ contractId, term, onClose, onUpdated }: EditPodminkyDialogProps) {
+/**
+ * Edits a single date of the podminky timeline: the terms row starting that day
+ * (if any) plus every utility row starting that day. A utility merely *active* on
+ * the date started earlier — it belongs to its own row, so it is shown read-only
+ * with a pointer to the date that owns it.
+ */
+function EditPodminkyDialog({ contractId, date, terms, utilities, onClose, onUpdated }: EditPodminkyDialogProps) {
+  const term = terms.find(t => t.validFrom === date) ?? null;
+  const editableUtils = UTILITY_KINDS.flatMap(k => utilities.filter(u => u.kind === k && u.validFrom === date));
+  const inheritedUtils = UTILITY_KINDS
+    .map(k => validAt(utilities.filter(u => u.kind === k), date))
+    .filter((u): u is Utility => u !== null && u.validFrom !== date);
+
   const [form, setForm] = useState({
-    baseRentCzk: (term.baseRent / 100).toFixed(2),
-    serviceAdvanceCzk: (term.serviceAdvance / 100).toFixed(2),
-    paymentDueDay: String(term.paymentDueDay),
-    paymentAppliesTo: term.paymentAppliesTo as 'current' | 'next',
-    source: term.source as 'initial' | 'addendum' | 'change',
-    documentRef: term.documentRef ?? '',
-    note: term.note ?? '',
+    baseRentCzk: ((term?.baseRent ?? 0) / 100).toFixed(2),
+    serviceAdvanceCzk: ((term?.serviceAdvance ?? 0) / 100).toFixed(2),
+    paymentDueDay: String(term?.paymentDueDay ?? 10),
+    paymentAppliesTo: (term?.paymentAppliesTo ?? 'current') as 'current' | 'next',
+    source: (term?.source ?? 'change') as 'initial' | 'addendum' | 'change',
+    documentRef: term?.documentRef ?? '',
+    note: term?.note ?? '',
   });
+  const [utilForm, setUtilForm] = useState<Record<string, { amountCzk: string; note: string }>>(
+    Object.fromEntries(editableUtils.map(u => [
+      u.id,
+      { amountCzk: (u.monthlyAdvance / 100).toFixed(2), note: u.note ?? '' },
+    ])),
+  );
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const baseRent = parseKorun(form.baseRentCzk);
   const serviceAdvance = parseKorun(form.serviceAdvanceCzk);
-  const amountsInvalid = baseRent.kind !== 'value' || serviceAdvance.kind !== 'value';
+  const termAmountsInvalid = term !== null && (baseRent.kind !== 'value' || serviceAdvance.kind !== 'value');
+  const utilAmount = (id: string) => parseKorun(utilForm[id]?.amountCzk ?? '');
+  const utilAmountsInvalid = editableUtils.some(u => utilAmount(u.id).kind !== 'value');
 
   async function handleSubmit() {
-    if (amountsInvalid) return;
+    if (termAmountsInvalid || utilAmountsInvalid) return;
     setSubmitting(true);
     setErr(null);
     try {
-      await api.patch(`/api/contracts/${contractId}/terms/${term.id}`, {
-        baseRent: baseRent.kind === 'value' ? baseRent.halere : 0,
-        serviceAdvance: serviceAdvance.kind === 'value' ? serviceAdvance.halere : 0,
-        paymentDueDay: parseInt(form.paymentDueDay, 10) || 10,
-        paymentAppliesTo: form.paymentAppliesTo,
-        source: form.source,
-        documentRef: form.documentRef || null,
-        note: form.note || null,
-      });
+      const reqs: Promise<unknown>[] = [];
+
+      if (term && baseRent.kind === 'value' && serviceAdvance.kind === 'value') {
+        reqs.push(api.patch(`/api/contracts/${contractId}/terms/${term.id}`, {
+          baseRent: baseRent.halere,
+          serviceAdvance: serviceAdvance.halere,
+          paymentDueDay: parseInt(form.paymentDueDay, 10) || 10,
+          paymentAppliesTo: form.paymentAppliesTo,
+          source: form.source,
+          documentRef: form.documentRef || null,
+          note: form.note || null,
+        }));
+      }
+
+      for (const u of editableUtils) {
+        const amount = utilAmount(u.id);
+        if (amount.kind !== 'value') continue;
+        const note = (utilForm[u.id]?.note ?? '') || null;
+        // Skip untouched rows — a PATCH per utility is cheap, but a no-op write
+        // is still a write against a shared timeline.
+        if (amount.halere === u.monthlyAdvance && note === (u.note ?? null)) continue;
+        reqs.push(api.patch(`/api/contracts/${contractId}/utilities/${u.id}`, {
+          monthlyAdvance: amount.halere,
+          note,
+        }));
+      }
+
+      if (reqs.length > 0) await Promise.all(reqs);
       onUpdated();
       onClose();
     } catch (e) {
@@ -1109,67 +1150,112 @@ function EditPodminkyDialog({ contractId, term, onClose, onUpdated }: EditPodmin
       <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-xl font-semibold">Upravit podmínky</h2>
         <p className="text-xs text-muted-foreground">
-          Platnost od <strong>{term.validFrom}</strong> (datum nelze změnit — pro přesun v čase smaž a přidej nové).
+          Platnost od <strong>{date}</strong> (datum nelze změnit — pro přesun v čase smaž a přidej nové).
         </p>
-        <div>
-          <Label>Nájem (Kč)</Label>
-          <Input type="text" value={form.baseRentCzk} onChange={e => setForm({ ...form, baseRentCzk: e.target.value })} />
-          {form.baseRentCzk !== '' && baseRent.kind === 'invalid' && (
-            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
-          )}
-        </div>
-        <div>
-          <Label>Záloha SVJ (Kč)</Label>
-          <Input type="text" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
-          {form.serviceAdvanceCzk !== '' && serviceAdvance.kind === 'invalid' && (
-            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>Splatnost ke dni</Label>
-            <Input type="number" min={1} max={31} value={form.paymentDueDay} onChange={e => setForm({ ...form, paymentDueDay: e.target.value })} />
+
+        {term ? (
+          <>
+            <div>
+              <Label>Nájem (Kč)</Label>
+              <Input type="text" value={form.baseRentCzk} onChange={e => setForm({ ...form, baseRentCzk: e.target.value })} />
+              {form.baseRentCzk !== '' && baseRent.kind === 'invalid' && (
+                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+              )}
+            </div>
+            <div>
+              <Label>Záloha SVJ (Kč)</Label>
+              <Input type="text" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
+              {form.serviceAdvanceCzk !== '' && serviceAdvance.kind === 'invalid' && (
+                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Splatnost ke dni</Label>
+                <Input type="number" min={1} max={31} value={form.paymentDueDay} onChange={e => setForm({ ...form, paymentDueDay: e.target.value })} />
+              </div>
+              <div>
+                <Label>Platba za</Label>
+                <select
+                  className={SELECT_CLS}
+                  value={form.paymentAppliesTo}
+                  onChange={e => setForm({ ...form, paymentAppliesTo: e.target.value as 'current' | 'next' })}
+                >
+                  <option value="current">Aktuální měsíc</option>
+                  <option value="next">Následující měsíc (předem)</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <Label>Zdroj</Label>
+              <select
+                className={SELECT_CLS}
+                value={form.source}
+                onChange={e => setForm({ ...form, source: e.target.value as 'initial' | 'addendum' | 'change' })}
+              >
+                <option value="initial">Počáteční</option>
+                <option value="addendum">Dodatek</option>
+                <option value="change">Změna</option>
+              </select>
+            </div>
+            <div>
+              <Label>Doklad (URL nebo cesta) — volitelné</Label>
+              <Input
+                placeholder="https://drive.google.com/file/d/... nebo /path/to/dodatek-5.pdf"
+                value={form.documentRef}
+                onChange={e => setForm({ ...form, documentRef: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Poznámka (volitelné)</Label>
+              <Input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            K tomuto datu se nemění nájem ani záloha SVJ — jen energie níže.
+          </p>
+        )}
+
+        {editableUtils.length > 0 && (
+          <div className="space-y-3 border-t pt-4">
+            <p className="text-sm font-medium">Energie od {date}</p>
+            {editableUtils.map(u => (
+              <div key={u.id} className="space-y-1">
+                <Label className="text-sm">{UTILITY_LABEL[u.kind as UtilityKind]} (Kč)</Label>
+                <Input
+                  type="text"
+                  value={utilForm[u.id]?.amountCzk ?? ''}
+                  onChange={e => setUtilForm({ ...utilForm, [u.id]: { ...utilForm[u.id]!, amountCzk: e.target.value } })}
+                />
+                {utilAmount(u.id).kind === 'invalid' && (
+                  <p className="text-sm text-destructive">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+                )}
+                <Input
+                  placeholder="Poznámka (volitelné)"
+                  value={utilForm[u.id]?.note ?? ''}
+                  onChange={e => setUtilForm({ ...utilForm, [u.id]: { ...utilForm[u.id]!, note: e.target.value } })}
+                />
+              </div>
+            ))}
           </div>
-          <div>
-            <Label>Platba za</Label>
-            <select
-              className={SELECT_CLS}
-              value={form.paymentAppliesTo}
-              onChange={e => setForm({ ...form, paymentAppliesTo: e.target.value as 'current' | 'next' })}
-            >
-              <option value="current">Aktuální měsíc</option>
-              <option value="next">Následující měsíc (předem)</option>
-            </select>
+        )}
+
+        {inheritedUtils.length > 0 && (
+          <div className="space-y-1 border-t pt-4">
+            <p className="text-sm font-medium">Energie platné k tomuto datu, ale beze změny</p>
+            {inheritedUtils.map(u => (
+              <p key={u.id} className="text-xs text-muted-foreground">
+                {UTILITY_LABEL[u.kind as UtilityKind]}: {(u.monthlyAdvance / 100).toLocaleString('cs-CZ')} Kč — platí od {u.validFrom}, uprav na tom řádku.
+              </p>
+            ))}
           </div>
-        </div>
-        <div>
-          <Label>Zdroj</Label>
-          <select
-            className={SELECT_CLS}
-            value={form.source}
-            onChange={e => setForm({ ...form, source: e.target.value as 'initial' | 'addendum' | 'change' })}
-          >
-            <option value="initial">Počáteční</option>
-            <option value="addendum">Dodatek</option>
-            <option value="change">Změna</option>
-          </select>
-        </div>
-        <div>
-          <Label>Doklad (URL nebo cesta) — volitelné</Label>
-          <Input
-            placeholder="https://drive.google.com/file/d/... nebo /path/to/dodatek-5.pdf"
-            value={form.documentRef}
-            onChange={e => setForm({ ...form, documentRef: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label>Poznámka (volitelné)</Label>
-          <Input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
-        </div>
+        )}
+
         {err && <p className="text-sm text-destructive">{err}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose} disabled={submitting}>Zrušit</Button>
-          <Button onClick={handleSubmit} disabled={amountsInvalid || submitting}>
+          <Button onClick={handleSubmit} disabled={termAmountsInvalid || utilAmountsInvalid || submitting}>
             {submitting ? 'Ukládám…' : 'Uložit'}
           </Button>
         </div>
@@ -1561,7 +1647,7 @@ export function ContractDetailPage() {
 
   // ── Podmínky dialog state ──────────────────────────────────────────────────
   const [podminkyOpen, setPodminkyOpen] = useState(false);
-  const [editTermsTarget, setEditTermsTarget] = useState<ContractTerm | null>(null);
+  const [editRowDate, setEditRowDate] = useState<string | null>(null);
 
   // ── Cost statement dialog state ────────────────────────────────────────────
   const [csOpen, setCsOpen] = useState(false);
@@ -1718,7 +1804,7 @@ export function ContractDetailPage() {
               <PodminkyTable
                 terms={terms}
                 utilities={utilities}
-                onEditTerm={(t) => setEditTermsTarget(t)}
+                onEditRow={(d) => setEditRowDate(d)}
                 isPending={!termsData || !utilitiesData}
                 isError={(termsError && !termsData) || (utilitiesError && !utilitiesData)}
                 onRetry={() => { if (!termsData) termsRefetch(); if (!utilitiesData) utilitiesRefetch(); }}
@@ -2004,13 +2090,16 @@ export function ContractDetailPage() {
       )}
 
       {/* ── Edit Podmínky dialog ───────────────────────────────────────────── */}
-      {editTermsTarget && id && (
+      {editRowDate && id && (
         <EditPodminkyDialog
           contractId={id}
-          term={editTermsTarget}
-          onClose={() => setEditTermsTarget(null)}
+          date={editRowDate}
+          terms={terms}
+          utilities={utilities}
+          onClose={() => setEditRowDate(null)}
           onUpdated={() => {
             qc.invalidateQueries({ queryKey: ['contracts', id, 'terms'] });
+            qc.invalidateQueries({ queryKey: ['contracts', id, 'utilities'] });
           }}
         />
       )}

@@ -17,6 +17,13 @@ const AddContractUtilityInput = z.object({
   note: z.string().nullable().optional().describe('Internal note'),
 });
 
+const UpdateContractUtilityInput = z.object({
+  contractId: z.string().describe('Contract ID (the owning contract)'),
+  utilityId: z.string().describe('ID of the utility row to update (from contract_utilities_list)'),
+  monthlyAdvance: z.number().int().nonnegative().optional().describe('Corrected monthly advance in haléře (CZK × 100)'),
+  note: z.string().nullable().optional().describe('Internal note — string nastaví, null odstraní'),
+});
+
 export async function listContractUtilities(client: RentalApiClient, args: z.infer<typeof ListContractUtilitiesInput>) {
   const data = await client.get<{ utilities: unknown[] }>(`/api/contracts/${args.contractId}/utilities`);
   return data.utilities;
@@ -25,6 +32,12 @@ export async function listContractUtilities(client: RentalApiClient, args: z.inf
 export async function addContractUtility(client: RentalApiClient, args: z.infer<typeof AddContractUtilityInput>) {
   const { contractId, ...body } = args;
   const data = await client.post<{ utility: unknown }>(`/api/contracts/${contractId}/utilities`, body);
+  return data.utility;
+}
+
+export async function updateContractUtility(client: RentalApiClient, args: z.infer<typeof UpdateContractUtilityInput>) {
+  const { contractId, utilityId, ...body } = args;
+  const data = await client.patch<{ utility: unknown }>(`/api/contracts/${contractId}/utilities/${utilityId}`, body);
   return data.utility;
 }
 
@@ -41,5 +54,12 @@ export function addContractUtilityTools(server: FastMCP, client: RentalApiClient
     description: 'Add a utility advance entry to a contract (electricity, gas, internet, water, other).',
     parameters: AddContractUtilityInput,
     execute: async (args) => JSON.stringify(await addContractUtility(client, args), null, 2),
+  });
+
+  server.addTool({
+    name: 'contract_utilities_update',
+    description: 'Update an existing utility row in-place — fix a mistyped advance or rewrite a stale note. kind + validFrom are immutable (they define the row\'s slot in the per-kind SCD2 chain); a genuine change from a given date belongs in contract_utilities_add instead.',
+    parameters: UpdateContractUtilityInput,
+    execute: async (args) => JSON.stringify(await updateContractUtility(client, args), null, 2),
   });
 }

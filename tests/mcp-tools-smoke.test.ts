@@ -7,7 +7,7 @@ import { listProperties, createProperty, getProperty, updateProperty } from '../
 import { listTenants, createTenant } from '../mcp/tools/tenants.js';
 import { listContracts, createContract } from '../mcp/tools/contracts.js';
 import { listContractTerms, addContractTerms } from '../mcp/tools/contract-terms.js';
-import { listContractUtilities, addContractUtility } from '../mcp/tools/contract-utilities.js';
+import { listContractUtilities, addContractUtility, updateContractUtility } from '../mcp/tools/contract-utilities.js';
 import { listPropertyTariffs, addPropertyTariff } from '../mcp/tools/property-tariffs.js';
 import { listPayments, recordPayment, recordPaymentsBatch, deletePayment } from '../mcp/tools/payments.js';
 import { listCostStatements, createCostStatement, deleteCostStatement } from '../mcp/tools/cost-statements.js';
@@ -133,6 +133,19 @@ describe('MCP tools smoke', () => {
     await addContractUtility(mcpClient, { contractId, kind: 'electricity', validFrom: '2024-01-01', monthlyAdvance: 120000, note: null });
     const utils = await listContractUtilities(mcpClient, { contractId });
     expect(utils).toHaveLength(1);
+    await dbClient.close();
+  });
+
+  it('contract_utilities_update fixes a row in-place', async () => {
+    const { dbClient, mcpClient } = await bootstrap();
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
+    const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
+    const contractId = (contract as { id: string }).id;
+    const created = await addContractUtility(mcpClient, { contractId, kind: 'electricity', validFrom: '2024-01-01', monthlyAdvance: 120000, note: 'stará poznámka' }) as { id: string };
+    const updated = await updateContractUtility(mcpClient, { contractId, utilityId: created.id, monthlyAdvance: 130000, note: 'nová poznámka' });
+    expect(updated).toMatchObject({ id: created.id, kind: 'electricity', validFrom: '2024-01-01', validTo: null, monthlyAdvance: 130000, note: 'nová poznámka' });
+    expect(await listContractUtilities(mcpClient, { contractId })).toHaveLength(1);
     await dbClient.close();
   });
 

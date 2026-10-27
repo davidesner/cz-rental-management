@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const Haler = z.number().int();
@@ -86,7 +86,7 @@ export async function paymentRuleSet(client: RentalApiClient, args: z.infer<type
   return data.rule;
 }
 
-export function addBankTools(server: FastMCP, client: RentalApiClient) {
+export function addBankTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'bank_integrations_list',
     description: "List the org's bank integrations (IMAP mailboxes harvested for incoming-payment notifications), including each one's last sync status. Never returns credentials.",

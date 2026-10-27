@@ -78,7 +78,8 @@ Persistovaný reconciliation řádek ukládá jen finální čísla per kind. Br
 | Komponenta | Kde běží | Účel |
 |---|---|---|
 | **Webová aplikace** (frontend + REST API) | Vercel | Source of truth — vlastní DB, auth, REST endpointy. UI je na review a opravy edge case'ů, ne na bulk zadávání dat. |
-| **MCP server** | Lokálně u uživatele (stdio) | Tenký klient nad REST API — vystavuje jeden tool per resource, takže jakýkoliv LLM klient (Claude Code, Cursor, atd.) může číst i zapisovat. |
+| **Remote MCP server** | Vercel, stejný deployment (`/mcp`) | Streamable HTTP + OAuth 2.1. Claude, ChatGPT nebo Claude Code se připojí jen URL a přihlášením; jeden tool per resource, běží jako přihlášený uživatel. |
+| **Stdio MCP server** (legacy) | Lokálně u uživatele (`npx`) | Tytéž tooly jako npm balíček, tenký klient nad REST API s per-user API tokenem. |
 | **Claude Code plugin** | Instalovatelný uživatelem | Hotový workflow, který naučí agenta proces ročního vyúčtování. Sám se rozšiřuje per-property znalostmi. |
 
 ---
@@ -88,7 +89,7 @@ Persistovaný reconciliation řádek ukládá jen finální čísla per kind. Br
 **Backend:** TypeScript · Hono · Drizzle ORM (postgres-js) · better-auth · Zod · PostgreSQL (lokální Docker / Neon prod)
 **Frontend:** React 19 · Vite · TailwindCSS · shadcn/ui · TanStack Query
 **Testing:** Vitest · Playwright
-**MCP:** fastmcp (stdio)
+**MCP:** @modelcontextprotocol/server (remote, streamable HTTP) · better-auth OAuth provider · fastmcp (legacy stdio)
 **Dokumenty (v pluginu):** Typst (moderní alternativa k LaTeXu) · pandoc · reportlab (Python, PDF)
 
 ---
@@ -177,7 +178,7 @@ core/                 → Čistá doménová logika, framework-free
   lib/                → Pure helpers (allocation, payment-matching, temporal)
   auth/               → better-auth setup
 src/                  → React frontend (Vite)
-mcp/                  → Standalone MCP server (samostatná concern)
+mcp/                  → Definice MCP toolů + samostatný stdio server (npm balíček)
   tools/              → Jeden soubor per resource vystavující MCP tooly
 tests/                → Vitest integration + service testy (fresh DB per test)
 drizzle/              → Generované SQL migrace
@@ -280,7 +281,15 @@ Schema datového souboru je zdokumentované v `scripts/example-pdf-data.json`.
 
 ## MCP server
 
-Publikovaný jako samostatný npm balíček: [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp). Běží jako stdio proces na stroji uživatele přes `npx` — není potřeba klonovat repo. Vystavuje jeden tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) a autentizuje se proti API přes per-user token.
+Aplikace je **remote MCP server**: `https://<tvoje-app>/mcp`, servírovaný ze stejného Vercel deploymentu. Agenti se autentizují přes OAuth 2.1 (dynamická registrace klienta, PKCE, souhlasová obrazovka), takže žádný token ke kopírování.
+
+- **Claude** (claude.ai / Desktop / mobil): Settings → Connectors → Add custom connector → `https://<tvoje-app>/mcp`.
+- **Claude Code:** `claude mcp add --transport http rental-management https://<tvoje-app>/mcp`, pak `/mcp` a přihlášení.
+- **ChatGPT:** konektor v developer módu, OAuth s dynamickou registrací klienta.
+
+Tooly jsou tytéž definice jako ve stdio balíčku (`mcp/tools/`): jeden tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …). Na `/mcp` volají REST API in-process jako přihlášený uživatel, takže org scoping a oprávnění jsou stejné jako v UI. Nastavení, odpojení agentů a smoke check: [`DEPLOY.md`](./DEPLOY.md#remote-mcp-claude-chatgpt-claude-code).
+
+**Stdio balíček** [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp) dál funguje pro klienty bez podpory remote MCP. Spouští se přes `npx` a autentizuje API tokenem:
 
 ```jsonc
 // .mcp.json
@@ -291,14 +300,14 @@ Publikovaný jako samostatný npm balíček: [`@esnerda/cz-rental-management-mcp
       "args": ["-y", "@esnerda/cz-rental-management-mcp@latest"],
       "env": {
         "RENTAL_API_URL": "https://your-app.vercel.app",
-        "RENTAL_API_TOKEN": "<from /settings/api-tokens>"
+        "RENTAL_API_TOKEN": "<z /settings/api-tokens>"
       }
     }
   }
 }
 ```
 
-Zdroj je v [`mcp/`](./mcp). Pro lokální vývoj backendu spustí `pnpm mcp` ten samý server ze zdrojáků přes `tsx`. Publikace: `cd mcp && pnpm build && npm publish --access public`.
+Zdroj je v [`mcp/`](./mcp) (tooly + stdio entrypoint) a [`server/mcp/`](./server/mcp) (remote endpoint). Pro lokální vývoj backendu `pnpm mcp` pustí stdio server ze zdrojáků přes `tsx`; remote endpoint je součástí `pnpm dev` na `http://localhost:5173/mcp`.
 
 ---
 

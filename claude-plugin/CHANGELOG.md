@@ -5,6 +5,15 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 1.2.0 - 2026-10-27
+
+### Changed
+
+- **`init` doporučuje remote MCP.** Aplikace teď servíruje MCP přímo na
+  `https://<adresa>/mcp` s OAuth přihlášením, takže napojení je jen URL a
+  "Povolit", bez API tokenu a bez lokálního procesu. Stdio balíček přes `npx`
+  zůstává jako fallback pro klienty, které remote MCP neumí.
+
 ## 1.1.0 — 2026-08-30
 
 ### Changed

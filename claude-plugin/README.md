@@ -54,7 +54,19 @@ Pak už jen řekni, co chceš — „spočítej vyúčtování <nemovitost>", �
 
 ## MCP backend
 
-Plugin spoléhá na běžící `rental-management` MCP server, který je publikovaný jako samostatný npm balíček [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp) a spouští se přes `npx` (není potřeba clone repa). Skill `init` ti pomůže s `.mcp.json` konfigurací:
+Plugin spoléhá na `rental-management` MCP server. Aplikace ho servíruje přímo jako
+**remote MCP** na `https://<your-app>/mcp`. Stačí URL a přihlášení (OAuth), žádný token:
+
+```bash
+claude mcp add --transport http --scope user rental-management https://<your-app>/mcp
+```
+
+V Claude (claude.ai / Desktop) přes Settings → Connectors → Add custom connector. Skill
+`init` ti s připojením pomůže.
+
+Pro klienty bez remote MCP zůstává legacy stdio balíček
+[`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp)
+spouštěný přes `npx`:
 
 ```json
 {

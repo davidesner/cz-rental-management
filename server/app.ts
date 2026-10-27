@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { secureHeaders } from 'hono/secure-headers';
-import { createAuth } from '../core/auth/better-auth.js';
+import { createAuth, resolveBaseUrl } from '../core/auth/better-auth.js';
 import { errorMiddleware } from './middleware/errors.js';
 import { authMiddleware } from './middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
@@ -20,6 +20,8 @@ import { reconciliationRoutes } from './routes/reconciliations.js';
 import { rentReductionRoutes } from './routes/rent-reductions.js';
 import { paymentBreakdownRoutes } from './routes/payment-breakdown.js';
 import { bankRoutes, cronRoutes } from './routes/bank.js';
+import { mcpRoutes } from './mcp/routes.js';
+import type { InProcessEnv } from './middleware/auth.js';
 import type { DB } from '../core/db/client.js';
 import type { Auth } from '../core/auth/better-auth.js';
 import type { AuthContext } from '../core/auth/context.js';
@@ -73,6 +75,18 @@ export function buildApp(deps: AppDeps): HonoApp {
 
   // Health check — used by Playwright webServer readiness probe
   app.get('/api/health', (c) => c.json({ ok: true }));
+
+  // Remote MCP endpoint + OAuth discovery. Before the better-auth catch-all:
+  // it answers two of that handler's well-known paths. `/mcp` authenticates
+  // with its own OAuth access tokens; its tools call this app in-process.
+  app.route('/', mcpRoutes({
+    auth,
+    db: deps.db,
+    baseURL: resolveBaseUrl(),
+    secret: process.env.BETTER_AUTH_SECRET ?? '',
+    production: process.env.VERCEL_ENV === 'production',
+    dispatch: (req: Request, env: InProcessEnv) => app.fetch(req, env),
+  }));
 
   // Auth routes must remain unauthenticated
   app.route('/api', authRoutes(auth));

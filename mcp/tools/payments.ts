@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -116,7 +116,7 @@ export async function deletePayment(client: RentalApiClient, args: z.infer<typeo
   return { deleted: true };
 }
 
-export function addPaymentTools(server: FastMCP, client: RentalApiClient) {
+export function addPaymentTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'payments_list',
     description: 'List payments, optionally filtered by contract, date range, or unassigned status.',

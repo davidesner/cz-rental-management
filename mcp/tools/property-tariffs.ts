@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -29,7 +29,7 @@ export async function addPropertyTariff(client: RentalApiClient, args: z.infer<t
   return data.tariff;
 }
 
-export function addPropertyTariffTools(server: FastMCP, client: RentalApiClient) {
+export function addPropertyTariffTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'property_tariffs_list',
     description: 'List all SVJ tariff history for a property.',

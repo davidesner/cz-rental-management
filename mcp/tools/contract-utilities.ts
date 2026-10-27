@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -41,7 +41,7 @@ export async function updateContractUtility(client: RentalApiClient, args: z.inf
   return data.utility;
 }
 
-export function addContractUtilityTools(server: FastMCP, client: RentalApiClient) {
+export function addContractUtilityTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'contract_utilities_list',
     description: 'List all utility advance history for a contract.',

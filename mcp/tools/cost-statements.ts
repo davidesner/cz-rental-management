@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -79,7 +79,7 @@ export async function deleteCostStatement(client: RentalApiClient, args: z.infer
   return { deleted: true };
 }
 
-export function addCostStatementTools(server: FastMCP, client: RentalApiClient) {
+export function addCostStatementTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'cost_statements_list',
     description: 'List cost statements, optionally filtered by property, kind, or date range.',

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -48,7 +48,7 @@ export async function updateContract(client: RentalApiClient, args: z.infer<type
   return data.contract;
 }
 
-export function addContractTools(server: FastMCP, client: RentalApiClient) {
+export function addContractTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'contracts_list',
     description: 'List all contracts in the current organization.',

@@ -9,6 +9,17 @@ Bump verze v `mcp/package.json` je zároveň spouštěč releasu — po mergi do
 publikuje job `release-mcp` v `.github/workflows/ci.yml` balíček na npm. Verze
 v konstruktoru `FastMCP` v `mcp/index.ts` musí sedět, jinak CI failne.
 
+## Unreleased
+
+Bez změny chování, bez releasu (verze zůstává).
+
+### Changed
+
+- Tooly se registrují přes rozhraní `ToolSink` (`tools/sink.ts`) a jednu funkci
+  `addAllTools` (`tools/index.ts`) místo přímo do `FastMCP`. Stejné definice teď
+  servíruje i remote MCP endpoint aplikace (`/mcp`).
+- README doporučuje remote MCP; tenhle balíček je fallback pro klienty bez něj.
+
 ## 0.3.0 — 2026-09-04
 
 ### Added

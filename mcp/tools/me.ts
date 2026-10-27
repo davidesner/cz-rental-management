@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const GetMeInput = z.object({});
@@ -8,7 +8,7 @@ export async function getMe(client: RentalApiClient, _args: z.infer<typeof GetMe
   return client.get<unknown>('/api/me');
 }
 
-export function addMeTools(server: FastMCP, client: RentalApiClient) {
+export function addMeTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'me_get',
     description: 'Get the currently authenticated user along with their organization memberships and active org.',

@@ -13,15 +13,19 @@ TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres" pnpm 
 # `pnpm build` is type-check only (tsc --noEmit); use vercel-build for actual Vite output
 pnpm vercel-build
 
-# MCP server runs locally at the user (stdio), never deployed
+# Stdio MCP server (legacy npm package) from source; the remote MCP is /mcp on the API
 pnpm mcp
+
+# List / revoke AI agents connected to the remote MCP (OAuth clients)
+pnpm mcp:clients list
 ```
 
 `pnpm dev` runs API on :3000 + Vite on :5173. Local Postgres expected via Docker container `rental-pg`.
 
 ## Architecture (the non-obvious bits)
 
-- **Monorepo with three entrypoints**: `api/` (Vercel serverless), `server/` (Node dev server), `mcp/` (standalone MCP server, stdio, runs at the user — never deployed to a server, but published to npm as `@esnerda/cz-rental-management-mcp`).
+- **Monorepo with three entrypoints**: `api/` (Vercel serverless), `server/` (Node dev server), `mcp/` (standalone stdio MCP server, published to npm as `@esnerda/cz-rental-management-mcp`).
+- **Remote MCP** is `/mcp` on the API (`server/mcp/`): streamable HTTP, OAuth 2.1 via better-auth `jwt()` + `mcp()` plugins (`core/auth/mcp-oauth.ts` holds the policy). It serves the same `mcp/tools/` definitions; each tool calls the REST API **in-process** as the token's user (`IN_PROCESS_USER` env binding in `server/middleware/auth.ts`), so a new tool in `mcp/tools/` appears on both transports. An MCP access token is never accepted on `/api/*`.
 - **`core/` is framework-free**. All business logic lives in `core/services/*.ts` + `core/lib/*.ts` and is unit-testable in isolation. Routes (`server/routes/`) and MCP tools (`mcp/tools/`) are thin shells calling into `core/`.
 - **`claude-plugin/skills/` obsahuje postup, pracovní složka uživatele znalost.** Metodika a parsery per nemovitost žijí v `<nemovitost>/_agent/` u dokumentů; nemovitost se resolvuje přes `AGENTS.md` v kořeni pracovní složky.
 - **DB client auto-switches pool size** based on `process.env.VERCEL` (`core/db/client.ts`). Don't add another switch — extend that one.

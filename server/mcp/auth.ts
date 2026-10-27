@@ -1,5 +1,5 @@
 import { verifyJwsAccessToken } from 'better-auth/oauth2';
-import { and, eq, gt } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Auth } from '../../core/auth/better-auth.js';
 import { authIssuer, JWT_ALG, MCP_SCOPE, mcpResource, protectedResourceMetadataUrl } from '../../core/auth/mcp-oauth.js';
 import type { DB } from '../../core/db/client.js';
@@ -60,10 +60,13 @@ export function bearerToken(req: Request): string | null {
  * takes effect on its next call, not when its access token expires.
  *
  * A token minted while its browser session lived carries that session as
- * `sid`, and is revoked with it (sign-out, expiry), as better-auth's own
- * userinfo endpoint treats it. A token refreshed after the session ended has no
- * `sid` and is accepted: the refresh token outlives the browser session, so an
- * agent stays connected when the user signs out of the web app.
+ * `sid` and is revoked when the session row is deleted (sign-out), as
+ * better-auth's own userinfo endpoint treats it. Only deletion counts, not
+ * expiry: better-auth keeps copying the `sid` of an expired-but-present
+ * session into refreshed tokens, so rejecting on expiry would refuse every
+ * refresh. A token refreshed after the session row is gone has no `sid` and is
+ * accepted: the refresh token, not the browser session, bounds how long an
+ * agent stays connected.
  *
  * Organization, role and property access are NOT decided here: the tools call
  * the REST API in-process as this user, and the API's auth middleware resolves
@@ -107,7 +110,7 @@ export function createMcpAuthenticator(deps: { auth: Auth; db: DB; baseURL: stri
       const [live] = await db
         .select({ id: session.id })
         .from(session)
-        .where(and(eq(session.id, sid), eq(session.userId, userId), gt(session.expiresAt, new Date())))
+        .where(and(eq(session.id, sid), eq(session.userId, userId)))
         .limit(1);
       if (!live) return null;
     }

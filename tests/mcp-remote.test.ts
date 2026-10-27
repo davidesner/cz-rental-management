@@ -246,11 +246,26 @@ describe('OAuth flow', () => {
     expect((await postMcp(access_token, listToolsBody)).status).toBe(200);
   });
 
-  it('refuses an expired bound session', async () => {
-    const { accessToken, claims } = await obtainMcpToken(t.app, 'alice@example.test', 'alice-password-1');
+  it('keeps refreshed tokens working after the bound session merely expires', async () => {
+    // better-auth copies the sid of an expired-but-present session into
+    // refreshed tokens; expiry must not lock the agent into a 401 loop.
+    const first = await obtainMcpToken(t.app, 'alice@example.test', 'alice-password-1');
     await t.db.update(session).set({ expiresAt: sql`now() - interval '1 minute'` })
-      .where(eq(session.id, claims['sid'] as string));
-    expect((await postMcp(accessToken, listToolsBody)).status).toBe(401);
+      .where(eq(session.id, first.claims['sid'] as string));
+    let refreshToken = first.refreshToken ?? '';
+    for (let cycle = 0; cycle < 2; cycle++) {
+      const res = await appFetch(t.app)(`${APP}/api/auth/oauth2/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token', refresh_token: refreshToken, client_id: first.clientId, resource: RESOURCE,
+        }).toString(),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { access_token: string; refresh_token: string };
+      refreshToken = body.refresh_token;
+      expect((await postMcp(body.access_token, listToolsBody)).status).toBe(200);
+    }
   });
 
   it('does not start without a registered client', async () => {

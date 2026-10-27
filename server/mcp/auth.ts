@@ -1,9 +1,9 @@
 import { verifyJwsAccessToken } from 'better-auth/oauth2';
-import { eq } from 'drizzle-orm';
+import { and, eq, gt } from 'drizzle-orm';
 import type { Auth } from '../../core/auth/better-auth.js';
 import { authIssuer, JWT_ALG, MCP_SCOPE, mcpResource, protectedResourceMetadataUrl } from '../../core/auth/mcp-oauth.js';
 import type { DB } from '../../core/db/client.js';
-import { oauthClient, user } from '../../core/db/schema.js';
+import { oauthClient, session, user } from '../../core/db/schema.js';
 
 /** Who is calling `/mcp`, from a verified access token and fresh database rows. */
 export interface McpPrincipal {
@@ -59,6 +59,12 @@ export function bearerToken(req: Request): string | null {
  * exist and not be disabled (`pnpm mcp:clients revoke`), so revoking an agent
  * takes effect on its next call, not when its access token expires.
  *
+ * A token minted while its browser session lived carries that session as
+ * `sid`, and is revoked with it (sign-out, expiry), as better-auth's own
+ * userinfo endpoint treats it. A token refreshed after the session ended has no
+ * `sid` and is accepted: the refresh token outlives the browser session, so an
+ * agent stays connected when the user signs out of the web app.
+ *
  * Organization, role and property access are NOT decided here: the tools call
  * the REST API in-process as this user, and the API's auth middleware resolves
  * them exactly as for a browser session (server/middleware/auth.ts).
@@ -92,8 +98,19 @@ export function createMcpAuthenticator(deps: { auth: Auth; db: DB; baseURL: stri
     if (typeof userId !== 'string' || !userId || typeof clientId !== 'string' || !clientId) return null;
     if (typeof expiresAt !== 'number') return null;
 
+    const sid = payload['sid'];
+    if (sid !== undefined && sid !== null && typeof sid !== 'string') return null;
+
     const [row] = await db.select({ id: user.id }).from(user).where(eq(user.id, userId)).limit(1);
     if (!row) return null;
+    if (typeof sid === 'string') {
+      const [live] = await db
+        .select({ id: session.id })
+        .from(session)
+        .where(and(eq(session.id, sid), eq(session.userId, userId), gt(session.expiresAt, new Date())))
+        .limit(1);
+      if (!live) return null;
+    }
     const [client] = await db
       .select({ disabled: oauthClient.disabled })
       .from(oauthClient)

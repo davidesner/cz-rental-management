@@ -19,19 +19,20 @@ const SERVER_INFO = { name: 'rental-management', title: 'Rental management', ver
 /** Dispatches a REST request into the app in-process, as the given user. */
 export type InProcessFetch = (req: Request, env: InProcessEnv) => Response | Promise<Response>;
 
-/** The base URL of in-process requests. Hono routes on the path only; the host is never used. */
-const IN_PROCESS_BASE = 'http://in-process.invalid';
-
 /**
  * A REST client whose requests never leave the process: each one is handed to
  * the app with the verified user in `env`, so it runs through exactly the same
  * auth middleware, org scoping and validation as a browser request.
+ *
+ * Its base URL is the app's public origin: requests only use the path (Hono
+ * routes on it, nothing is fetched over the network), but tools also build
+ * links for the user from `client.baseUrl` (e.g. the bank setup page).
  */
-function inProcessClient(dispatch: InProcessFetch, userId: string): RentalApiClient {
+function inProcessClient(dispatch: InProcessFetch, baseURL: string, userId: string): RentalApiClient {
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) =>
     dispatch(new Request(input, init), { [IN_PROCESS_USER]: userId })) as typeof fetch;
   // The bearer is a placeholder the middleware never reads (the env user wins).
-  return new RentalApiClient(IN_PROCESS_BASE, 'in-process', fetchImpl);
+  return new RentalApiClient(baseURL, 'in-process', fetchImpl);
 }
 
 /** Collects the tool definitions `add*Tools` register, bound to one client. */
@@ -119,9 +120,9 @@ async function refuseListen(req: Request): Promise<Response | null> {
  * The tools are the same definitions the stdio npm package serves
  * (mcp/tools/), bound per request to an in-process REST client for that user.
  */
-export function createMcpHttpHandler(dispatch: InProcessFetch) {
+export function createMcpHttpHandler(dispatch: InProcessFetch, baseURL: string) {
   const factory: McpServerFactory = ({ authInfo }) => {
-    const client = inProcessClient(dispatch, userIdOf(authInfo));
+    const client = inProcessClient(dispatch, baseURL, userIdOf(authInfo));
     const server = new McpServer(SERVER_INFO, { instructions: MCP_INSTRUCTIONS });
     for (const tool of collectTools(client)) {
       server.registerTool(

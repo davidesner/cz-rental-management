@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { freshDb } from './helpers/db.js';
 import { makeApp } from './helpers/app.js';
 import { registerUser } from './helpers/fixtures.js';
@@ -15,9 +15,23 @@ import {
   resultJson,
   submitConsent,
 } from './helpers/mcp-oauth.js';
-import { oauthClient, user } from '../core/db/schema.js';
+import { oauthClient, session, user } from '../core/db/schema.js';
 
 type Boot = Awaited<ReturnType<typeof boot>>;
+
+const listToolsBody = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+
+function postMcp(accessToken: string, body: string) {
+  return t.app.request(`${APP}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${accessToken}`,
+    },
+    body,
+  });
+}
 
 async function boot() {
   const { db, client } = await freshDb();
@@ -210,6 +224,35 @@ describe('OAuth flow', () => {
     expect(res.status).toBe(401);
   });
 
+  it('revokes the access token with its session on sign-out, while refresh keeps the agent connected', async () => {
+    const first = await obtainMcpToken(t.app, 'alice@example.test', 'alice-password-1');
+    const sid = first.claims['sid'];
+    expect(typeof sid).toBe('string');
+    await t.db.delete(session).where(eq(session.id, sid as string));
+    expect((await postMcp(first.accessToken, listToolsBody)).status).toBe(401);
+
+    const res = await appFetch(t.app)(`${APP}/api/auth/oauth2/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: first.refreshToken ?? '',
+        client_id: first.clientId,
+        resource: RESOURCE,
+      }).toString(),
+    });
+    expect(res.status).toBe(200);
+    const { access_token } = (await res.json()) as { access_token: string };
+    expect((await postMcp(access_token, listToolsBody)).status).toBe(200);
+  });
+
+  it('refuses an expired bound session', async () => {
+    const { accessToken, claims } = await obtainMcpToken(t.app, 'alice@example.test', 'alice-password-1');
+    await t.db.update(session).set({ expiresAt: sql`now() - interval '1 minute'` })
+      .where(eq(session.id, claims['sid'] as string));
+    expect((await postMcp(accessToken, listToolsBody)).status).toBe(401);
+  });
+
   it('does not start without a registered client', async () => {
     await expect(beginAuthorization(t.app, { redirectUri: 'https://evil.example/cb' })).rejects.toThrow();
   });
@@ -252,6 +295,22 @@ describe('MCP tools over /mcp', () => {
 
     await alice.close();
     await bob.close();
+  });
+
+  it('refuses an oversized body before parsing it', async () => {
+    const { accessToken } = await obtainMcpToken(t.app, 'alice@example.test', 'alice-password-1');
+    const big = JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'subscriptions/listen', params: { pad: 'x'.repeat(8 * 1024 * 1024) },
+    });
+    expect((await postMcp(accessToken, big)).status).toBe(413);
+  });
+
+  it('links the bank setup page on the public origin, not the in-process host', async () => {
+    const { accessToken } = await obtainMcpToken(t.app, 'alice@example.test', 'alice-password-1');
+    const client = await mcpClient(t.app, accessToken);
+    const res = resultJson(await client.callTool({ name: 'bank_integrations_setup_url', arguments: {} }));
+    expect(res).toMatchObject({ url: `${APP}/settings?tab=bank&action=new` });
+    await client.close();
   });
 
   it('surfaces REST validation errors to the model as a tool error', async () => {

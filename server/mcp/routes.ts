@@ -5,6 +5,7 @@ import {
 } from '@better-auth/oauth-provider';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type { Auth } from '../../core/auth/better-auth.js';
 import {
   agentDisplayName,
@@ -53,6 +54,9 @@ function withoutDpop(serve: (req: Request) => Promise<Response>) {
   };
 }
 
+/** Largest `/mcp` request body accepted. */
+export const MCP_MAX_BODY_BYTES = 4 * 1024 * 1024;
+
 export interface McpRouteDeps {
   auth: Auth;
   db: DB;
@@ -70,7 +74,7 @@ export interface McpRouteDeps {
 export function mcpRoutes(deps: McpRouteDeps) {
   const { auth, db, baseURL } = deps;
   const authenticate = createMcpAuthenticator({ auth, db, baseURL });
-  const handler = createMcpHttpHandler(deps.dispatch);
+  const handler = createMcpHttpHandler(deps.dispatch, baseURL);
   const protectedResource = {
     resource: mcpResource(baseURL),
     authorization_servers: [authIssuer(baseURL)],
@@ -83,6 +87,13 @@ export function mcpRoutes(deps: McpRouteDeps) {
   const invalidQuery = { error: { kind: 'bad_request', message: 'invalid authorization request' } } as const;
 
   return new Hono()
+    // Before anything reads the body (the handler parses it to refuse
+    // `subscriptions/listen`): a bounded, streamed read, also for chunked
+    // requests without content-length. Same limit as the MCP SDK's default.
+    .use('/mcp', bodyLimit({
+      maxSize: MCP_MAX_BODY_BYTES,
+      onError: (c) => c.json({ jsonrpc: '2.0', error: { code: -32600, message: 'Request body too large' }, id: null }, 413),
+    }))
     .all('/mcp', async (c) => {
       if (!isAllowedOrigin(c.req.header('origin') ?? null, baseURL, deps.production)) {
         return c.json({ error: 'forbidden_origin' }, 403);

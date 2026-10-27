@@ -193,6 +193,23 @@ describe('OAuth flow', () => {
     await client.close();
   });
 
+  it('refuses on /mcp a token that lacks the rental scope', async () => {
+    const { accessToken, claims } = await obtainMcpToken(t.app, 'alice@example.test', 'alice-password-1', {
+      scope: 'offline_access',
+    });
+    expect(String(claims['scope']).split(' ')).not.toContain('rental');
+    const res = await t.app.request(`${APP}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+    });
+    expect(res.status).toBe(401);
+  });
+
   it('does not start without a registered client', async () => {
     await expect(beginAuthorization(t.app, { redirectUri: 'https://evil.example/cb' })).rejects.toThrow();
   });

@@ -32,6 +32,8 @@ export function appFetch(app: AppHono): FetchLike {
 export interface FlowOptions {
   redirectUri?: string;
   clientName?: string;
+  /** Requested scopes; the MCP scope plus refresh by default. */
+  scope?: string;
 }
 
 export interface Authorization {
@@ -66,7 +68,7 @@ export async function beginAuthorization(app: AppHono, opts: FlowOptions = {}): 
     metadata,
     clientInformation,
     redirectUrl: redirectUri,
-    scope: 'rental offline_access',
+    scope: opts.scope ?? 'rental offline_access',
     state: randomBytes(8).toString('hex'),
     resource: new URL(RESOURCE),
   });

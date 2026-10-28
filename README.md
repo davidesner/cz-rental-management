@@ -284,7 +284,8 @@ Schema for the data file is documented in `scripts/example-pdf-data.json`.
 
 [`agent-plugin/`](./agent-plugin) bundles the MCP connector with the skills. This repository is the marketplace for both clients:
 
-- **Claude Code / Cowork:** `/plugin install rental-management --marketplace davidesner/cz-rental-management`
+- **Claude (Cowork, claude.ai, Desktop):** Customize → Plugins → Add marketplace → `davidesner/cz-rental-management`, install `rental-management`, then connect the connector from the plugin's Connectors tab
+- **Claude Code (local only):** `/plugin install rental-management --marketplace davidesner/cz-rental-management`
 - **ChatGPT desktop / Codex:** `codex plugin marketplace add davidesner/cz-rental-management`, then install `rental-management@rental-management`
 - **Upload** (claude.ai, ChatGPT): zips from `./scripts/build-plugin.sh [https://<your-app>]`
 

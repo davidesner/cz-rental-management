@@ -19,21 +19,25 @@ Claude Desktop) i ChatGPT (desktop, Codex).
 
 ## Instalace
 
-### Claude Code / Cowork
+### Claude (Cowork, claude.ai, Claude Desktop)
 
-Tenhle repozitář je marketplace:
+Customize → Plugins → **Add marketplace** → `davidesner/cz-rental-management`, pak u pluginu
+`rental-management` **Install**. Instalace se uloží k účtu, takže plugin je pak i v chatu a
+v Claude Code. Konektor se po instalaci nepřipojí sám: v pluginu otevři záložku
+**Connectors** a připoj `rental-management` (přihlášení do aplikace + **Povolit**).
+
+Alternativně upload balíčku `plugin-dist/rental-management-claude.zip` (postav ho
+`./scripts/build-plugin.sh`) na stránce Plugins.
+
+### Claude Code (jen lokálně)
 
 ```
 /plugin install rental-management --marketplace davidesner/cz-rental-management
 ```
 
 nebo `claude plugin marketplace add davidesner/cz-rental-management` a
-`claude plugin install rental-management@rental-management`. Admin Cowork organizace může
-repozitář přidat jako org marketplace.
-
-### claude.ai / Claude Desktop (upload)
-
-`plugin-dist/rental-management-claude.zip` (postav ho `./scripts/build-plugin.sh`).
+`claude plugin install rental-management@rental-management`. Takhle nainstalovaný plugin
+zůstane jen v Claude Code na tomhle stroji. Přihlášení ke konektoru: `/mcp`.
 
 ### ChatGPT desktop / Codex
 

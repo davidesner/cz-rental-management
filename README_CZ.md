@@ -283,7 +283,8 @@ Schema datového souboru je zdokumentované v `scripts/example-pdf-data.json`.
 
 [`agent-plugin/`](./agent-plugin) spojuje MCP konektor se skilly. Tenhle repozitář je marketplace pro oba klienty:
 
-- **Claude Code / Cowork:** `/plugin install rental-management --marketplace davidesner/cz-rental-management`
+- **Claude (Cowork, claude.ai, Desktop):** Customize → Plugins → Add marketplace → `davidesner/cz-rental-management`, nainstaluj `rental-management` a v záložce Connectors pluginu připoj konektor
+- **Claude Code (jen lokálně):** `/plugin install rental-management --marketplace davidesner/cz-rental-management`
 - **ChatGPT desktop / Codex:** `codex plugin marketplace add davidesner/cz-rental-management`, pak nainstaluj `rental-management@rental-management`
 - **Upload** (claude.ai, ChatGPT): zipy z `./scripts/build-plugin.sh [https://<tvoje-app>]`
 

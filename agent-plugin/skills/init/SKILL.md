@@ -148,7 +148,7 @@ Bez backendu `rental-management` skilly `rocni-vyuctovani` a `smlouvy` nemají o
 **Nejdřív ověř, jestli už je připojený.** Plugin konektor nese sám (remote MCP
 `rental-management`), takže po instalaci pluginu obvykle stačí zavolat třeba
 `properties_list`. Když klient hlásí, že je potřeba přihlášení, řekni userovi, ať
-ho dokončí (Claude Code: `/mcp`; Claude a ChatGPT nabídnou přihlášení samy): přihlásí
+ho dokončí (Claude Code: `/mcp`; Claude: v pluginu záložka Connectors → připojit; ChatGPT nabídne přihlášení sám): přihlásí
 se e-mailem a heslem do aplikace a na souhlasové obrazovce klikne **Povolit**.
 
 Ruční napojení řeš jen když tooly nejsou k dispozici (skill běží mimo plugin, nebo

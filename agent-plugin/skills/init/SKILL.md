@@ -1,6 +1,6 @@
 ---
 name: init
-description: Založ nebo přerovnej pracovní složku pro správu nemovitostí — AGENTS.md, kostra složek per byt, volitelně napojení na MCP backend. Aktivuj když user řekne "založ složku na byty", "nastav rental management", "přerovnej mi tyhle dokumenty" apod.
+description: Založ nebo přerovnej pracovní složku pro správu nemovitostí — AGENTS.md, kostra složek per byt, ověří napojení na MCP backend. Aktivuj když user řekne "založ složku na byty", "nastav rental management", "přerovnej mi tyhle dokumenty" apod.
 ---
 
 # Init: pracovní složka pro správu nemovitostí
@@ -73,7 +73,7 @@ Prefix `_` znamená „meta, ne dokumenty" a řadí složku nahoru. `_agent/` m�
    ```
 
 4. **Napiš `AGENTS.md`** podle šablony níže.
-5. **Nabídni napojení na MCP** (viz níže).
+5. **Ověř napojení na MCP** (viz níže).
 
 ## Režim B — přerovnání existující složky
 
@@ -82,7 +82,7 @@ Prefix `_` znamená „meta, ne dokumenty" a řadí složku nahoru. `_agent/` m�
 3. **Přesouvej, nikdy nemaž.** Použij `git mv` pokud je složka ve verzovacím systému, jinak `mv`. Co nezařadíš, nech na místě a vypiš to na konci.
 4. **Nepřejmenovávej identifikátory od zdroje** — faktury a výpisy si nechávají jméno, které jim dal vystavovatel; parsery na ně můžou globovat. Popisně přejmenovávej jen neprůhledné názvy (`scan001.pdf`).
 5. **Napiš `AGENTS.md`.** Pokud se složky nejmenují jako slugy (běžné u existujícího archivu), zapiš do něj explicitní mapping — přejmenovávat není potřeba.
-6. **Nabídni napojení na MCP** (viz níže).
+6. **Ověř napojení na MCP** (viz níže).
 7. Na konci ukaž souhrn: co se přesunulo, co zůstalo nezařazené.
 
 ## Šablona `AGENTS.md`
@@ -140,24 +140,28 @@ je závazná — když se od konvence liší, platí tabulka.
 
 Konkrétní nemovitosti a stavy doplň podle toho, co ti user řekl. Neuváděj jména nájemců ani částky — ty patří do MCP.
 
-## Volitelně: napojení na MCP backend
+## Napojení na MCP backend
 
-Zeptej se, jestli má user připojit backend `rental-management`. Bez něj skilly
-`rocni-vyuctovani` a `smlouvy` nemají odkud číst částky ani kam je zapsat.
+Bez backendu `rental-management` skilly `rocni-vyuctovani` a `smlouvy` nemají odkud
+číst částky ani kam je zapsat.
 
-Doporučená cesta je **remote MCP**: žádný token, jen URL a přihlášení:
+**Nejdřív ověř, jestli už je připojený.** Plugin konektor nese sám (remote MCP
+`rental-management`), takže po instalaci pluginu obvykle stačí zavolat třeba
+`properties_list`. Když klient hlásí, že je potřeba přihlášení, řekni userovi, ať
+ho dokončí (Claude Code: `/mcp`; Claude a ChatGPT nabídnou přihlášení samy): přihlásí
+se e-mailem a heslem do aplikace a na souhlasové obrazovce klikne **Povolit**.
 
-- **URL**: `https://<adresa aplikace>/mcp` (streamable HTTP)
-- **autentizace**: OAuth, klient se sám zaregistruje, user se přihlásí e-mailem
-  a heslem a na souhlasové obrazovce klikne **Povolit**. Client id ani secret
-  nevyplňuj.
+Ruční napojení řeš jen když tooly nejsou k dispozici (skill běží mimo plugin, nebo
+user má vlastní nasazení aplikace):
 
-Podle klienta:
-
+- **URL**: `https://<adresa aplikace>/mcp` (streamable HTTP), autentizace OAuth:
+  klient se sám zaregistruje, client id ani secret nevyplňuj.
 - **Claude Code**: `claude mcp add --transport http --scope user rental-management https://<adresa>/mcp`,
   pak `/mcp` a přihlášení v prohlížeči.
 - **Claude (claude.ai / Desktop / Cowork)**: Settings → Connectors → Add custom
   connector, URL výše.
+- **ChatGPT**: Settings → Apps and Connectors → Developer mode → Create, URL výše,
+  OAuth s dynamickou registrací.
 - **jiný klient**: zapiš remote HTTP server s URL výše v jeho nativním tvaru;
   OAuth si vyjedná sám.
 
@@ -172,8 +176,8 @@ sdíleném disku a token do něj nepatří. Navíc konfigurace vázaná na slož
 znamená, že server naběhne jen tehdy, když je klient spuštěný přesně odtud.
 Vyber scope platný pro uživatele, ne pro složku.
 
-Na konci nech user klienta restartovat a ověř, že tooly odpovídají — třeba
-`properties_list`.
+Po ručním napojení nech user klienta restartovat a ověř, že tooly odpovídají,
+třeba `properties_list`.
 
 ## Na závěr
 

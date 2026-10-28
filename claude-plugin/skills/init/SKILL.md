@@ -145,16 +145,27 @@ Konkrétní nemovitosti a stavy doplň podle toho, co ti user řekl. Neuváděj 
 Zeptej se, jestli má user připojit backend `rental-management`. Bez něj skilly
 `rocni-vyuctovani` a `smlouvy` nemají odkud číst částky ani kam je zapsat.
 
-Co server potřebuje:
+Doporučená cesta je **remote MCP**: žádný token, jen URL a přihlášení:
 
-- **transport**: stdio — klient ho spouští jako lokální proces
+- **URL**: `https://<adresa aplikace>/mcp` (streamable HTTP)
+- **autentizace**: OAuth, klient se sám zaregistruje, user se přihlásí e-mailem
+  a heslem a na souhlasové obrazovce klikne **Povolit**. Client id ani secret
+  nevyplňuj.
+
+Podle klienta:
+
+- **Claude Code**: `claude mcp add --transport http --scope user rental-management https://<adresa>/mcp`,
+  pak `/mcp` a přihlášení v prohlížeči.
+- **Claude (claude.ai / Desktop / Cowork)**: Settings → Connectors → Add custom
+  connector, URL výše.
+- **jiný klient**: zapiš remote HTTP server s URL výše v jeho nativním tvaru;
+  OAuth si vyjedná sám.
+
+Jen když klient remote MCP neumí, použij legacy stdio balíček:
+
 - **command**: `npx`, argumenty `-y @esnerda/cz-rental-management-mcp@latest`
 - **env**: `RENTAL_API_URL` (adresa backendu) a `RENTAL_API_TOKEN`
   (token si user vygeneruje v aplikaci na `/settings/api-tokens`)
-
-Zjisti, jakého klienta user používá, a zapiš tuhle konfiguraci v jeho nativním
-tvaru na místo, kam u něj patří. Klient, který umí jen vzdálené konektory přes
-HTTP, lokální stdio server nespustí — tam je potřeba hostovaný backend.
 
 **Konfigurace nepatří do workspace.** Workspace bývá na Google Drivu nebo jiném
 sdíleném disku a token do něj nepatří. Navíc konfigurace vázaná na složku

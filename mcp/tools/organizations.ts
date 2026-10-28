@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const ListOrgsInput = z.object({});
@@ -18,7 +18,7 @@ export async function createOrganization(client: RentalApiClient, args: z.infer<
   return data.organization;
 }
 
-export function addOrganizationTools(server: FastMCP, client: RentalApiClient) {
+export function addOrganizationTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'organizations_list',
     description: 'List all organizations the current user belongs to.',

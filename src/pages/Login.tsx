@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQueryClient } from '@tanstack/react-query';
+import { oauthQueryFromLocation } from '@/lib/oauth';
 
 interface LoginForm { email: string; password: string }
 
@@ -17,14 +18,25 @@ export function LoginPage() {
 
   async function onSubmit(values: LoginForm) {
     setError(null);
+    // Opened by an AI agent connecting to the remote MCP endpoint: the signed
+    // query goes along with the sign-in, and better-auth answers with where the
+    // OAuth flow continues (the consent page).
+    const oauthQuery = oauthQueryFromLocation(window.location.search);
     const res = await fetch('/api/auth/sign-in/email', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify(values),
+      body: JSON.stringify(oauthQuery ? { ...values, oauth_query: oauthQuery } : values),
     });
     if (!res.ok) { setError('Nesprávné přihlašovací údaje'); return; }
     await queryClient.invalidateQueries({ queryKey: ['me'] });
+    if (oauthQuery) {
+      const next = (await res.json().catch(() => null)) as { redirect?: boolean; url?: string } | null;
+      if (next?.redirect && next.url) {
+        window.location.href = next.url;
+        return;
+      }
+    }
     navigate('/');
   }
 

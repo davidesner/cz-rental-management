@@ -66,10 +66,61 @@ function pickMembership(rows: UserAuthRow[], orgIdHint?: string) {
   return withMembership[0] ?? null;
 }
 
+/**
+ * Key of the Hono `env` binding that carries a user the remote MCP endpoint
+ * already authenticated (server/mcp/). MCP tools call this REST API in-process
+ * via `app.fetch(req, { [IN_PROCESS_USER]: userId })`.
+ *
+ * Only in-process code can set it: over HTTP, `env` is whatever the runtime
+ * adapter passes (`{ incoming, outgoing }` for @hono/node-server), never
+ * anything derived from the request, and a Symbol cannot be serialised into a
+ * request anyway.
+ */
+export const IN_PROCESS_USER = Symbol('rental.inProcessUser');
+
+export type InProcessEnv = { [IN_PROCESS_USER]?: string };
+
+function inProcessUserId(c: Context): string | null {
+  const env = c.env as InProcessEnv | undefined;
+  const userId = env?.[IN_PROCESS_USER];
+  return typeof userId === 'string' && userId !== '' ? userId : null;
+}
+
+/**
+ * Auth context for a user authenticated outside of the API token path (a
+ * browser session or the MCP endpoint): fresh password flag, then the
+ * membership picked by the org hint (or the oldest one).
+ */
+async function userContext(db: DB, userId: string, path: string, orgHint: string | undefined): Promise<AuthContext> {
+  const rows = await loadUserAuthRows(db, userId);
+  if (rows.length === 0) throw new AppError('unauthenticated', 'user not found');
+  assertPasswordOk(rows[0]?.mustChangePassword, path);
+  const m = pickMembership(rows, orgHint);
+  if (!m || !m.membershipId || !m.membershipUserId) {
+    return { userId, orgId: null, membershipId: null, role: null, allowedPropertyIds: null };
+  }
+  const allowed = await loadAllowedProperties(db, m.membershipId, m.role as Role);
+  return {
+    userId: m.membershipUserId,
+    orgId: m.orgId,
+    membershipId: m.membershipId,
+    role: m.role as Role,
+    allowedPropertyIds: allowed,
+  };
+}
+
 export function authMiddleware() {
   return async (c: Context, next: Next) => {
     const db = c.get('db') as DB;
     const auth = c.get('auth') as Auth;
+
+    // 0) A user the MCP endpoint verified, calling in-process. Checked first so
+    //    the placeholder bearer of the in-process client is never looked up.
+    const mcpUserId = inProcessUserId(c);
+    if (mcpUserId) {
+      c.set('auth_ctx', await userContext(db, mcpUserId, c.req.path, undefined));
+      return next();
+    }
 
     // 1) Try Bearer token
     const authz = c.req.header('authorization');
@@ -116,26 +167,8 @@ export function authMiddleware() {
     // 2) Try better-auth session
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) throw new AppError('unauthenticated', 'no session');
-    const rows = await loadUserAuthRows(db, session.user.id);
-    assertPasswordOk(rows[0]?.mustChangePassword, c.req.path);
     const orgHint = c.req.header('x-org-id') ?? undefined;
-    const m = pickMembership(rows, orgHint);
-    if (!m || !m.membershipId || !m.membershipUserId) {
-      const ctx: AuthContext = {
-        userId: session.user.id, orgId: null, membershipId: null, role: null, allowedPropertyIds: null,
-      };
-      c.set('auth_ctx', ctx);
-      return next();
-    }
-    const allowed = await loadAllowedProperties(db, m.membershipId, m.role as Role);
-    const ctx: AuthContext = {
-      userId: m.membershipUserId,
-      orgId: m.orgId,
-      membershipId: m.membershipId,
-      role: m.role as Role,
-      allowedPropertyIds: allowed,
-    };
-    c.set('auth_ctx', ctx);
+    c.set('auth_ctx', await userContext(db, session.user.id, c.req.path, orgHint));
     return next();
   };
 }

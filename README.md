@@ -78,7 +78,8 @@ The persisted reconciliation row stores only the final numbers per kind. The bre
 | Component | Where it runs | Purpose |
 |---|---|---|
 | **Web app** (frontend + REST API) | Vercel | Source of truth — owns DB, auth, REST endpoints. UI is for review and edge-case correction, not bulk data entry. |
-| **MCP server** | Locally at the user (stdio) | Thin client wrapping the REST API — exposes one tool per resource so any LLM client (Claude Code, Cursor, etc.) can read and write data. |
+| **Remote MCP server** | Vercel, same deployment (`/mcp`) | Streamable HTTP + OAuth 2.1. Claude, ChatGPT or Claude Code connect with just the URL and a sign-in; one tool per resource, running as the signed-in user. |
+| **Stdio MCP server** (legacy) | Locally at the user (`npx`) | The same tools as an npm package, wrapping the REST API with a per-user API token. |
 | **Claude Code plugin** | User-installable | Packaged workflow that teaches the agent the annual reconciliation process. Self-extends with per-property knowledge. |
 
 ---
@@ -88,7 +89,7 @@ The persisted reconciliation row stores only the final numbers per kind. The bre
 **Backend:** TypeScript · Hono · Drizzle ORM (postgres-js) · better-auth · Zod · PostgreSQL (local Docker / Neon prod)
 **Frontend:** React 19 · Vite · TailwindCSS · shadcn/ui · TanStack Query
 **Testing:** Vitest · Playwright
-**MCP:** fastmcp (stdio)
+**MCP:** @modelcontextprotocol/server (remote, streamable HTTP) · better-auth OAuth provider · fastmcp (legacy stdio)
 **Documents (in plugin):** Typst (Latex-modern alternative) · pandoc · reportlab (Python, PDF)
 
 ---
@@ -178,7 +179,7 @@ core/                 → Pure domain logic, framework-free
   lib/                → Pure helpers (allocation, payment-matching, temporal)
   auth/               → better-auth setup
 src/                  → React frontend (Vite)
-mcp/                  → Standalone MCP server (separate concern)
+mcp/                  → MCP tool definitions + standalone stdio server (npm package)
   tools/              → One file per resource exposing MCP tools
 tests/                → Vitest integration + service tests (fresh-DB per test)
 drizzle/              → Generated SQL migrations
@@ -281,7 +282,15 @@ Schema for the data file is documented in `scripts/example-pdf-data.json`.
 
 ## MCP server
 
-Published as a standalone npm package: [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp). Runs as a stdio process at the user's machine via `npx` — no need to clone the repo. Exposes one tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) and authenticates against the API via a per-user token.
+The app is a **remote MCP server**: `https://<your-app>/mcp`, served by the same Vercel deployment. Agents authenticate with OAuth 2.1 (dynamic client registration, PKCE, consent screen), so there is no token to copy.
+
+- **Claude** (claude.ai / Desktop / mobile): Settings → Connectors → Add custom connector → `https://<your-app>/mcp`.
+- **Claude Code:** `claude mcp add --transport http rental-management https://<your-app>/mcp`, then `/mcp` to sign in.
+- **ChatGPT:** developer mode connector, OAuth with dynamic client registration.
+
+Tools are the same definitions as the stdio package (`mcp/tools/`): one tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …). On `/mcp` they call the REST API in-process as the signed-in user, so org scoping and permissions are identical to the UI. Setup, revoking agents and smoke checks: [`DEPLOY.md`](./DEPLOY.md#remote-mcp-claude-chatgpt-claude-code).
+
+The **stdio package** [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp) still works for clients without remote MCP support. It runs via `npx` and authenticates with an API token:
 
 ```jsonc
 // .mcp.json
@@ -299,7 +308,7 @@ Published as a standalone npm package: [`@esnerda/cz-rental-management-mcp`](htt
 }
 ```
 
-Source lives in [`mcp/`](./mcp). For local backend dev `pnpm mcp` runs the same server from source via `tsx`. Publish: `cd mcp && pnpm build && npm publish --access public`.
+Source lives in [`mcp/`](./mcp) (tools + stdio entrypoint) and [`server/mcp/`](./server/mcp) (remote endpoint). For local backend dev `pnpm mcp` runs the stdio server from source via `tsx`; the remote endpoint is part of `pnpm dev` at `http://localhost:5173/mcp`.
 
 ---
 

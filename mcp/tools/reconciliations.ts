@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -65,7 +65,7 @@ export async function recomputeReconciliation(client: RentalApiClient, args: z.i
   return data.reconciliation;
 }
 
-export function addReconciliationTools(server: FastMCP, client: RentalApiClient) {
+export function addReconciliationTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'reconciliations_list',
     description: 'List reconciliations, optionally filtered by contract.',

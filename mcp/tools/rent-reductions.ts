@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -34,7 +34,7 @@ export async function deleteRentReduction(client: RentalApiClient, args: z.infer
   return { ok: true };
 }
 
-export function addRentReductionTools(server: FastMCP, client: RentalApiClient) {
+export function addRentReductionTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'rent_reductions_add',
     description: 'Add a rent reduction (srážka) for a specific month of a contract. Use when the tenant paid for repairs the landlord is responsible for and the landlord agrees to reduce that month\'s rent by the amount. The reduction lowers the expected rent in the monthly payment breakdown.',

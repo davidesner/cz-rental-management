@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rental-management": {
+      "type": "http",
+      "url": "https://cz-rental-management.vercel.app/mcp"
+    }
+  }
+}

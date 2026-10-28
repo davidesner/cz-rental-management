@@ -268,6 +268,9 @@ Provozní poznámky:
   (`/api/:path*`) by k requestu přidala `?path=...` a rozbila podepsaný OAuth query;
   `server/vercel-query.ts` to navíc odstraňuje jako druhá pojistka.
 
+Nejjednodušší je nainstalovat **plugin** (`agent-plugin/`, viz README): konektor je v něm
+přibalený spolu se skilly. Pro samotný konektor bez skillů:
+
 ### Připojení v Claude
 
 claude.ai / Desktop / mobil: Settings → Connectors → Add custom connector, URL
@@ -307,6 +310,9 @@ Proti cílové DB (`DATABASE_URL` v env nebo `.env`):
    `401` s `WWW-Authenticate: Bearer resource_metadata="https://<host>/.well-known/oauth-protected-resource/mcp", scope="rental"`.
 4. Připoj konektor v Claude, potvrď souhlas a zeptej se "Jaké mám nemovitosti?"
    (očekává `properties_list`).
+
+Při změně produkční domény uprav i `agent-plugin/.mcp.json` (přibalený konektor pluginu)
+a bumpni verzi pluginu, jinak nainstalované pluginy míří na starou adresu.
 
 ### Stdio MCP (legacy)
 

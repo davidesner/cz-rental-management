@@ -1,0 +1,12 @@
+{
+  "name": "rental-management",
+  "description": "Správa pronájmu: konektor na rental-management a skilly pro roční vyúčtování a smlouvy",
+  "owner": { "name": "David Esner", "email": "esnerda@gmail.com" },
+  "plugins": [
+    {
+      "name": "rental-management",
+      "source": "./agent-plugin",
+      "description": "Konektor na rental-management (remote MCP) a skilly pro roční vyúčtování, smlouvy a dodatky"
+    }
+  ]
+}

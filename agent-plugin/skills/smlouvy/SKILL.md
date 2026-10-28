@@ -63,7 +63,7 @@ Use case: user má DOCX/PDF (např. starou smlouvu, vzor od právníka, dodatek 
    ```bash
    pandoc input.docx -o /tmp/source.md
    ```
-   Pokud PDF, použij `Read` tool (Claude umí číst PDFs).
+   Pokud PDF, přečti ho nástrojem pro čtení souborů (Claude i ChatGPT PDF čtou), jinak `pdftotext`.
 
 2. **Analyzuj strukturu**:
    - Identifikuj sekce/články (typicky "Článek N — Title")

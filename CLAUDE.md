@@ -27,7 +27,7 @@ pnpm mcp:clients list
 - **Monorepo with three entrypoints**: `api/` (Vercel serverless), `server/` (Node dev server), `mcp/` (standalone stdio MCP server, published to npm as `@esnerda/cz-rental-management-mcp`).
 - **Remote MCP** is `/mcp` on the API (`server/mcp/`): streamable HTTP, OAuth 2.1 via better-auth `jwt()` + `mcp()` plugins (`core/auth/mcp-oauth.ts` holds the policy). It serves the same `mcp/tools/` definitions; each tool calls the REST API **in-process** as the token's user (`IN_PROCESS_USER` env binding in `server/middleware/auth.ts`), so a new tool in `mcp/tools/` appears on both transports. An MCP access token is never accepted on `/api/*`.
 - **`core/` is framework-free**. All business logic lives in `core/services/*.ts` + `core/lib/*.ts` and is unit-testable in isolation. Routes (`server/routes/`) and MCP tools (`mcp/tools/`) are thin shells calling into `core/`.
-- **`claude-plugin/skills/` obsahuje postup, pracovní složka uživatele znalost.** Metodika a parsery per nemovitost žijí v `<nemovitost>/_agent/` u dokumentů; nemovitost se resolvuje přes `AGENTS.md` v kořeni pracovní složky.
+- **`agent-plugin/skills/` obsahuje postup, pracovní složka uživatele znalost.** Metodika a parsery per nemovitost žijí v `<nemovitost>/_agent/` u dokumentů; nemovitost se resolvuje přes `AGENTS.md` v kořeni pracovní složky.
 - **DB client auto-switches pool size** based on `process.env.VERCEL` (`core/db/client.ts`). Don't add another switch — extend that one.
 
 ## Domain rules (REQUIRED knowledge)
@@ -51,11 +51,11 @@ pnpm mcp:clients list
 ## Conventions
 
 - Add a field: schema → `pnpm db:generate` → edit migration SQL if needed → `pnpm db:migrate` → update service, route, MCP tool, UI page, test. Test with `freshDb()` helper.
-- **`claude-plugin/` changes**: bump `claude-plugin/.claude-plugin/plugin.json#version` (semver: patch = text fix, minor = new skill/command, major = workflow break) + add `claude-plugin/CHANGELOG.md` entry.
+- **`agent-plugin/` changes**: bump the version in **both** `agent-plugin/.claude-plugin/plugin.json` (Claude) and `agent-plugin/.codex-plugin/plugin.json` (ChatGPT / Codex) (semver: patch = text fix, minor = new skill/command, major = workflow break) + add `agent-plugin/CHANGELOG.md` entry. CI fails on drift (`pnpm check:plugin-version`). The repo root is the marketplace for both clients (`.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json`).
 - **`mcp/` changes = a release.** Bump `mcp/package.json#version` + the matching literal in the `FastMCP` constructor in `mcp/index.ts` (CI fails on drift via `pnpm check:mcp-version`) + add an `mcp/CHANGELOG.md` entry. On merge to `main` the `release-mcp` job publishes to npm and tags `mcp-v<version>`; leaving the version alone is how you merge without releasing. Auth is an npm trusted publisher bound to `ci.yml` — **there is no npm token in this repo, and moving the job to another workflow file breaks publishing** until the binding is updated on npmjs.com.
 - **No real PII in code or docs.** Use `<placeholder>` style for names/addresses/amounts in examples and tests.
-- **Don't commit `.mcp.json`** — contains API tokens.
-- **Don't compute money in the LLM head.** Write Python scripts (`claude-plugin/skills/rocni-vyuctovani/scripts/`) for arithmetic. The plugin skill explicitly forbids in-head math.
+- **Don't commit `.mcp.json`** — contains API tokens. The one exception is `agent-plugin/.mcp.json`, the plugin's bundled connector: a URL only (OAuth at first use), un-ignored explicitly in `.gitignore`. Never put a token in it.
+- **Don't compute money in the LLM head.** Write Python scripts (`agent-plugin/skills/rocni-vyuctovani/scripts/`) for arithmetic. The plugin skill explicitly forbids in-head math.
 - **`main` is protected — work on a branch and open a PR.** `.github/workflows/ci.yml` must go green first (`test`, `typecheck`, `build`), and the branch must be up to date with `main`. This applies to admins too.
 - **Don't narrow `exclude` in `vitest.config.ts` to root-relative globs.** Setting `exclude` replaces vitest's defaults; patterns need a `**/` prefix or vitest collects dependencies' own test files out of nested `node_modules`.
 - **Migrations run in the Vercel build**, via `pnpm migrate:deploy` inside `vercel-build` (`scripts/migrate-deploy.ts`). Each environment is double-gated: `VERCEL_ENV=preview` + `PREVIEW_DB_MIGRATIONS=1`, `VERCEL_ENV=production` + `PRODUCTION_DB_MIGRATIONS=1`. So **merging to `main` migrates production** before the new code goes live. Forward-only — rolling back a deploy does not roll back the schema. See `@DEPLOY.md`.
@@ -64,4 +64,4 @@ pnpm mcp:clients list
 
 - `tests/reference-property-2024.test.ts` — full reconciliation E2E producing a stable reference number. **If this breaks, the math regressed.**
 - `@DEPLOY.md` — Vercel + Neon deployment checklist.
-- `@claude-plugin/skills/rocni-vyuctovani/SKILL.md` — end-user workflow skill (annual reconciliation).
+- `@agent-plugin/skills/rocni-vyuctovani/SKILL.md` — end-user workflow skill (annual reconciliation).

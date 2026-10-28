@@ -4,6 +4,8 @@ data/
 .env
 .env.local
 .mcp.json
+# The plugin's bundled connector: a URL only, no token (OAuth sign-in at first use).
+!/agent-plugin/.mcp.json
 rental_backups/
 *.log
 .DS_Store
@@ -23,3 +25,6 @@ test-results/
 # Python (skill scripts)
 __pycache__/
 *.pyc
+
+# Plugin upload zips (scripts/build-plugin.sh)
+/plugin-dist/

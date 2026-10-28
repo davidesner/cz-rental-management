@@ -5,6 +5,22 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 2.0.0 - 2026-10-28
+
+### Changed
+
+- **Plugin pro Claude i ChatGPT.** Složka `claude-plugin/` je teď `agent-plugin/` a nese
+  dva manifesty: `.claude-plugin/plugin.json` (Claude Code, Cowork, claude.ai) a
+  `.codex-plugin/plugin.json` (ChatGPT desktop, Codex). Verze obou musí sedět.
+- **Konektor je přibalený.** `.mcp.json` pluginu míří na remote MCP aplikace
+  (`https://cz-rental-management.vercel.app/mcp`), takže po instalaci stačí přihlášení
+  a souhlas, nic se nekonfiguruje ručně. `init` napojení jen ověří; ruční nastavení
+  zůstává pro běh mimo plugin a vlastní nasazení.
+- **Instalace z marketplace.** Repozitář je marketplace pro Claude
+  (`.claude-plugin/marketplace.json`) i ChatGPT / Codex (`.agents/plugins/marketplace.json`).
+  Upload balíčky staví `scripts/build-plugin.sh` (volitelně s adresou vlastního nasazení).
+- Lokální vývoj: `claude --plugin-dir <repo>/agent-plugin` (dřív `.../claude-plugin`).
+
 ## 1.2.0 - 2026-10-27
 
 ### Changed

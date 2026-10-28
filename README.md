@@ -11,14 +11,14 @@ Annual property reconciliation traditionally takes hours, sometimes a whole day 
 This project is built on a simple premise: **in a world of capable AI agents, no one wants to click through a UI to fill values into a proprietary form**. So we don't ask them to. The web app is intentionally minimal — it holds only the business logic and the data structure, plus a thin UI for review and correction. The real value lives elsewhere:
 
 - A **clean REST API + MCP server** (and a CLI planned) that exposes every entity (properties, contracts, payments, cost statements, reconciliations, tenants, …) with strong types and idempotent writes — designed for agents first, humans second.
-- A **Claude Code plugin** with skills that teach an agent *how* to perform the annual reconciliation: read whatever source documents the user happens to have (PDF, DOCX, image, CSV, bank export, email body) → parse → compute domain-specific adjustments → write the result to the platform → produce a polished PDF for the tenant.
+- An **agent plugin** for Claude and ChatGPT that bundles the MCP connector with skills teaching the agent *how* to perform the annual reconciliation: read whatever source documents the user happens to have (PDF, DOCX, image, CSV, bank export, email body) → parse → compute domain-specific adjustments → write the result to the platform → produce a polished PDF for the tenant.
 - A **per-property learning loop**: the first time the agent processes documents for a property, it writes its own parsers and computers and saves regression fixtures. Subsequent runs reuse them. The skill compounds in value with every use.
 
 What the user does: point the agent at their source documents — bank statement, SVJ evidenční list, contract, electricity bill — and confirm the result before it persists. Done in minutes instead of hours.
 
 ### Where this leads
 
-That the MCP server (CLI TBD) is just an agentic interface and it works with any client that speaks the protocol (Claude Code, Claude Desktop, Cursor, …). The Claude Code plugin is one workflow on top, not the only one possible. Combined with other MCPs (email, file, bank export parser) and Skills, you can get to worklfows like:
+That the MCP server (CLI TBD) is just an agentic interface and it works with any client that speaks the protocol (Claude Code, Claude Desktop, Cursor, …). The agent plugin is one workflow on top, not the only one possible. Combined with other MCPs (email, file, bank export parser) and Skills, you can get to worklfows like:
 
 - An always-on agent that watches a landlord inbox, registers incoming `evidenční list` PDFs as cost statements, flags late payments. No custom app — just wired-together MCP servers and a system prompt.
 - Monthly bank export → matched against contracts → late-payment surfaces in the UI.
@@ -80,7 +80,7 @@ The persisted reconciliation row stores only the final numbers per kind. The bre
 | **Web app** (frontend + REST API) | Vercel | Source of truth — owns DB, auth, REST endpoints. UI is for review and edge-case correction, not bulk data entry. |
 | **Remote MCP server** | Vercel, same deployment (`/mcp`) | Streamable HTTP + OAuth 2.1. Claude, ChatGPT or Claude Code connect with just the URL and a sign-in; one tool per resource, running as the signed-in user. |
 | **Stdio MCP server** (legacy) | Locally at the user (`npx`) | The same tools as an npm package, wrapping the REST API with a per-user API token. |
-| **Claude Code plugin** | User-installable | Packaged workflow that teaches the agent the annual reconciliation process. Self-extends with per-property knowledge. |
+| **Agent plugin** (`agent-plugin/`) | User-installable in Claude (Code, Cowork, claude.ai) and ChatGPT / Codex | The remote MCP connector plus skills that teach the agent the annual reconciliation and contract workflows. Self-extends with per-property knowledge. |
 
 ---
 
@@ -183,7 +183,7 @@ mcp/                  → MCP tool definitions + standalone stdio server (npm pa
   tools/              → One file per resource exposing MCP tools
 tests/                → Vitest integration + service tests (fresh-DB per test)
 drizzle/              → Generated SQL migrations
-claude-plugin/        → Claude Code plugin (skills: vyúčtování, smlouvy, init)
+agent-plugin/         → Agent plugin for Claude + ChatGPT (bundled MCP connector, skills: vyúčtování, smlouvy, init)
 ```
 
 `core/` is the heart — every route handler and MCP tool is a thin shell calling into `core/services/*.ts`. The same business logic backs HTTP and MCP. UI (`src/`) talks only to `/api`.
@@ -201,7 +201,7 @@ Detailed explanations in [`CLAUDE.md`](./CLAUDE.md) and `core/services/reconcili
 
 ---
 
-## Claude Code plugin: skill architecture
+## Agent plugin: skill architecture
 
 The plugin ships three skills. What they learn and produce lives in the user's own working folder, beside the documents it describes.
 
@@ -209,14 +209,14 @@ The plugin ships three skills. What they learn and produce lives in the user's o
 flowchart TB
     M[Plugin marketplace<br/>or local --plugin-dir] -->|install| P
 
-    subgraph P["claude-plugin/"]
+    subgraph P["agent-plugin/"]
         direction LR
         SK1[skills/rocni-vyuctovani/<br/>SKILL.md + scripts/]
         SK2[skills/smlouvy/<br/>SKILL.md + templates/]
         SK3[skills/init/<br/>SKILL.md]
     end
 
-    P --> AGENT{{Claude Code session<br/>agent invokes a skill}}
+    P --> AGENT{{Claude or ChatGPT session<br/>agent invokes a skill}}
 
     AGENT -->|init: scaffolds the folder| AG
     AGENT -->|resolves property| AG
@@ -280,6 +280,17 @@ Schema for the data file is documented in `scripts/example-pdf-data.json`.
 ---
 
 
+## Agent plugin (Claude + ChatGPT)
+
+[`agent-plugin/`](./agent-plugin) bundles the MCP connector with the skills. This repository is the marketplace for both clients:
+
+- **Claude (Cowork, claude.ai, Desktop):** Customize → Plugins → Add marketplace → `davidesner/cz-rental-management`, install `rental-management`, then connect the connector from the plugin's Connectors tab
+- **Claude Code (local only):** `/plugin install rental-management --marketplace davidesner/cz-rental-management`
+- **ChatGPT desktop / Codex:** `codex plugin marketplace add davidesner/cz-rental-management`, then install `rental-management@rental-management`
+- **Upload** (claude.ai, ChatGPT): zips from `./scripts/build-plugin.sh [https://<your-app>]`
+
+On first use the connector asks for the app sign-in (OAuth). Details: [`agent-plugin/README.md`](./agent-plugin/README.md).
+
 ## MCP server
 
 The app is a **remote MCP server**: `https://<your-app>/mcp`, served by the same Vercel deployment. Agents authenticate with OAuth 2.1 (dynamic client registration, PKCE, consent screen), so there is no token to copy.
@@ -316,10 +327,10 @@ Source lives in [`mcp/`](./mcp) (tools + stdio entrypoint) and [`server/mcp/`](.
 
 - [`CLAUDE.md`](./CLAUDE.md) — orientation for AI agents and contributors
 - [`DEPLOY.md`](./DEPLOY.md) — Vercel + Neon deployment checklist
-- [`claude-plugin/CHANGELOG.md`](./claude-plugin/CHANGELOG.md) — plugin release notes
-- [`claude-plugin/skills/rocni-vyuctovani/SKILL.md`](./claude-plugin/skills/rocni-vyuctovani/SKILL.md) — annual reconciliation skill
-- [`claude-plugin/skills/smlouvy/SKILL.md`](./claude-plugin/skills/smlouvy/SKILL.md) — contracts skill
-- [`claude-plugin/skills/init/SKILL.md`](./claude-plugin/skills/init/SKILL.md) — workspace scaffolding skill
+- [`agent-plugin/CHANGELOG.md`](./agent-plugin/CHANGELOG.md) — plugin release notes
+- [`agent-plugin/skills/rocni-vyuctovani/SKILL.md`](./agent-plugin/skills/rocni-vyuctovani/SKILL.md) — annual reconciliation skill
+- [`agent-plugin/skills/smlouvy/SKILL.md`](./agent-plugin/skills/smlouvy/SKILL.md) — contracts skill
+- [`agent-plugin/skills/init/SKILL.md`](./agent-plugin/skills/init/SKILL.md) — workspace scaffolding skill
 
 ---
 

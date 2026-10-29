@@ -5,6 +5,12 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
+## 2.0.1 - 2026-10-29
+
+### Fixed
+
+- README: přesný příkaz pro instalaci v Codexu (`codex plugin add rental-management@rental-management`).
+
 ## 2.0.0 - 2026-10-28
 
 ### Changed

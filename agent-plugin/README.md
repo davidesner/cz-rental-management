@@ -47,7 +47,13 @@ Repozitář je i marketplace pro ChatGPT / Codex (`.agents/plugins/marketplace.j
 codex plugin marketplace add davidesner/cz-rental-management
 ```
 
-pak nainstaluj `rental-management@rental-management`. Případně nahraj
+pak nainstaluj plugin:
+
+```bash
+codex plugin add rental-management@rental-management
+```
+
+Případně nahraj
 `plugin-dist/rental-management-chatgpt.zip`. Konektor je v pluginu přibalený (manifest
 `.codex-plugin/plugin.json` s `mcpServers: "./.mcp.json"`), samostatný konektor v ChatGPT
 přidávat nemusíš. Přibalené MCP funguje jen v desktopové aplikaci; ve webovém ChatGPT

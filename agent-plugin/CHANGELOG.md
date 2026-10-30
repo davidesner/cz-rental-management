@@ -5,19 +5,50 @@ Verzování dle [semver](https://semver.org/):
 - **minor** (`0.x.0`): nová funkce / sub-skill / command zachovávající stávající workflow
 - **major** (`x.0.0`): breaking change ve workflow nebo schema (např. přesun template do DB)
 
-## 1.2.0 — 2026-09-06
+## 2.1.0 - 2026-10-30
 
 ### Added
 
-- **`skills/smlouvy/templates/lease-en.typ`** — anglická smlouva o nájmu bytu pro zahraničního nájemce. Proti `lease-cs.typ` navíc pole `{{landlords}}` (víc pronajímatelů, typicky oba manželé u jednotky v SJM), volitelný `idDoc` u nájemce (cizinec se identifikuje cestovním dokladem), `bankVs` pro párování plateb, `noticeEmail` pro e-mailové doručování a odstavec o jazyku a rozhodném právu.
-- **`skills/smlouvy/templates/handover-en.typ`** — předávací protokol jako příloha smlouvy. Sloupec na stav u každé položky, oba registry dvoutarifního elektroměru, kontaktní osoba podle § 2269 OZ a sekce na závady.
-- **`skills/smlouvy/SKILL.md`** — sekce o kogentních ustanoveních, která šablona nesmí porušit, o anglické smlouvě, o obsahu předávacího protokolu, o zákeřných vzorech v Typstu a o povinné kontrole vyrenderovaného PDF přes `pdftotext` + grep.
-- **`skills/rocni-vyuctovani/SKILL.md`** — sekce o zúčtovacích obdobích a lhůtách podle zák. č. 67/2013 Sb. a postup, jak rozpadnout předpis SVJ na položky na osobu vs. na byt.
+- **`skills/smlouvy/templates/lease-en.typ`** - anglická smlouva o nájmu bytu pro zahraničního nájemce. Proti `lease-cs.typ` navíc pole `{{landlords}}` (víc pronajímatelů, typicky oba manželé u jednotky v SJM), volitelný `idDoc` u nájemce (cizinec se identifikuje cestovním dokladem), `bankVs` pro párování plateb, `noticeEmail` pro e-mailové doručování a odstavec o jazyku a rozhodném právu.
+- **`skills/smlouvy/templates/handover-en.typ`** - předávací protokol jako příloha smlouvy. Sloupec na stav u každé položky, oba registry dvoutarifního elektroměru, kontaktní osoba podle § 2269 OZ a sekce na závady.
+- **`skills/smlouvy/SKILL.md`** - sekce o kogentních ustanoveních, která šablona nesmí porušit, o anglické smlouvě, o obsahu předávacího protokolu, o zákeřných vzorech v Typstu a o povinné kontrole vyrenderovaného PDF přes `pdftotext` + grep.
+- **`skills/rocni-vyuctovani/SKILL.md`** - sekce o zúčtovacích obdobích a lhůtách podle zák. č. 67/2013 Sb. a postup, jak rozpadnout předpis SVJ na položky na osobu vs. na byt.
 
 ### Changed
 
-- **Šablony teď výslovně přiznávají právo na úroky z jistoty.** § 2254 odst. 2 OZ dává nájemci úroky z jistoty od jejího poskytnutí a § 2235 odst. 1 OZ říká, že se k ujednáním zkracujícím nájemcova práva u nájmu bytu nepřihlíží. `lease-cs.typ` o jistotě dosud mlčel a mlčení stačí, protože zákon platí i bez ujednání; nově to ale říká nahlas, aby se z generic starting pointu nedala odvodit opačná klauzule. `lease-en.typ` to má od začátku. Sazba se záměrně nefixuje — doktrína se neshoduje a nižší sjednaná sazba by stejně byla neúčinná.
+- **Šablony teď výslovně přiznávají právo na úroky z jistoty.** § 2254 odst. 2 OZ dává nájemci úroky z jistoty od jejího poskytnutí a § 2235 odst. 1 OZ říká, že se k ujednáním zkracujícím nájemcova práva u nájmu bytu nepřihlíží. `lease-cs.typ` o jistotě dosud mlčel a mlčení stačí, protože zákon platí i bez ujednání; nově to ale říká nahlas, aby se z generic starting pointu nedala odvodit opačná klauzule. `lease-en.typ` to má od začátku. Sazba se záměrně nefixuje - doktrína se neshoduje a nižší sjednaná sazba by stejně byla neúčinná.
 - **Workflow A nově hlídá klauzuli „jistota není úročena".** Staré vzory ji běžně obsahují; skill na ni při učení šablony z existujícího dokumentu upozorní, aby se nepřenesla dál a aby uživatel věděl, že na jeho podepsaných smlouvách nárok na úrok běží dál.
+
+## 2.0.1 - 2026-10-29
+
+### Fixed
+
+- README: přesný příkaz pro instalaci v Codexu (`codex plugin add rental-management@rental-management`).
+
+## 2.0.0 - 2026-10-28
+
+### Changed
+
+- **Plugin pro Claude i ChatGPT.** Složka `claude-plugin/` je teď `agent-plugin/` a nese
+  dva manifesty: `.claude-plugin/plugin.json` (Claude Code, Cowork, claude.ai) a
+  `.codex-plugin/plugin.json` (ChatGPT desktop, Codex). Verze obou musí sedět.
+- **Konektor je přibalený.** `.mcp.json` pluginu míří na remote MCP aplikace
+  (`https://cz-rental-management.vercel.app/mcp`), takže po instalaci stačí přihlášení
+  a souhlas, nic se nekonfiguruje ručně. `init` napojení jen ověří; ruční nastavení
+  zůstává pro běh mimo plugin a vlastní nasazení.
+- **Instalace z marketplace.** Repozitář je marketplace pro Claude
+  (`.claude-plugin/marketplace.json`) i ChatGPT / Codex (`.agents/plugins/marketplace.json`).
+  Upload balíčky staví `scripts/build-plugin.sh` (volitelně s adresou vlastního nasazení).
+- Lokální vývoj: `claude --plugin-dir <repo>/agent-plugin` (dřív `.../claude-plugin`).
+
+## 1.2.0 - 2026-10-27
+
+### Changed
+
+- **`init` doporučuje remote MCP.** Aplikace teď servíruje MCP přímo na
+  `https://<adresa>/mcp` s OAuth přihlášením, takže napojení je jen URL a
+  "Povolit", bez API tokenu a bez lokálního procesu. Stdio balíček přes `npx`
+  zůstává jako fallback pro klienty, které remote MCP neumí.
 
 ## 1.1.0 — 2026-08-30
 

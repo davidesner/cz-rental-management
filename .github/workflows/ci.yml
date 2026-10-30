@@ -99,6 +99,10 @@ jobs:
       # triggers a release, a forgotten literal would otherwise ship silently.
       - name: Check MCP version literal
         run: node scripts/check-mcp-version.mjs
+      # agent-plugin/ has a Claude and a ChatGPT manifest; each client updates by its own
+      # manifest's version, so both must be bumped together.
+      - name: Check plugin manifests
+        run: node scripts/check-plugin-version.mjs
 
   build:
     name: build

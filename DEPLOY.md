@@ -2,7 +2,8 @@
 
 Tahle apka je monorepo:
 - **Web (frontend + API)** → Vercel
-- **MCP server** → samostatný npm balíček `@esnerda/cz-rental-management-mcp` spouštěný přes `npx` u uživatele. MCP nikdy nejde na Vercel.
+- **Remote MCP server** → součást stejného deploymentu: `https://<host>/mcp` (streamable HTTP, OAuth). Viz [Remote MCP](#remote-mcp-claude-chatgpt-claude-code).
+- **Stdio MCP server** (legacy) → npm balíček `@esnerda/cz-rental-management-mcp` spouštěný přes `npx` u uživatele, autentizace API tokenem.
 
 ## First deploy
 
@@ -59,7 +60,8 @@ Hand the user their temporary password through a secure channel (Signal, passwor
 | Frontend (Vite SPA) | Vercel CDN | `vite build` → `dist/` |
 | Backend (Hono) | Vercel Functions | `api/index.ts` adapter |
 | DB | Neon | — |
-| MCP server | Lokálně u uživatele | `npx -y @esnerda/cz-rental-management-mcp@latest` |
+| Remote MCP (`/mcp`) | Vercel Functions (stejná funkce jako API) | `api/index.ts` adapter |
+| Stdio MCP (legacy) | Lokálně u uživatele | `npx -y @esnerda/cz-rental-management-mcp@latest` |
 
 ## Local dev vs prod
 
@@ -227,9 +229,95 @@ deployment smazat ručně — `vercel remove <deployment>` smaže i Neon branch 
 
 Vercel Project Settings → Domains → Add. Po nastavení změň `BETTER_AUTH_URL` env var na custom doménu a redeploy (better-auth potřebuje match domain pro cookies).
 
-## MCP server (samostatně)
+## Remote MCP (Claude, ChatGPT, Claude Code)
 
-MCP server je publikován jako samostatný npm balíček `@esnerda/cz-rental-management-mcp` a spouští se přes `npx` u uživatele (nepotřebuje clone repa):
+Aplikace je zároveň MCP server pro AI asistenty, servírovaný ze stejného deploymentu:
+`https://<host>/mcp` (streamable HTTP, stateless, JSON odpovědi). Autentizace je OAuth 2.1
+s dynamickou registrací klienta, takže uživatel nic nekopíruje, jen se přihlásí a potvrdí
+přístup. Discovery dokumenty jsou na `/.well-known/oauth-protected-resource/mcp` a
+`/.well-known/oauth-authorization-server/api/auth`; `vercel.json` přepisuje `/mcp` a
+`/.well-known/*` na API funkci.
+
+Jak to funguje:
+- Authorization server je better-auth (`jwt()` + `mcp()` pluginy v `core/auth/better-auth.ts`),
+  tabulky `jwks` a `oauth_*` (migrace `0014_remote_mcp_oauth`).
+- Access token je JWT (EdDSA, 15 min, audience `https://<host>/mcp`, scope `rental`),
+  refresh token rotuje. `/mcp` token ověřuje in-process proti vlastnímu JWKS.
+- Nástroje jsou tytéž jako ve stdio balíčku (`mcp/tools/`). Volají REST API **in-process**
+  jako přihlášený uživatel, takže org scoping, role, přístup k nemovitostem i vynucená
+  změna hesla platí úplně stejně jako v UI (`server/middleware/auth.ts`, `IN_PROCESS_USER`).
+  Uživatel s více organizacemi pracuje přes MCP v té nejstarší (stejně jako UI bez `x-org-id`).
+- MCP access token **neplatí** na REST API a API token neplatí na `/mcp`.
+
+Provozní poznámky:
+- Žádné nové env vars. `BETTER_AUTH_URL` musí být **přesně** veřejný origin, který dáváš
+  agentům: určuje audience tokenů i resource id. Jiný host, `http` nebo cesta navíc = každé
+  připojení selže. Na preview bez `BETTER_AUTH_URL` je to `VERCEL_URL` (per-deployment URL,
+  ne branch alias).
+- Rotace `BETTER_AUTH_SECRET` zneplatní šifrování JWKS a všechna připojení; uživatelé se
+  připojí znovu.
+- Registrace klienta přijímá jen redirect URI Claude (`claude.ai`, `claude.com`), ChatGPT
+  (`chatgpt.com`) a loopback (`http://localhost`, `http://127.0.0.1`: Claude Code, MCP
+  Inspector). Jiného klienta přidáš v `core/auth/mcp-oauth.ts#redirectKind`.
+- `Origin` hlavička: jiná než vlastní origin aplikace = 403. Mimo produkci projde i loopback
+  (MCP Inspector). Claude a ChatGPT servery `Origin` neposílají.
+- Pro změnu `allowedScopes` resource v budoucnu nasaď jednou s `resourceSeedMode: 'merge'`,
+  jinak si DB řádek `oauth_resource` drží staré scopy.
+- Preview deploymenty za Vercel Authentication nejsou pro Claude/ChatGPT dosažitelné.
+- `vercel.json` rewrites používají **nepojmenované** skupiny (`/api/(.*)`). Pojmenovaná
+  (`/api/:path*`) by k requestu přidala `?path=...` a rozbila podepsaný OAuth query;
+  `server/vercel-query.ts` to navíc odstraňuje jako druhá pojistka.
+
+Nejjednodušší je nainstalovat **plugin** (`agent-plugin/`, viz README): konektor je v něm
+přibalený spolu se skilly. Pro samotný konektor bez skillů:
+
+### Připojení v Claude
+
+claude.ai / Desktop / mobil: Settings → Connectors → Add custom connector, URL
+`https://<host>/mcp`, client id a secret nech prázdné. Přihlas se e-mailem a heslem a
+potvrď **Povolit**.
+
+Claude Code:
+
+```bash
+claude mcp add --transport http rental-management https://<host>/mcp
+```
+
+pak `/mcp` a přihlášení v prohlížeči.
+
+### Připojení v ChatGPT
+
+Settings → Apps and Connectors → Advanced → Developer mode → Create. URL
+`https://<host>/mcp`, autentizace OAuth, dynamická registrace klienta.
+
+### Odpojení agentů
+
+Proti cílové DB (`DATABASE_URL` v env nebo `.env`):
+
+- `pnpm mcp:clients list` vypíše každého agenta (client id, Claude / ChatGPT / lokální), stav,
+  uživatelé a čas posledního tokenu;
+- `pnpm mcp:clients revoke <clientId>` vypne klienta a smaže jeho tokeny a souhlasy.
+  Platný access token je odmítnut hned při dalším volání. Uživatel se může připojit znovu
+  (zaregistruje se nový klient).
+
+### Smoke check po deployi
+
+1. `curl -s https://<host>/.well-known/oauth-protected-resource/mcp` vrátí JSON s
+   `"resource":"https://<host>/mcp"` (ne HTML SPA).
+2. `curl -s https://<host>/.well-known/oauth-authorization-server/api/auth` vrátí JSON s
+   `"issuer":"https://<host>/api/auth"` a `registration_endpoint`.
+3. `curl -si -X POST https://<host>/mcp -H 'content-type: application/json' -d '{}'` vrátí
+   `401` s `WWW-Authenticate: Bearer resource_metadata="https://<host>/.well-known/oauth-protected-resource/mcp", scope="rental"`.
+4. Připoj konektor v Claude, potvrď souhlas a zeptej se "Jaké mám nemovitosti?"
+   (očekává `properties_list`).
+
+Při změně produkční domény uprav i `agent-plugin/.mcp.json` (přibalený konektor pluginu)
+a bumpni verzi pluginu, jinak nainstalované pluginy míří na starou adresu.
+
+### Stdio MCP (legacy)
+
+Původní npm balíček `@esnerda/cz-rental-management-mcp` dál funguje pro klienty bez
+remote MCP. Spouští se přes `npx` a autentizuje API tokenem z UI:
 
 ```json
 // .mcp.json
@@ -249,8 +337,6 @@ MCP server je publikován jako samostatný npm balíček `@esnerda/cz-rental-man
 
 Pro lokální vývoj backendu je `pnpm mcp` (z root) pořád k dispozici — pouští stejný server z monorepa přes `tsx`.
 
-Publish workflow: `cd mcp && pnpm build && npm publish --access public`. Source/dist je v `mcp/`, dist je gitignorovaný.
-
 ## Troubleshooting
 
 - **`prepared statement "xxx" does not exist`** — `prepare: false` v serverless modu chybí, nebo používáš PgBouncer ale `postgres-js` nemá `prepare: false`. Check `core/db/client.ts`.
@@ -260,6 +346,7 @@ Publish workflow: `cd mcp && pnpm build && npm publish --access public`. Source/
 - **App refuses to boot with `BETTER_AUTH_SECRET must be set...`** — env var missing or shorter than 32 chars. Generate with `openssl rand -base64 32`.
 - **App refuses to boot with `BETTER_AUTH_TRUSTED_ORIGINS must be set...`** — set the env var to your prod origin(s), comma-separated.
 - **CORS / origin rejected when calling auth API** — origin not in `BETTER_AUTH_TRUSTED_ORIGINS`. Add it and redeploy.
+- **Agent connects but every `/mcp` call answers 401 `invalid_token`**: `BETTER_AUTH_URL` doesn't match the host the agent was given (token audience mismatch), or the client was revoked. Reconnect against the exact `BETTER_AUTH_URL` origin.
 
 ## Bankovní integrace (sběr plateb z e-mailů)
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -33,7 +33,7 @@ export async function paymentBreakdown(client: RentalApiClient, args: z.infer<ty
   }>(`/api/contracts/${args.contractId}/payment-breakdown?from=${args.from}&to=${args.to}`);
 }
 
-export function addPaymentBreakdownTools(server: FastMCP, client: RentalApiClient) {
+export function addPaymentBreakdownTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'contracts_payment_breakdown',
     description: 'Compute the monthly payment breakdown (rozpis) for a contract over a period. For each month, returns: expected components (rent + service advance + utilities, prorated for partial months), applied rent reduction (srážka, if any), received total from payments, and rent-first allocation breakdown (paid per category + deficits). All money in haléře (CZK × 100). Allocation order: rent → service → utilities. Surplus over the plan appears as `surplus`. Deficit indicates underpayment.',

@@ -14,6 +14,7 @@ import { handle } from '@hono/node-server/vercel';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createDb } from '../core/db/client.js';
 import { buildApp } from '../server/app.js';
+import { stripInjectedPathParam } from '../server/vercel-query.js';
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL not set');
@@ -35,6 +36,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
 }
 
 export default async function vercelHandler(req: ReqWithRawBody, res: ServerResponse) {
+  if (req.url) req.url = stripInjectedPathParam(req.url);
   const method = req.method ?? 'GET';
   if (method !== 'GET' && method !== 'HEAD' && !(req.rawBody instanceof Buffer)) {
     try {

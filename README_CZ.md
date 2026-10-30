@@ -11,14 +11,14 @@ Roční vyúčtování pronájmu tradičně zabere hodiny, někdy klidně celý 
 Tenhle projekt staví na jednoduchém předpokladu: **ve světě schopných AI agentů nikdo nechce proklikávat UI a vyplňovat hodnoty do nějakého proprietárního formuláře.** Tak po něm to nechceme. Webová aplikace je záměrně minimální — drží jen business logiku a datovou strukturu, plus tenké UI na review a opravy. Skutečná hodnota leží jinde:
 
 - **Čisté REST API + MCP server** (a plánované CLI), které vystavují každou entitu (nemovitosti, smlouvy, platby, vyúčtování nákladů, reconciliations, nájemníky, …) se silně typovanými, idempotentními zápisy — design primárně pro agenty, sekundárně pro lidi.
-- **Claude Code plugin** se skilly, které naučí agenta *jak* roční vyúčtování provést: přečíst zdrojové dokumenty v jakékoliv formě, kterou user zrovna má (PDF, DOCX, obrázek, CSV, bankovní export, tělo emailu) → parsovat → spočítat doménově specifické úpravy → zapsat výsledek do platformy → vyrobit hezké PDF pro nájemníka.
+- **Agent plugin** pro Claude a ChatGPT, který spojuje MCP konektor se skilly, které naučí agenta *jak* roční vyúčtování provést: přečíst zdrojové dokumenty v jakékoliv formě, kterou user zrovna má (PDF, DOCX, obrázek, CSV, bankovní export, tělo emailu) → parsovat → spočítat doménově specifické úpravy → zapsat výsledek do platformy → vyrobit hezké PDF pro nájemníka.
 - **Per-property learning loop**: poprvé když agent zpracuje dokumenty z nové nemovitosti, napíše si vlastní parsery a kalkulátory a uloží regression fixtury. Příště je znovu použije. Hodnota skillu narůstá s každým použitím.
 
 Co dělá uživatel: ukáže agentovi zdrojové dokumenty — bankovní výpis, SVJ evidenční list, smlouvu, fakturu za elektřinu — a před zápisem výsledek potvrdí. Hotovo za minuty místo hodin.
 
 ### Kam to směřuje
 
-To, že MCP server (CLI TBD) je pouhé agentické rozhraní, znamená, že funguje s jakýmkoliv klientem, který mluví protokolem (Claude Code, Claude Desktop, Cursor, …). Claude Code plugin je jeden workflow nahoře, ne jediný možný. V kombinaci s dalšími MCP servery (email, file, parser bankovních exportů) a Skilly se dostaneš ke scénářům jako:
+To, že MCP server (CLI TBD) je pouhé agentické rozhraní, znamená, že funguje s jakýmkoliv klientem, který mluví protokolem (Claude Code, Claude Desktop, Cursor, …). Agent plugin je jeden workflow nahoře, ne jediný možný. V kombinaci s dalšími MCP servery (email, file, parser bankovních exportů) a Skilly se dostaneš ke scénářům jako:
 
 - Always-on agent, který sleduje schránku majitele, registruje příchozí PDF evidenčních listů jako cost statementy a označuje pozdní platby. Žádná custom aplikace — jen propojené MCP servery a system prompt.
 - Měsíční bankovní export → přiřazený proti smlouvám → pozdní platby vyskočí v UI.
@@ -78,8 +78,9 @@ Persistovaný reconciliation řádek ukládá jen finální čísla per kind. Br
 | Komponenta | Kde běží | Účel |
 |---|---|---|
 | **Webová aplikace** (frontend + REST API) | Vercel | Source of truth — vlastní DB, auth, REST endpointy. UI je na review a opravy edge case'ů, ne na bulk zadávání dat. |
-| **MCP server** | Lokálně u uživatele (stdio) | Tenký klient nad REST API — vystavuje jeden tool per resource, takže jakýkoliv LLM klient (Claude Code, Cursor, atd.) může číst i zapisovat. |
-| **Claude Code plugin** | Instalovatelný uživatelem | Hotový workflow, který naučí agenta proces ročního vyúčtování. Sám se rozšiřuje per-property znalostmi. |
+| **Remote MCP server** | Vercel, stejný deployment (`/mcp`) | Streamable HTTP + OAuth 2.1. Claude, ChatGPT nebo Claude Code se připojí jen URL a přihlášením; jeden tool per resource, běží jako přihlášený uživatel. |
+| **Stdio MCP server** (legacy) | Lokálně u uživatele (`npx`) | Tytéž tooly jako npm balíček, tenký klient nad REST API s per-user API tokenem. |
+| **Agent plugin** (`agent-plugin/`) | Instalovatelný v Claude (Code, Cowork, claude.ai) i ChatGPT / Codex | Remote MCP konektor plus skilly, které naučí agenta roční vyúčtování a smlouvy. Sám se rozšiřuje per-property znalostmi. |
 
 ---
 
@@ -88,7 +89,7 @@ Persistovaný reconciliation řádek ukládá jen finální čísla per kind. Br
 **Backend:** TypeScript · Hono · Drizzle ORM (postgres-js) · better-auth · Zod · PostgreSQL (lokální Docker / Neon prod)
 **Frontend:** React 19 · Vite · TailwindCSS · shadcn/ui · TanStack Query
 **Testing:** Vitest · Playwright
-**MCP:** fastmcp (stdio)
+**MCP:** @modelcontextprotocol/server (remote, streamable HTTP) · better-auth OAuth provider · fastmcp (legacy stdio)
 **Dokumenty (v pluginu):** Typst (moderní alternativa k LaTeXu) · pandoc · reportlab (Python, PDF)
 
 ---
@@ -177,11 +178,11 @@ core/                 → Čistá doménová logika, framework-free
   lib/                → Pure helpers (allocation, payment-matching, temporal)
   auth/               → better-auth setup
 src/                  → React frontend (Vite)
-mcp/                  → Standalone MCP server (samostatná concern)
+mcp/                  → Definice MCP toolů + samostatný stdio server (npm balíček)
   tools/              → Jeden soubor per resource vystavující MCP tooly
 tests/                → Vitest integration + service testy (fresh DB per test)
 drizzle/              → Generované SQL migrace
-claude-plugin/        → Claude Code plugin (skilly: vyúčtování, smlouvy, init)
+agent-plugin/         → Agent plugin pro Claude + ChatGPT (přibalený MCP konektor, skilly: vyúčtování, smlouvy, init)
 ```
 
 `core/` je srdce — každý route handler a MCP tool je tenká slupka volající `core/services/*.ts`. Stejná business logika pohání HTTP i MCP. UI (`src/`) mluví jen s `/api`.
@@ -199,7 +200,7 @@ Detailní vysvětlení v [`CLAUDE.md`](./CLAUDE.md) a `core/services/reconciliat
 
 ---
 
-## Claude Code plugin: architektura skillů
+## Agent plugin: architektura skillů
 
 Plugin obsahuje tři skilly. To, co se naučí a vyrobí, žije v pracovní složce uživatele, vedle dokumentů, kterých se to týká.
 
@@ -207,14 +208,14 @@ Plugin obsahuje tři skilly. To, co se naučí a vyrobí, žije v pracovní slo�
 flowchart TB
     M[Plugin marketplace<br/>nebo local --plugin-dir] -->|instalace| P
 
-    subgraph P["claude-plugin/"]
+    subgraph P["agent-plugin/"]
         direction LR
         SK1[skills/rocni-vyuctovani/<br/>SKILL.md + scripts/]
         SK2[skills/smlouvy/<br/>SKILL.md + templates/]
         SK3[skills/init/<br/>SKILL.md]
     end
 
-    P --> AGENT{{Claude Code session<br/>agent invokuje skill}}
+    P --> AGENT{{Claude nebo ChatGPT session<br/>agent invokuje skill}}
 
     AGENT -->|init: založí kostru| AG
     AGENT -->|resolvuje nemovitost| AG
@@ -278,9 +279,28 @@ Schema datového souboru je zdokumentované v `scripts/example-pdf-data.json`.
 ---
 
 
+## Agent plugin (Claude + ChatGPT)
+
+[`agent-plugin/`](./agent-plugin) spojuje MCP konektor se skilly. Tenhle repozitář je marketplace pro oba klienty:
+
+- **Claude (Cowork, claude.ai, Desktop):** Customize → Plugins → Add marketplace → `davidesner/cz-rental-management`, nainstaluj `rental-management` a v záložce Connectors pluginu připoj konektor
+- **Claude Code (jen lokálně):** `/plugin install rental-management --marketplace davidesner/cz-rental-management`
+- **ChatGPT desktop / Codex:** `codex plugin marketplace add davidesner/cz-rental-management`, pak nainstaluj `rental-management@rental-management`
+- **Upload** (claude.ai, ChatGPT): zipy z `./scripts/build-plugin.sh [https://<tvoje-app>]`
+
+Při prvním použití si konektor vyžádá přihlášení do aplikace (OAuth). Detaily: [`agent-plugin/README.md`](./agent-plugin/README.md).
+
 ## MCP server
 
-Publikovaný jako samostatný npm balíček: [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp). Běží jako stdio proces na stroji uživatele přes `npx` — není potřeba klonovat repo. Vystavuje jeden tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …) a autentizuje se proti API přes per-user token.
+Aplikace je **remote MCP server**: `https://<tvoje-app>/mcp`, servírovaný ze stejného Vercel deploymentu. Agenti se autentizují přes OAuth 2.1 (dynamická registrace klienta, PKCE, souhlasová obrazovka), takže žádný token ke kopírování.
+
+- **Claude** (claude.ai / Desktop / mobil): Settings → Connectors → Add custom connector → `https://<tvoje-app>/mcp`.
+- **Claude Code:** `claude mcp add --transport http rental-management https://<tvoje-app>/mcp`, pak `/mcp` a přihlášení.
+- **ChatGPT:** konektor v developer módu, OAuth s dynamickou registrací klienta.
+
+Tooly jsou tytéž definice jako ve stdio balíčku (`mcp/tools/`): jeden tool per REST resource (`properties_list`, `contracts_get`, `payments_record_batch`, …). Na `/mcp` volají REST API in-process jako přihlášený uživatel, takže org scoping a oprávnění jsou stejné jako v UI. Nastavení, odpojení agentů a smoke check: [`DEPLOY.md`](./DEPLOY.md#remote-mcp-claude-chatgpt-claude-code).
+
+**Stdio balíček** [`@esnerda/cz-rental-management-mcp`](https://www.npmjs.com/package/@esnerda/cz-rental-management-mcp) dál funguje pro klienty bez podpory remote MCP. Spouští se přes `npx` a autentizuje API tokenem:
 
 ```jsonc
 // .mcp.json
@@ -291,14 +311,14 @@ Publikovaný jako samostatný npm balíček: [`@esnerda/cz-rental-management-mcp
       "args": ["-y", "@esnerda/cz-rental-management-mcp@latest"],
       "env": {
         "RENTAL_API_URL": "https://your-app.vercel.app",
-        "RENTAL_API_TOKEN": "<from /settings/api-tokens>"
+        "RENTAL_API_TOKEN": "<z /settings/api-tokens>"
       }
     }
   }
 }
 ```
 
-Zdroj je v [`mcp/`](./mcp). Pro lokální vývoj backendu spustí `pnpm mcp` ten samý server ze zdrojáků přes `tsx`. Publikace: `cd mcp && pnpm build && npm publish --access public`.
+Zdroj je v [`mcp/`](./mcp) (tooly + stdio entrypoint) a [`server/mcp/`](./server/mcp) (remote endpoint). Pro lokální vývoj backendu `pnpm mcp` pustí stdio server ze zdrojáků přes `tsx`; remote endpoint je součástí `pnpm dev` na `http://localhost:5173/mcp`.
 
 ---
 
@@ -307,10 +327,10 @@ Zdroj je v [`mcp/`](./mcp). Pro lokální vývoj backendu spustí `pnpm mcp` ten
 
 - [`CLAUDE.md`](./CLAUDE.md) — orientace pro AI agenty a contributory
 - [`DEPLOY.md`](./DEPLOY.md) — Vercel + Neon deployment checklist
-- [`claude-plugin/CHANGELOG.md`](./claude-plugin/CHANGELOG.md) — release notes pluginu
-- [`claude-plugin/skills/rocni-vyuctovani/SKILL.md`](./claude-plugin/skills/rocni-vyuctovani/SKILL.md) — skill ročního vyúčtování
-- [`claude-plugin/skills/smlouvy/SKILL.md`](./claude-plugin/skills/smlouvy/SKILL.md) — skill pro smlouvy
-- [`claude-plugin/skills/init/SKILL.md`](./claude-plugin/skills/init/SKILL.md) — skill pro založení pracovní složky
+- [`agent-plugin/CHANGELOG.md`](./agent-plugin/CHANGELOG.md) — release notes pluginu
+- [`agent-plugin/skills/rocni-vyuctovani/SKILL.md`](./agent-plugin/skills/rocni-vyuctovani/SKILL.md) — skill ročního vyúčtování
+- [`agent-plugin/skills/smlouvy/SKILL.md`](./agent-plugin/skills/smlouvy/SKILL.md) — skill pro smlouvy
+- [`agent-plugin/skills/init/SKILL.md`](./agent-plugin/skills/init/SKILL.md) — skill pro založení pracovní složky
 
 ---
 

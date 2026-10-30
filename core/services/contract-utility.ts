@@ -13,6 +13,11 @@ export interface CreateUtilityInput {
   note?: string | null;
 }
 
+export interface UpdateUtilityInput {
+  monthlyAdvance?: number;
+  note?: string | null;
+}
+
 export interface UtilityRow {
   id: string;
   contractId: string;
@@ -47,6 +52,33 @@ export async function addContractUtility(db: DB, orgId: string, contractId: stri
     }).returning();
     return row! as UtilityRow;
   });
+}
+
+/**
+ * In-place correction of a single utility row — typo in the advance, stale note.
+ * `kind` and `validFrom` stay immutable: they define the row's slot in the
+ * per-kind SCD2 chain, so changing them here would break the timeline. A real
+ * change over time belongs in `addContractUtility` (new row, prior one closed).
+ */
+export async function updateContractUtility(
+  db: DB, orgId: string, contractId: string, utilityId: string,
+  allowedPropertyIds: string[] | null, input: UpdateUtilityInput,
+): Promise<UtilityRow> {
+  await assertContractInOrg(db, orgId, contractId, allowedPropertyIds);
+  const [existing] = await db.select().from(contractUtility)
+    .where(and(eq(contractUtility.id, utilityId), eq(contractUtility.contractId, contractId)));
+  if (!existing) throw new AppError('not_found', 'utility not in contract');
+
+  const patch: Record<string, unknown> = {};
+  for (const key of ['monthlyAdvance', 'note'] as const) {
+    if (input[key] !== undefined) patch[key] = input[key];
+  }
+  if (Object.keys(patch).length === 0) return existing as UtilityRow;
+
+  const [row] = await db.update(contractUtility).set(patch)
+    .where(and(eq(contractUtility.id, utilityId), eq(contractUtility.contractId, contractId)))
+    .returning();
+  return row! as UtilityRow;
 }
 
 export async function listContractUtilities(db: DB, orgId: string, contractId: string, allowedPropertyIds: string[] | null): Promise<UtilityRow[]> {

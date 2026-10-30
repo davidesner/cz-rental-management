@@ -5,6 +5,7 @@ import { AppError } from '../errors.js';
 import { expectedForMonth, allocate, UTILITY_ORDER, type UtilityKind } from '../lib/allocation.js';
 import { matchPayments, computeDueDate, type MonthSlot } from '../lib/payment-matching.js';
 import { validAt } from '../lib/temporal.js';
+import { effectiveEndDate } from '../lib/contract-period.js';
 
 export interface AppliedPaymentBreakdown {
   paymentId: string;
@@ -75,6 +76,10 @@ export async function paymentBreakdown(
   ));
   const reductions = await db.select().from(rentReduction).where(eq(rentReduction.contractId, contractId));
 
+  // A renewing lease runs through the whole requested period, not just up to
+  // its original end date.
+  const contractEnd = effectiveEndDate(c, periodTo);
+
   // Build month slots
   const slots: MonthSlot[] = [];
   const [y0, m0] = periodFrom.split('-').map(Number) as [number, number];
@@ -84,7 +89,7 @@ export async function paymentBreakdown(
     const monthStr = `${y}-${String(m).padStart(2, '0')}`;
     const monthFirst = `${monthStr}-01`;
     const exp = expectedForMonth(
-      y, m, c.startDate, c.endDate ?? null,
+      y, m, c.startDate, contractEnd,
       terms.map(t => ({ validFrom: t.validFrom, validTo: t.validTo, baseRent: t.baseRent, serviceAdvance: t.serviceAdvance })),
       utilities.map(u => ({ kind: u.kind as UtilityKind, validFrom: u.validFrom, validTo: u.validTo, monthlyAdvance: u.monthlyAdvance })),
     );

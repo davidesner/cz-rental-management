@@ -1,10 +1,23 @@
 import 'dotenv/config';
+import { mcp } from '@better-auth/mcp';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
+import { jwt } from 'better-auth/plugins';
 import { eq } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
 import * as schema from '../db/schema.js';
 import { createOrganization } from '../services/organization.js';
+import {
+  checkClientRegistration,
+  DISABLED_AUTH_PATHS,
+  JWT_ALG,
+  MCP_ACCESS_TOKEN_TTL_SECONDS,
+  MCP_SCOPE,
+  mcpResource,
+  RegistrationRejected,
+  REGISTER_RATE_LIMIT,
+} from './mcp-oauth.js';
 
 function requireEnv(name: string, minLength = 0): string {
   const value = process.env[name];
@@ -51,15 +64,25 @@ export function resolveTrustedOrigins(baseURL: string): string[] {
   );
 }
 
-export function createAuth(db: DB) {
-  const secret = requireEnv('BETTER_AUTH_SECRET', 32);
-  // Prefer an explicit BETTER_AUTH_URL. On Vercel preview deployments where it
-  // isn't set (each preview has a distinct URL), fall back to the per-deployment
-  // VERCEL_URL that Vercel auto-populates.
+/**
+ * The app's public origin. Prefer an explicit BETTER_AUTH_URL. On Vercel
+ * preview deployments where it isn't set (each preview has a distinct URL),
+ * fall back to the per-deployment VERCEL_URL that Vercel auto-populates.
+ *
+ * It also names the remote MCP resource (`<baseURL>/mcp`) and the OAuth
+ * issuer, so it must be exactly the origin agents are given.
+ */
+export function resolveBaseUrl(): string {
   const explicitBaseUrl = process.env.BETTER_AUTH_URL;
   const vercelUrl = process.env.VERCEL_URL;
-  const baseURL = explicitBaseUrl
+  return explicitBaseUrl
     ?? (vercelUrl ? `https://${vercelUrl}` : requireEnv('BETTER_AUTH_URL'));
+}
+
+export function createAuth(db: DB) {
+  const secret = requireEnv('BETTER_AUTH_SECRET', 32);
+  const baseURL = resolveBaseUrl();
+  const resource = mcpResource(baseURL);
   const trustedOrigins = resolveTrustedOrigins(baseURL);
 
   // Sign-up is disabled in production (manual user provisioning via scripts/create-user.ts).
@@ -75,6 +98,14 @@ export function createAuth(db: DB) {
         session: schema.session,
         verification: schema.verification,
         rateLimit: schema.rateLimit,
+        jwks: schema.jwks,
+        oauthClient: schema.oauthClient,
+        oauthResource: schema.oauthResource,
+        oauthClientResource: schema.oauthClientResource,
+        oauthRefreshToken: schema.oauthRefreshToken,
+        oauthAccessToken: schema.oauthAccessToken,
+        oauthConsent: schema.oauthConsent,
+        oauthClientAssertion: schema.oauthClientAssertion,
       },
     }),
     secret,
@@ -103,6 +134,42 @@ export function createAuth(db: DB) {
       max: 100,
       storage: 'database',
       modelName: 'rateLimit',
+    },
+    disabledPaths: [...DISABLED_AUTH_PATHS],
+    plugins: [
+      // Signs the MCP access tokens. No session JWT in a `set-auth-jwt` header:
+      // the only JWTs this app issues are OAuth access tokens.
+      jwt({ disableSettingJwtHeader: true, jwks: { keyPairConfig: { alg: JWT_ALG, crv: 'Ed25519' } } }),
+      // OAuth 2.1 authorization server for the remote MCP endpoint (server/mcp/).
+      // The login page resumes the flow by posting the signed `oauth_query`
+      // with the sign-in; the consent page is src/pages/OAuthConsent.tsx.
+      mcp({
+        resource,
+        loginPage: '/login',
+        consentPage: '/oauth/consent',
+        scopes: ['openid', 'profile', 'email', 'offline_access', MCP_SCOPE],
+        resources: [{ identifier: resource, allowedScopes: [MCP_SCOPE, 'offline_access'] }],
+        // The resource row is seeded once (default `insertOnly`). A release that
+        // changes `allowedScopes` above must deploy once with
+        // `resourceSeedMode: 'merge'`, or the stored row keeps the old scopes.
+        resourceSeedMode: 'insertOnly',
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        clientRegistrationDefaultApplicationType: 'infer',
+        accessTokenExpiresIn: MCP_ACCESS_TOKEN_TTL_SECONDS,
+        rateLimit: { register: REGISTER_RATE_LIMIT },
+      }),
+    ],
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== '/oauth2/register') return;
+        try {
+          checkClientRegistration(ctx.body);
+        } catch (e) {
+          if (!(e instanceof RegistrationRejected)) throw e;
+          throw new APIError('BAD_REQUEST', { error: e.error, error_description: `rejected: ${e.field}` });
+        }
+      }),
     },
     advanced: {
       useSecureCookies: !baseURL.startsWith('http://localhost') && !baseURL.startsWith('http://127.0.0.1'),

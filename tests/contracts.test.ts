@@ -293,4 +293,95 @@ describe('contracts REST', () => {
       await client.close();
     }
   });
+
+  describe('automatic renewal (prolongace)', () => {
+    const json = { 'content-type': 'application/json' };
+
+    it('stores autoRenew + renewalMonths and reports the rolled-forward end', async () => {
+      const { client, app, cookie, property, tenant } = await setup();
+      try {
+        const res = await app.request('/api/contracts', {
+          method: 'POST', headers: { ...json, cookie },
+          body: JSON.stringify({
+            propertyId: property.id, tenantId: tenant.id,
+            startDate: '2020-01-01', endDate: '2020-12-31', autoRenew: true, renewalMonths: 12,
+          }),
+        });
+        expect(res.status).toBe(201);
+        const ctr = (await res.json() as any).contract;
+        expect(ctr.endDate).toBe('2020-12-31'); // the original end is kept
+        expect(ctr.autoRenew).toBe(true);
+        expect(ctr.renewalMonths).toBe(12);
+        // Rolled forward to the renewal period running today: a year-end on or after today.
+        const today = new Date().toISOString().slice(0, 10);
+        expect(ctr.effectiveEndDate >= today).toBe(true);
+        expect(ctr.effectiveEndDate.endsWith('-12-31')).toBe(true);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('refuses autoRenew without an end date or a period length', async () => {
+      const { client, app, cookie, property, tenant } = await setup();
+      try {
+        for (const body of [
+          { startDate: '2024-01-01', autoRenew: true, renewalMonths: 12 },
+          { startDate: '2024-01-01', endDate: '2024-12-31', autoRenew: true },
+        ]) {
+          const res = await app.request('/api/contracts', {
+            method: 'POST', headers: { ...json, cookie },
+            body: JSON.stringify({ propertyId: property.id, tenantId: tenant.id, ...body }),
+          });
+          expect(res.status).toBe(422);
+        }
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('switching renewal off ends the contract at the end of the current period', async () => {
+      const { client, app, cookie, property, tenant } = await setup();
+      try {
+        const ctr = (await (await app.request('/api/contracts', {
+          method: 'POST', headers: { ...json, cookie },
+          body: JSON.stringify({
+            propertyId: property.id, tenantId: tenant.id,
+            startDate: '2020-01-01', endDate: '2020-12-31', autoRenew: true, renewalMonths: 12,
+          }),
+        })).json() as any).contract;
+
+        const off = (await (await app.request(`/api/contracts/${ctr.id}`, {
+          method: 'PATCH', headers: { ...json, cookie },
+          body: JSON.stringify({ autoRenew: false }),
+        })).json() as any).contract;
+        expect(off.autoRenew).toBe(false);
+        expect(off.endDate).toBe(ctr.effectiveEndDate);
+        expect(off.effectiveEndDate).toBe(ctr.effectiveEndDate);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('an explicit endDate wins when switching renewal off', async () => {
+      const { client, app, cookie, property, tenant } = await setup();
+      try {
+        const ctr = (await (await app.request('/api/contracts', {
+          method: 'POST', headers: { ...json, cookie },
+          body: JSON.stringify({
+            propertyId: property.id, tenantId: tenant.id,
+            startDate: '2020-01-01', endDate: '2020-12-31', autoRenew: true, renewalMonths: 12,
+          }),
+        })).json() as any).contract;
+
+        const off = (await (await app.request(`/api/contracts/${ctr.id}`, {
+          method: 'PATCH', headers: { ...json, cookie },
+          body: JSON.stringify({ autoRenew: false, endDate: '2022-03-31' }),
+        })).json() as any).contract;
+        expect(off.endDate).toBe('2022-03-31');
+        expect(off.effectiveEndDate).toBe('2022-03-31');
+      } finally {
+        await client.close();
+      }
+    });
+  });
 });

@@ -4,6 +4,8 @@ MCP (Model Context Protocol) server for the Czech rental-management app. Exposes
 
 This package is a thin client: it does not host data itself. It talks to a running rental-management REST backend via `RENTAL_API_URL` + a per-user API token.
 
+> **Prefer the remote MCP endpoint.** The rental-management app serves the same tools itself at `https://<your-app>/mcp` (streamable HTTP, OAuth sign-in, no token to copy). Use this package only for clients that cannot connect to a remote MCP server.
+
 ## Usage
 
 Add to your MCP client config (e.g. `.mcp.json`):

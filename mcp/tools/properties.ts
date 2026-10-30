@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { FastMCP } from 'fastmcp';
+import type { ToolSink } from './sink.js';
 import type { RentalApiClient } from '../client.js';
 
 const ListPropertiesInput = z.object({});
@@ -44,7 +44,7 @@ export async function updateProperty(client: RentalApiClient, args: z.infer<type
   return data.property;
 }
 
-export function addPropertyTools(server: FastMCP, client: RentalApiClient) {
+export function addPropertyTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'properties_list',
     description: 'List all properties in the current organization.',

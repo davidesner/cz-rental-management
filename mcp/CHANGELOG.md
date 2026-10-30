@@ -9,6 +9,33 @@ Bump verze v `mcp/package.json` je zároveň spouštěč releasu — po mergi do
 publikuje job `release-mcp` v `.github/workflows/ci.yml` balíček na npm. Verze
 v konstruktoru `FastMCP` v `mcp/index.ts` musí sedět, jinak CI failne.
 
+## 0.4.0 — 2026-10-30
+
+### Added
+
+- `contracts_create` a `contracts_update` berou `autoRenew` a `renewalMonths`
+  pro smlouvy s automatickým prodloužením (prolongací) za stejných podmínek.
+  `endDate` zůstává původní konec doby určité; `contracts_get` a
+  `contracts_list` vrací navíc `effectiveEndDate` (konec právě běžícího období).
+  Vypnutí `autoRenew` bez `endDate` ukončí smlouvu ke konci aktuálního období.
+
+### Changed
+
+- Tooly se registrují přes rozhraní `ToolSink` (`tools/sink.ts`) a jednu funkci
+  `addAllTools` (`tools/index.ts`) místo přímo do `FastMCP`. Stejné definice teď
+  servíruje i remote MCP endpoint aplikace (`/mcp`).
+- README doporučuje remote MCP; tenhle balíček je fallback pro klienty bez něj.
+
+## 0.3.0 — 2026-09-04
+
+### Added
+
+- `contract_utilities_update` — oprava existujícího řádku média na místě (překlep
+  v záloze, zastaralá poznámka). `kind` a `validFrom` zůstávají neměnné, protože
+  určují pozici řádku v per-kind SCD2 řetězci; skutečná změna od data patří dál
+  do `contract_utilities_add`. Do teď šel řádek média jen založit, takže stará
+  poznámka se nedala přepsat — jen překrýt novým řádkem.
+
 ## 0.2.0 — 2026-08-29
 
 První verze publikovaná na npm. `0.1.0` na registry nikdy nebyla — existovala jen

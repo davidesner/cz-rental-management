@@ -312,7 +312,7 @@ export function CostStatementsPage() {
               </select>
             </div>
             <div>
-              <div className="mb-1 flex items-center gap-1.5"><Label className="mb-0">Období</Label><Hint label="K čemu je období">Období říká, co náklad pokrývá. Při vyúčtování nájemníkovi se podle něj párují i platby stejného druhu, pokud období začíná uvnitř vyúčtovávaného roku. Náklad přes přelom roku rozděl na dva záznamy, každý ve svém kalendářním roce.</Hint></div>
+              <div className="mb-1 flex items-center gap-1.5"><Label className="mb-0">Období</Label><Hint label="K čemu je období">Období říká, co náklad pokrývá. Při vyúčtování nájemci se podle něj párují i platby stejného druhu, pokud období začíná uvnitř vyúčtovávaného roku. Náklad přes přelom roku rozděl na dva záznamy, každý ve svém kalendářním roce.</Hint></div>
               <div className="flex gap-2 mb-2">
                 <Button
                   type="button"
@@ -391,7 +391,7 @@ export function CostStatementsPage() {
             <div>
               <div className="mb-1 flex items-center gap-1.5">
               <Label className="mb-0">Částka úpravy (Kč)</Label>
-              <Hint label="K čemu je úprava">Část nákladů, kterou nájemník neplatí, třeba fond oprav nebo odměny výboru v předpisu SVJ. Záporná částka se od celkových nákladů odečte, kladná přičte. Předvyplní se z evidenčního listu nemovitosti podle délky období; můžeš ji přepsat.</Hint>
+              <Hint label="K čemu je úprava">Část nákladů, kterou nájemce neplatí, třeba fond oprav nebo odměny výboru v předpisu SVJ. Záporná částka se od celkových nákladů odečte, kladná přičte. Předvyplní se z evidenčního listu nemovitosti podle délky období; můžeš ji přepsat.</Hint>
               {autoFillLabel && !adjustmentTouched && <span className="text-xs text-soft">{autoFillLabel}</span>}
             </div>
               <Input

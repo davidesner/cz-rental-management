@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { api, ApiError, apiErrorMessage } from '@/lib/api';
 import { parseKorun } from '@/lib/money';
 import { fmtDate, fmtKc } from '@/lib/format';
@@ -18,12 +18,17 @@ import { TableEmpty, TableError } from '@/components/ui/table-error';
 import { Crumb } from '@/components/Layout';
 import { Hint } from '@/components/ui/hint';
 import { Status } from '@/components/ui/status';
+import { Agenda, reminderItems } from '@/components/Agenda';
 import { isActiveContract, isEndedContract, useContracts, useCurrentTermsMap } from '@/hooks/useContracts';
+import { useDashboard, type Period } from '@/hooks/useDashboard';
+import { useReminders } from '@/hooks/useReminders';
+import { IncomeCard } from './property/IncomeCard';
+import { CurrentLeaseCard } from './property/CurrentLeaseCard';
+import { CostsCard } from './property/CostsCard';
+import { ReconciliationsCard } from './property/ReconciliationsCard';
+import { EditPropertyDialog, type PropertyRow } from './property/EditPropertyDialog';
+import { DocRef } from './property/DocRef';
 
-interface Property {
-  id: string; name: string; address: string | null;
-  reconciliationSkill: string | null; note: string | null; createdAt: string;
-}
 interface Tariff {
   id: string; propertyId: string;
   validFrom: string; validTo: string | null;
@@ -33,25 +38,12 @@ interface Tariff {
   note: string | null;
 }
 
-function DocRef({ value }: { value: string | null }) {
-  if (!value) return <span className="text-soft">—</span>;
-  const isUrl = /^https?:\/\//.test(value);
-  if (isUrl) {
-    return (
-      <a href={value} target="_blank" rel="noreferrer" className="inline-block max-w-[200px] truncate align-bottom text-sm" title={value}>
-        {(() => { try { return new URL(value).hostname; } catch { return value; } })()}
-      </a>
-    );
-  }
-  return <span className="text-sm text-soft" title={value}>{value}</span>;
-}
-
 export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const property = useQuery({
     queryKey: ['property', id],
-    queryFn: () => api.get<{ property: Property }>(`/api/properties/${id}`),
+    queryFn: () => api.get<{ property: PropertyRow }>(`/api/properties/${id}`),
     enabled: !!id,
   });
   const tariffs = useQuery({
@@ -65,7 +57,26 @@ export function PropertyDetailPage() {
     .filter(c => c.propertyId === id)
     .sort((a, b) => Number(isEndedContract(b)) - Number(isEndedContract(a)) || b.startDate.localeCompare(a.startDate));
   const { map: termsMap } = useCurrentTermsMap(leases.map(c => c.id));
+  // The lease running today, or failing that the earliest one still to start.
+  const activeLease = leases.find(isActiveContract) ?? null;
+  const upcomingLease = activeLease ? null : [...leases].filter(c => !isEndedContract(c)).sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null;
+  const shownLease = activeLease ?? upcomingLease;
 
+  const now = new Date();
+  const [period, setPeriod] = useState<Period>({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const dashboard = useDashboard(period, { propertyId: id });
+
+  // Agenda: derived deadlines for this property plus manual reminders tied to it or to one of its leases.
+  const reminders = useReminders();
+  const leaseIds = new Set(leases.map(c => c.id));
+  const manual = reminderItems(
+    (reminders.query.data ?? []).filter(r => r.propertyId === id || (r.contractId !== null && leaseIds.has(r.contractId))),
+    r => r.contractId ? `/contracts/${r.contractId}` : `/properties/${id}`,
+    r => leases.find(c => c.id === r.contractId)?.tenantName ?? '',
+  );
+  const agenda = [...manual.filter(i => !i.done), ...dashboard.agenda].sort((a, b) => a.date.localeCompare(b.date)).concat(manual.filter(i => i.done));
+
+  const [editOpen, setEditOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     validFrom: '', totalSvjAdvanceCzk: '', deductibleAmountCzk: '',
@@ -106,67 +117,49 @@ export function PropertyDetailPage() {
       </div>
     );
   }
-  if (!property.data) return <p className="text-sm text-soft">Nemovitost nenalezena.</p>;
+  if (!property.data || !id) return <p className="text-sm text-soft">Nemovitost nenalezena.</p>;
   const p = property.data.property;
   const rows = [...(tariffs.data?.tariffs ?? [])].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
 
+  const occupancy = !contracts.data
+    ? null
+    : activeLease ? <Status tone="ok">Pronajato</Status>
+    : upcomingLease ? <Status tone="wait">Pronájem začne {fmtDate(upcomingLease.startDate)}</Status>
+    : <Status tone="soft">Volná</Status>;
+
   return (
     <>
-      <PageHeader crumb={<Crumb to="/properties">Nemovitosti</Crumb>} title={p.name} sub={p.address ?? undefined} />
+      <PageHeader
+        crumb={<Crumb to="/properties">Nemovitosti</Crumb>}
+        title={p.name}
+        sub={<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">{occupancy}{p.address && <span>{p.address}</span>}</span>}
+        actions={<Button variant="outline" onClick={() => setEditOpen(true)}><Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />Upravit</Button>}
+      />
 
-      <Card>
-        <CardHeader><CardTitle>Základní údaje</CardTitle></CardHeader>
-        <CardContent>
-          <KV className="max-w-xl">
-            <KVRow label="Adresa" className="font-normal">{p.address ?? <span className="text-soft">—</span>}</KVRow>
-            <KVRow label="Postup vyúčtování" className="font-normal">{p.reconciliationSkill ? <code>{p.reconciliationSkill}</code> : <span className="text-soft">—</span>}</KVRow>
-            <KVRow label="Poznámka" wide>{p.note ?? <span className="text-soft">—</span>}</KVRow>
-          </KV>
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-stretch gap-5">
+        <IncomeCard className="flex-[3_1_480px]" period={period} onPeriod={setPeriod} data={dashboard} hasLeases={leases.length > 0} />
+        <CurrentLeaseCard
+          className="flex-[1_1_280px]"
+          lease={shownLease}
+          upcoming={activeLease === null && upcomingLease !== null}
+          terms={shownLease ? termsMap[shownLease.id] : undefined}
+          debt={shownLease ? dashboard.debts.find(d => d.contractId === shownLease.id) : undefined}
+          loaded={!!contracts.data}
+        />
+      </div>
 
-      <Card className="overflow-hidden">
-        <CardHeader>
-          <CardTitle>Pronájmy</CardTitle>
-          <CardDescription>Kdo v nemovitosti bydlí a bydlel.</CardDescription>
-        </CardHeader>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nájemník</TableHead>
-              <TableHead>Stav</TableHead>
-              <TableHead>Období</TableHead>
-              <TableHead className="num">Měsíčně</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {contracts.isError && !contracts.data ? (
-              <TableError cols={4} onRetry={() => contracts.refetch()} />
-            ) : !contracts.data ? (
-              <TableSkeleton cols={4} rows={2} />
-            ) : leases.length === 0 ? (
-              <TableEmpty cols={4}>Zatím žádný pronájem této nemovitosti.</TableEmpty>
-            ) : leases.map(c => {
-              const t = termsMap[c.id];
-              const active = isActiveContract(c);
-              const ended = isEndedContract(c);
-              return (
-                <TableRow key={c.id} className={ended ? 'text-soft' : undefined}>
-                  <TableCell><Link to={`/contracts/${c.id}`} className="font-medium text-ink">{c.tenantName}</Link></TableCell>
-                  <TableCell>
-                    {active ? <Status tone="ok">Běží</Status> : ended ? <Status tone="soft">Ukončen</Status> : <Status tone="wait">Začne {fmtDate(c.startDate)}</Status>}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{fmtDate(c.startDate)} až {c.endDate ? fmtDate(c.endDate) : 'dosud'}</TableCell>
-                  <TableCell className="num">{t === undefined ? <span className="text-wait">…</span> : t.monthlyTotal !== null ? fmtKc(t.monthlyTotal) : <span className="text-soft">—</span>}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </Card>
+      <Agenda
+        items={agenda}
+        isPending={reminders.query.isPending || dashboard.isPending}
+        newDefaults={{ propertyId: id }}
+        contracts={leases.map(c => ({ id: c.id, label: c.tenantName }))}
+        emptyText="Nic nečeká. Nájem je zaplacený a žádná připomínka k této nemovitosti není otevřená."
+      />
+
+      <CostsCard propertyId={id} propertyName={p.name} />
 
       <Card className="overflow-hidden">
-        <CardHeader className="flex-row items-center justify-between gap-3">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
           <div>
             <CardTitle>Evidenční list (předpis SVJ)</CardTitle>
             <CardDescription>Nový záznam vždy uzavře předchozí. Aktuální je ten bez konce platnosti.</CardDescription>
@@ -208,6 +201,67 @@ export function PropertyDetailPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <ReconciliationsCard leases={leases} leasesLoaded={!!contracts.data} />
+
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <CardTitle>Pronájmy</CardTitle>
+          <CardDescription>Kdo v nemovitosti bydlí a bydlel.</CardDescription>
+        </CardHeader>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nájemník</TableHead>
+              <TableHead>Stav</TableHead>
+              <TableHead>Období</TableHead>
+              <TableHead className="num">Měsíčně</TableHead>
+              <TableHead className="num">Kauce</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {contracts.isError && !contracts.data ? (
+              <TableError cols={5} onRetry={() => contracts.refetch()} />
+            ) : !contracts.data ? (
+              <TableSkeleton cols={5} rows={2} />
+            ) : leases.length === 0 ? (
+              <TableEmpty cols={5}>Zatím žádný pronájem této nemovitosti.</TableEmpty>
+            ) : leases.map(c => {
+              const t = termsMap[c.id];
+              const active = isActiveContract(c);
+              const ended = isEndedContract(c);
+              return (
+                <TableRow key={c.id} className={ended ? 'text-soft' : undefined}>
+                  <TableCell><Link to={`/contracts/${c.id}`} className="font-medium text-ink">{c.tenantName}</Link></TableCell>
+                  <TableCell>
+                    {active ? <Status tone="ok">Běží</Status> : ended ? <Status tone="soft">Ukončen</Status> : <Status tone="wait">Začne {fmtDate(c.startDate)}</Status>}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">{fmtDate(c.startDate)} až {c.endDate ? fmtDate(c.endDate) : 'dosud'}</TableCell>
+                  <TableCell className="num">{t === undefined ? <span className="text-wait">…</span> : t.monthlyTotal !== null ? fmtKc(t.monthlyTotal) : <span className="text-soft">—</span>}</TableCell>
+                  <TableCell className="num">{c.securityDeposit ? fmtKc(c.securityDeposit) : <span className="text-soft">—</span>}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+          <CardTitle>Základní údaje</CardTitle>
+          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}><Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />Upravit</Button>
+        </CardHeader>
+        <CardContent>
+          <KV className="max-w-xl">
+            <KVRow label="Adresa" className="font-normal">{p.address ?? <span className="text-soft">—</span>}</KVRow>
+            <KVRow label={<span className="inline-flex items-center gap-1">Postup vyúčtování<Hint label="K čemu je postup vyúčtování">Název postupu, podle kterého agent dělá roční vyúčtování této nemovitosti.</Hint></span>} className="font-normal">{p.reconciliationSkill ? <code>{p.reconciliationSkill}</code> : <span className="text-soft">—</span>}</KVRow>
+            <KVRow label="Evidováno od" className="font-normal">{fmtDate(p.createdAt)}</KVRow>
+            <KVRow label="Poznámka" wide className="whitespace-pre-line">{p.note ?? <span className="text-soft">—</span>}</KVRow>
+          </KV>
+        </CardContent>
+      </Card>
+
+      {editOpen && <EditPropertyDialog property={p} onClose={() => setEditOpen(false)} />}
 
       {open && (
         <Modal

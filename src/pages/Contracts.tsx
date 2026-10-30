@@ -55,7 +55,7 @@ export function ContractsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nájemník</TableHead>
+              <TableHead>Nájemce</TableHead>
               <TableHead>Nemovitost</TableHead>
               <TableHead className="num">Výše nájmu</TableHead>
               <TableHead>Období</TableHead>

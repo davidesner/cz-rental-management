@@ -87,7 +87,7 @@ export function OAuthConsentPage() {
           <>
             <CardContent className="space-y-3 text-sm">
               <p>
-                Bude moci číst a měnit nemovitosti, nájemníky, smlouvy, platby, vyúčtování a bankovní integrace
+                Bude moci číst a měnit nemovitosti, nájemce, smlouvy, platby, vyúčtování a bankovní integrace
                 se stejnými právy, jako máte vy.
               </p>
               <p className="text-soft">

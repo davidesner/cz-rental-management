@@ -193,7 +193,7 @@ export function DashboardPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nájemník a nemovitost</TableHead>
+              <TableHead>Nájemce a nemovitost</TableHead>
               <TableHead className="num">Dluh</TableHead>
               <TableHead>Po splatnosti</TableHead>
               <TableHead><span className="sr-only">Akce</span></TableHead>

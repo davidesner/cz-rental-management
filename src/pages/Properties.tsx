@@ -59,7 +59,7 @@ export function PropertiesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Nemovitost</TableHead>
-              <TableHead>Aktuální nájemník</TableHead>
+              <TableHead>Aktuální nájemce</TableHead>
               <TableHead>Postup vyúčtování</TableHead>
             </TableRow>
           </TableHeader>

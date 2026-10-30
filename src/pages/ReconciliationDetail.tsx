@@ -434,7 +434,7 @@ export function ReconciliationDetailPage() {
               <TableRow>
                 <TableCell colSpan={4}>
                   Celkový rozdíl
-                  <span className="ml-2 font-normal text-soft">{totalDiff > 0 ? 'vrátit nájemníkovi' : totalDiff < 0 ? 'nájemník doplácí' : 'vyrovnáno'}</span>
+                  <span className="ml-2 font-normal text-soft">{totalDiff > 0 ? 'vrátit nájemci' : totalDiff < 0 ? 'nájemce doplácí' : 'vyrovnáno'}</span>
                   {isStale && <span className="ml-2 text-sm font-normal text-soft">(uložený)</span>}
                 </TableCell>
                 <TableCell className={cn('num', diffTone(totalDiff))}>{fmtKcSigned(totalDiff)}</TableCell>
@@ -451,7 +451,7 @@ export function ReconciliationDetailPage() {
       </Card>
 
       <p className="text-sm text-soft">
-        Kladný rozdíl znamená, že nájemník zaplatil na zálohách víc, než stály skutečné náklady, a částka se mu vrací. Záporný rozdíl doplácí.
+        Kladný rozdíl znamená, že nájemce zaplatil na zálohách víc, než stály skutečné náklady, a částka se mu vrací. Záporný rozdíl doplácí.
         Období párování plateb se u služeb a energií řídí vyúčtováním nákladů, které začíná uvnitř období vyúčtování.
       </p>
     </>

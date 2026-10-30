@@ -151,9 +151,9 @@ export function NewContractDialog({ onClose, onCreated, propertyId }: Props) {
           </select>
         </div>
         <div>
-          <Label htmlFor="nc-tenant">Nájemník</Label>
+          <Label htmlFor="nc-tenant">Nájemce</Label>
           <select id="nc-tenant" className="select-native" value={form.tenantId} onChange={e => set('tenantId')(e.target.value)}>
-            <option value="">Vyber nájemníka…</option>
+            <option value="">Vyber nájemce…</option>
             {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
@@ -178,7 +178,7 @@ export function NewContractDialog({ onClose, onCreated, propertyId }: Props) {
       <div className="border-t border-rule pt-4">
         <div className="mb-3 flex items-center gap-1.5">
           <span className="font-medium">Měsíční předpis</span>
-          <Hint label="Co je měsíční předpis">Částky, které nájemník platí každý měsíc od začátku smlouvy. Nájem je příjem pronajímatele, záloha na služby SVJ a energie se jednou za rok vyúčtují proti skutečným nákladům.</Hint>
+          <Hint label="Co je měsíční předpis">Částky, které nájemce platí každý měsíc od začátku smlouvy. Nájem je příjem pronajímatele, záloha na služby SVJ a energie se jednou za rok vyúčtují proti skutečným nákladům.</Hint>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

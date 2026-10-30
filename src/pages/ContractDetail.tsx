@@ -526,7 +526,7 @@ export function CostStatementDialog({ fixedPropertyId, properties, onClose, onCr
           </select>
         </div>
         <div>
-          <div className="mb-1 flex items-center gap-1.5"><Label className="mb-0">Období</Label><Hint label="K čemu je období">Období říká, co náklad pokrývá. Při vyúčtování nájemníkovi se podle něj párují i platby stejného druhu, pokud období začíná uvnitř vyúčtovávaného roku. Náklad přes přelom roku rozděl na dva záznamy, každý ve svém kalendářním roce.</Hint></div>
+          <div className="mb-1 flex items-center gap-1.5"><Label className="mb-0">Období</Label><Hint label="K čemu je období">Období říká, co náklad pokrývá. Při vyúčtování nájemci se podle něj párují i platby stejného druhu, pokud období začíná uvnitř vyúčtovávaného roku. Náklad přes přelom roku rozděl na dva záznamy, každý ve svém kalendářním roce.</Hint></div>
           <div className="flex gap-2 mb-2">
             <Button type="button" variant={periodMode === 'year' ? 'default' : 'outline'} size="sm" onClick={() => setPeriodMode('year')}>Rok</Button>
             <Button type="button" variant={periodMode === 'custom' ? 'default' : 'outline'} size="sm" onClick={() => setPeriodMode('custom')}>Vlastní</Button>
@@ -562,7 +562,7 @@ export function CostStatementDialog({ fixedPropertyId, properties, onClose, onCr
         <div>
           <div className="mb-1 flex items-center gap-1.5">
               <Label className="mb-0">Částka úpravy (Kč)</Label>
-              <Hint label="K čemu je úprava">Část nákladů, kterou nájemník neplatí, třeba fond oprav nebo odměny výboru v předpisu SVJ. Záporná částka se od celkových nákladů odečte, kladná přičte. Předvyplní se z evidenčního listu nemovitosti podle délky období; můžeš ji přepsat.</Hint>
+              <Hint label="K čemu je úprava">Část nákladů, kterou nájemce neplatí, třeba fond oprav nebo odměny výboru v předpisu SVJ. Záporná částka se od celkových nákladů odečte, kladná přičte. Předvyplní se z evidenčního listu nemovitosti podle délky období; můžeš ji přepsat.</Hint>
               {autoFillLabel && !adjustmentTouched && <span className="text-xs text-soft">{autoFillLabel}</span>}
             </div>
           <Input type="text" placeholder="0.00" value={form.adjustmentAmount} onChange={e => { setAdjustmentTouched(true); setAutoFillLabel(null); setForm({ ...form, adjustmentAmount: e.target.value }); }} />
@@ -740,7 +740,7 @@ function ComputeDialog({ contractId, onClose, onCreated }: ComputeDialogProps) {
   });
 
   return (
-    <Modal title="Spočítat vyúčtování nájemníkovi" onClose={onClose} className="max-w-lg" footer={<>
+    <Modal title="Spočítat vyúčtování nájemci" onClose={onClose} className="max-w-lg" footer={<>
         <Button variant="outline" onClick={onClose}>Zrušit</Button>
         <Button
           onClick={() => computeMutation.mutate()}
@@ -1297,7 +1297,7 @@ function RentReductionDialog({ contractId, prefillMonth, onClose, onCreated }: R
         </div>
         <div>
           <Label>Důvod (volitelné)</Label>
-          <Input value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Např. nájemník uhradil opravu pronajímatele" />
+          <Input value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Např. nájemce uhradil opravu pronajímatele" />
         </div>
         {err && <p className="text-sm text-late">{err}</p>}
     </Modal>
@@ -1384,8 +1384,8 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
             <TableHead>Měsíc</TableHead>
             <TableHead>Splatnost</TableHead>
             <TableHead className="num"><span className="inline-flex items-center gap-1">Plán<Hint label="Co je plán">Měsíční předpis podle smlouvy: nájem, záloha SVJ a energie.</Hint></span></TableHead>
-            <TableHead className="num"><span className="inline-flex items-center gap-1">Srážka<Hint label="Co je srážka">Jednorázové snížení nájmu v daném měsíci, třeba když nájemník zaplatil opravu za pronajímatele. Snižuje nájem, ne zálohy.</Hint></span></TableHead>
-            <TableHead className="num"><span className="inline-flex items-center gap-1">Předepsáno<Hint label="Co je předepsáno">Plán po odečtení srážky, tedy částka, kterou měl nájemník za měsíc skutečně zaplatit. Platba se nejdřív počítá na nájem, pak na zálohu SVJ a energie.</Hint></span></TableHead>
+            <TableHead className="num"><span className="inline-flex items-center gap-1">Srážka<Hint label="Co je srážka">Jednorázové snížení nájmu v daném měsíci, třeba když nájemce zaplatil opravu za pronajímatele. Snižuje nájem, ne zálohy.</Hint></span></TableHead>
+            <TableHead className="num"><span className="inline-flex items-center gap-1">Předepsáno<Hint label="Co je předepsáno">Plán po odečtení srážky, tedy částka, kterou měl nájemce za měsíc skutečně zaplatit. Platba se nejdřív počítá na nájem, pak na zálohu SVJ a energie.</Hint></span></TableHead>
             <TableHead className="num">Zaplaceno</TableHead>
             <TableHead className="num">Rozdíl</TableHead>
           </TableRow>
@@ -1567,7 +1567,7 @@ function UdalostiTab({ contractId, contract, terms, reconciliations }: UdalostiP
   for (const r of reconciliations) {
     if (r.status !== 'draft') continue;
     const deadline = reconciliationDeadline(r.periodTo);
-    derived.push({ key: `rec:${r.id}`, date: deadline, title: `Dokončit vyúčtování ${fmtDate(r.periodFrom)} až ${fmtDate(r.periodTo)}`, ref: 'nájemníkovi do 4 měsíců po konci období', href: `/reconciliations/${r.id}`, reminderId: null, done: false, ...dueLabel(deadline, today) });
+    derived.push({ key: `rec:${r.id}`, date: deadline, title: `Dokončit vyúčtování ${fmtDate(r.periodFrom)} až ${fmtDate(r.periodTo)}`, ref: 'nájemci do 4 měsíců po konci období', href: `/reconciliations/${r.id}`, reminderId: null, done: false, ...dueLabel(deadline, today) });
   }
   const manual = reminderItems((reminders.query.data ?? []).filter(r => r.contractId === contractId), () => `/contracts/${contractId}?tab=udalosti`, () => '');
   const items = [...manual.filter(i => !i.done), ...derived].sort((a, b) => a.date.localeCompare(b.date)).concat(manual.filter(i => i.done));
@@ -1780,7 +1780,7 @@ export function ContractDetailPage() {
       <PageHeader
         crumb={<Crumb to="/contracts">Pronájmy</Crumb>}
         title={contract ? <Link to={`/properties/${contract.propertyId}`} className="text-ink hover:no-underline">{contract.propertyName}</Link> : ' '}
-        sub={contract && <>Nájemník · <span className="text-ink">{contract.tenantName}</span></>}
+        sub={contract && <>Nájemce · <span className="text-ink">{contract.tenantName}</span></>}
       />
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
@@ -1788,7 +1788,7 @@ export function ContractDetailPage() {
           <TabsTrigger value="prehled">Přehled</TabsTrigger>
           <TabsTrigger value="platby">Platby</TabsTrigger>
           <TabsTrigger value="sluzby">Služby / Energie</TabsTrigger>
-          <TabsTrigger value="vyuctovani">Vyúčtování nájemníkovi</TabsTrigger>
+          <TabsTrigger value="vyuctovani">Vyúčtování nájemci</TabsTrigger>
           <TabsTrigger value="udalosti">Události</TabsTrigger>
         </TabsList>
 
@@ -1996,7 +1996,7 @@ export function ContractDetailPage() {
                   <TableHead>Druh</TableHead>
                   <TableHead>Období</TableHead>
                   <TableHead className="num">Celkem</TableHead>
-                  <TableHead className="num"><span className="inline-flex items-center gap-1">Úprava<Hint label="Co je úprava">Část nákladů, kterou nese pronajímatel a nájemníkovi se nevyúčtovává, třeba fond oprav v předpisu SVJ.</Hint></span></TableHead>
+                  <TableHead className="num"><span className="inline-flex items-center gap-1">Úprava<Hint label="Co je úprava">Část nákladů, kterou nese pronajímatel a nájemci se nevyúčtovává, třeba fond oprav v předpisu SVJ.</Hint></span></TableHead>
                   <TableHead className="num">K vyúčtování</TableHead>
                   <TableHead>Poznámka k úpravě</TableHead>
                   <TableHead>Doklad</TableHead>
@@ -2033,12 +2033,12 @@ export function ContractDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* ── Tab 4: Vyúčtování nájemníkovi ──────────────────────────────── */}
+        {/* ── Tab 4: Vyúčtování nájemci ──────────────────────────────── */}
         <TabsContent value="vyuctovani">
           <Card className="overflow-hidden">
             <CardHeader className="flex-row items-center justify-between gap-3">
               <div>
-                <CardTitle>Vyúčtování nájemníkovi</CardTitle>
+                <CardTitle>Vyúčtování nájemci</CardTitle>
                 <CardDescription>Roční porovnání zaplacených záloh se skutečnými náklady.</CardDescription>
               </div>
               {id && (
@@ -2076,7 +2076,7 @@ export function ContractDetailPage() {
                         </TableCell>
                         <TableCell className={cn('num font-semibold', totalDiff < 0 ? 'text-late' : totalDiff > 0 ? 'text-accent' : 'text-soft')}>
                           {fmtKcSigned(totalDiff)}
-                          <div className="text-sm font-normal text-soft">{totalDiff > 0 ? 'vrátit nájemníkovi' : totalDiff < 0 ? 'nájemník doplácí' : 'vyrovnáno'}</div>
+                          <div className="text-sm font-normal text-soft">{totalDiff > 0 ? 'vrátit nájemci' : totalDiff < 0 ? 'nájemce doplácí' : 'vyrovnáno'}</div>
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right">
                           <Link to={`/reconciliations/${r.id}`} className="text-sm">Otevřít</Link>

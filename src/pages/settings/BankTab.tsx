@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
 import { api, apiErrorMessage } from '@/lib/api';
+import { fmtDateTime } from '@/lib/format';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
+import { Status } from '@/components/ui/status';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
-import { TableError } from '@/components/ui/table-error';
+import { TableEmpty, TableError } from '@/components/ui/table-error';
 import { IntegrationDialog, type BankIntegration } from './IntegrationDialog';
 import { IntegrationMethodChooser, type BankIntegrationKind } from './IntegrationMethodChooser';
 import { TransactionInbox } from './TransactionInbox';
@@ -24,30 +28,14 @@ type TestBankIntegrationResult =
   | { ok: true; mailboxExists: number; fromMatches: number; filterMatches: number; truncated: boolean; sinceDays: number }
   | { ok: false; error: string };
 
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('cs-CZ');
-}
-
 export function StatusPill({ integration }: { integration: BankIntegration }) {
   // Mirrors computePairingHealth on the server: not configured / working /
   // failing. An inactive integration reads as "not configured" because it
   // collects nothing.
-  if (!integration.active) {
-    return <span className="text-xs rounded-full px-2 py-0.5 bg-muted text-muted-foreground">Vypnuto</span>;
-  }
-  if (integration.lastSyncStatus === 'error') {
-    return (
-      <span
-        className="text-xs rounded-full px-2 py-0.5 bg-red-100 text-red-800"
-        title={integration.lastSyncError ?? undefined}
-      >Chyba</span>
-    );
-  }
-  if (integration.lastSyncStatus === 'ok') {
-    return <span className="text-xs rounded-full px-2 py-0.5 bg-green-100 text-green-800">Vše v pořádku</span>;
-  }
-  return <span className="text-xs rounded-full px-2 py-0.5 bg-muted text-muted-foreground">Nesynchronizováno</span>;
+  if (!integration.active) return <Status tone="soft">Vypnuto</Status>;
+  if (integration.lastSyncStatus === 'error') return <Status tone="late" title={integration.lastSyncError ?? undefined}>Chyba</Status>;
+  if (integration.lastSyncStatus === 'ok') return <Status tone="ok">Vše v pořádku</Status>;
+  return <Status tone="wait">Nesynchronizováno</Status>;
 }
 
 export function BankTab() {
@@ -76,6 +64,7 @@ export function BankTab() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['bank-integrations'] });
     qc.invalidateQueries({ queryKey: ['bank-transactions'] });
+    qc.invalidateQueries({ queryKey: ['payments'] });
   };
 
   const test = useMutation({
@@ -88,7 +77,7 @@ export function BankTab() {
       // truncated: the from-search matched more messages than we fetched
       // headers for (capped for speed on a shared mailbox), so filterMatches
       // is a floor, not an exact count.
-      const truncatedNote = r.truncated ? ' Počet je spodní odhad — zkontrolována byla jen část zpráv od tohoto odesílatele.' : '';
+      const truncatedNote = r.truncated ? ' Počet je spodní odhad, zkontrolována byla jen část zpráv od tohoto odesílatele.' : '';
       setNotice(r.filterMatches > 0
         ? {
             kind: 'ok',
@@ -110,7 +99,7 @@ export function BankTab() {
     onSuccess: ({ result }) => {
       invalidate();
       setNotice(result.status === 'ok'
-        ? { kind: 'ok', text: `Hotovo — ${result.fetched} zpráv, ${result.created} nových, ${result.matched} spárováno.` }
+        ? { kind: 'ok', text: `Hotovo: ${result.fetched} zpráv, ${result.created} nových, ${result.matched} spárováno.` }
         : { kind: 'err', text: `Synchronizace skončila chybou: ${result.error ?? 'neznámá chyba'}` });
     },
     onError: (e: unknown) => setNotice({ kind: 'err', text: apiErrorMessage(e) }),
@@ -126,28 +115,17 @@ export function BankTab() {
   const busy = test.isPending || sync.isPending || remove.isPending;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Bankovní integrace</h2>
-        <Button onClick={() => setDialog({ mode: 'chooser' })}>Nová integrace</Button>
-      </div>
-
-      {notice && (
-        <Card className={`p-4 flex items-start justify-between gap-4 ${
-          notice.kind === 'ok' ? 'border-green-500 bg-green-50'
-          : notice.kind === 'warn' ? 'border-amber-500 bg-amber-100'
-          : 'border-destructive bg-red-50'
-        }`}>
-          <p className={`text-sm ${
-            notice.kind === 'ok' ? 'text-green-900'
-            : notice.kind === 'warn' ? 'text-amber-900'
-            : 'text-red-900'
-          }`}>{notice.text}</p>
-          <Button size="sm" variant="outline" onClick={() => setNotice(null)}>Zavřít</Button>
-        </Card>
-      )}
+    <>
+      {notice && <Notice kind={notice.kind} onClose={() => setNotice(null)}>{notice.text}</Notice>}
 
       <Card className="overflow-hidden">
+        <CardHeader className="flex-row items-center justify-between gap-3">
+          <div>
+            <CardTitle>Bankovní integrace</CardTitle>
+            <CardDescription>Odkud se sbírají příchozí platby.</CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setDialog({ mode: 'chooser' })}><Plus className="h-3.5 w-3.5" strokeWidth={2.2} />Nová integrace</Button>
+        </CardHeader>
         <Table>
           <TableHeader>
             <TableRow>
@@ -155,7 +133,7 @@ export function BankTab() {
               <TableHead>Účet / server</TableHead>
               <TableHead>Stav</TableHead>
               <TableHead>Poslední synchronizace</TableHead>
-              <TableHead></TableHead>
+              <TableHead><span className="sr-only">Akce</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -164,33 +142,31 @@ export function BankTab() {
             ) : !data ? (
               <TableSkeleton cols={5} />
             ) : integrations.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-sm text-muted-foreground">
-                  Žádná integrace. Přidej mailbox, do kterého chodí notifikace z KB.
-                </TableCell>
-              </TableRow>
+              <TableEmpty cols={5}>Žádná integrace. Přidej schránku, do které chodí notifikace z banky.</TableEmpty>
             ) : integrations.map(i => (
-              <TableRow key={i.id}>
+              <TableRow key={i.id} className="rem">
                 <TableCell className="font-medium">{i.name}</TableCell>
-                <TableCell className="text-sm">
+                <TableCell>
                   <div>{i.imapUser}</div>
-                  <div className="text-muted-foreground text-xs">
+                  <div className="text-sm text-soft">
                     {i.imapHost}:{i.imapPort} · {i.imapFolder}
                     {i.accountNumber && ` · ${i.accountNumber}`}
                   </div>
                 </TableCell>
                 <TableCell><StatusPill integration={i} /></TableCell>
-                <TableCell className="text-sm">{fmtDateTime(i.lastSyncAt)}</TableCell>
-                <TableCell className="text-right whitespace-nowrap space-x-2">
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => { setNotice(null); test.mutate(i.id); }}>Test</Button>
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => { setNotice(null); sync.mutate(i.id); }}>Synchronizovat</Button>
-                  <Button size="sm" variant="outline" disabled={busy} onClick={() => setDialog({ mode: 'form', integration: i, kind: i.kind })}>Upravit</Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => { if (confirm(`Smazat integraci „${i.name}"? Nasbírané transakce se smažou s ní.`)) remove.mutate(i.id); }}
-                  >Smazat</Button>
+                <TableCell className="whitespace-nowrap">{fmtDateTime(i.lastSyncAt)}</TableCell>
+                <TableCell className="whitespace-nowrap text-right">
+                  <span className="inline-flex items-center gap-3.5">
+                    <Button size="sm" variant="outline" disabled={busy} onClick={() => { setNotice(null); sync.mutate(i.id); }}>Synchronizovat</Button>
+                    <button type="button" className="acts text-sm text-soft hover:text-ink disabled:opacity-50" disabled={busy} onClick={() => { setNotice(null); test.mutate(i.id); }}>Test</button>
+                    <button type="button" className="acts text-sm text-soft hover:text-ink disabled:opacity-50" disabled={busy} onClick={() => setDialog({ mode: 'form', integration: i, kind: i.kind })}>Upravit</button>
+                    <button
+                      type="button"
+                      className="acts text-sm text-soft hover:text-late disabled:opacity-50"
+                      disabled={busy}
+                      onClick={() => { if (confirm(`Smazat integraci „${i.name}"? Nasbírané transakce se smažou s ní.`)) remove.mutate(i.id); }}
+                    >Smazat</button>
+                  </span>
                 </TableCell>
               </TableRow>
             ))}
@@ -199,13 +175,11 @@ export function BankTab() {
       </Card>
 
       {integrations.some(i => i.active && i.lastSyncStatus === 'error' && (i.lastSyncError ?? '').includes('unexpected_structure')) && (
-        <Card className="p-4 border-destructive bg-red-50">
-          <p className="text-sm text-red-900">
-            <strong>Struktura notifikace se změnila.</strong> KB pravděpodobně upravila
-            šablonu e-mailu — do té doby se platby nesbírají. Detail je u dotčené
-            transakce níže se stavem „Nezpracováno".
-          </p>
-        </Card>
+        <Notice kind="err">
+          <strong>Struktura notifikace se změnila.</strong> Banka pravděpodobně upravila
+          šablonu e-mailu a do té doby se platby nesbírají. Detail je u dotčené
+          transakce níže se stavem „Nezpracováno".
+        </Notice>
       )}
 
       <TransactionInbox />
@@ -225,6 +199,6 @@ export function BankTab() {
           onSaved={invalidate}
         />
       )}
-    </div>
+    </>
   );
 }

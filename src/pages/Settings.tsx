@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PageHeader } from '@/components/ui/page-header';
 import { useMe } from '@/hooks/useMe';
 import { ApiTokensPanel } from './ApiTokens';
 import { BankTab } from './settings/BankTab';
@@ -35,30 +36,30 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Nastavení</h1>
+    <>
+      <PageHeader title="Nastavení" />
       {/* Waiting on the role rather than assuming one: guessing wrong renders the
           bank tab and then yanks it away (or the reverse) as /api/me resolves.
           An /api/me FAILURE is treated as "not an owner" — the safe side, and
           the tokens tab is the one every member may use. */}
       {!me && !isError ? (
-        <p className="text-sm text-muted-foreground">Načítání…</p>
+        <p className="text-sm text-soft">Načítání…</p>
       ) : (
         <Tabs value={tab} onValueChange={selectTab} className="w-full">
-          <TabsList>
+          <TabsList aria-label="Sekce nastavení">
             {isOwner && <TabsTrigger value="bank">Bankovní integrace</TabsTrigger>}
             <TabsTrigger value="api-tokens">API tokeny</TabsTrigger>
           </TabsList>
           {isOwner && (
-            <TabsContent value="bank" className="space-y-6 pt-4">
+            <TabsContent value="bank" className="flex flex-col gap-5">
               <BankTab />
             </TabsContent>
           )}
-          <TabsContent value="api-tokens" className="space-y-6 pt-4">
+          <TabsContent value="api-tokens" className="flex flex-col gap-5">
             <ApiTokensPanel />
           </TabsContent>
         </Tabs>
       )}
-    </div>
+    </>
   );
 }

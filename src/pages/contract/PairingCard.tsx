@@ -2,10 +2,15 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '@/lib/api';
 import { korunToHalerOrNull, parseKorun, toKorunInput } from '@/lib/money';
+import { fmtDateTime, fmtKcExact } from '@/lib/format';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { KV, KVRow } from '@/components/ui/kv';
+import { Modal } from '@/components/ui/modal';
+import { Status } from '@/components/ui/status';
+import { Hint } from '@/components/ui/hint';
 
 interface PaymentRule {
   id: string;
@@ -34,34 +39,27 @@ const ANY = 'cokoliv';
 const AMOUNT_HELP = 'Částka musí být číslo v korunách, např. 35000 nebo 35000,50. '
   + 'Pro „cokoliv" nech pole prázdné.';
 
-function fmtKc(halere: number | null): string {
-  if (halere === null) return '—';
-  return `${(halere / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kč`;
-}
-
-function HealthField({ health }: { health: PairingHealth }) {
-  const { label, tone } = health.state === 'chyba'
-    ? { label: 'Chyba', tone: 'text-red-700' }
-    : health.state === 'ok'
-      ? { label: 'Vše v pořádku', tone: 'text-green-700' }
-      : { label: 'Nenastaveno', tone: 'text-muted-foreground' };
+function HealthValue({ health }: { health: PairingHealth }) {
+  if (health.state === 'chyba') {
+    return (
+      <div>
+        <Status tone="late">Chyba</Status>
+        {health.message && <div className="mt-0.5 max-w-[16rem] break-words text-sm font-normal text-late">{health.message}</div>}
+      </div>
+    );
+  }
+  if (health.state === 'ok') {
+    return (
+      <div>
+        <Status tone="ok">Vše v pořádku</Status>
+        {health.lastSyncAt && <div className="text-sm font-normal text-soft">naposledy {fmtDateTime(health.lastSyncAt)}</div>}
+      </div>
+    );
+  }
   return (
     <div>
-      <span className="text-muted-foreground text-sm">Stav</span>
-      <p className={`font-medium ${tone}`}>{label}</p>
-      {health.state === 'chyba' && health.message && (
-        <p className="text-xs text-red-700 mt-1 break-words">{health.message}</p>
-      )}
-      {health.state === 'ok' && health.lastSyncAt && (
-        <p className="text-xs text-muted-foreground mt-1">
-          naposledy {new Date(health.lastSyncAt).toLocaleString('cs-CZ')}
-        </p>
-      )}
-      {health.state === 'nenastaveno' && (
-        <p className="text-xs text-muted-foreground mt-1">
-          Chybí pravidlo nebo aktivní bankovní integrace.
-        </p>
-      )}
+      <Status tone="wait">Nenastaveno</Status>
+      <div className="text-sm font-normal text-soft">Chybí pravidlo nebo aktivní bankovní integrace.</div>
     </div>
   );
 }
@@ -132,92 +130,87 @@ function PairingDialog({ contractId, rule, expectedMonthlyTotal, onClose, onSave
   const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }));
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">Párování plateb</h2>
-        <p className="text-sm text-muted-foreground">
-          Prázdné pole znamená „cokoliv". Platba se spáruje, když vyhoví všem vyplněným kritériím.
+    <Modal
+      title="Párování plateb"
+      description={'Prázdné pole znamená „cokoliv“. Platba se spáruje, když vyhoví všem vyplněným kritériím.'}
+      onClose={onClose}
+      className="max-w-lg"
+      footer={<>
+        {rule && (
+          <Button
+            variant="outline"
+            className="mr-auto"
+            disabled={remove.isPending}
+            onClick={() => { if (confirm('Smazat pravidlo párování?')) { setErr(null); remove.mutate(); } }}
+          >Smazat pravidlo</Button>
+        )}
+        <Button variant="outline" onClick={onClose}>Zrušit</Button>
+        <Button
+          disabled={save.isPending || badAmount}
+          onClick={() => {
+            setErr(null);
+            if (badAmount) { setErr(AMOUNT_HELP); return; }
+            save.mutate();
+          }}
+        >
+          {save.isPending ? 'Ukládám…' : 'Uložit'}
+        </Button>
+      </>}
+    >
+      <div>
+        <Label htmlFor="pr-account">Číslo účtu plátce</Label>
+        <Input
+          id="pr-account"
+          value={form.counterpartyAccount}
+          placeholder="např. 294153028/0300"
+          onChange={e => set('counterpartyAccount')(e.target.value)}
+        />
+        <p className="mt-1 text-xs text-soft">
+          Předčíslí je významné: <code>123-294153028/0300</code> se nespáruje s <code>294153028/0300</code>.
         </p>
+      </div>
 
+      <div className="grid grid-cols-3 gap-3">
         <div>
-          <Label>Číslo účtu plátce</Label>
-          <Input
-            value={form.counterpartyAccount}
-            placeholder="např. 294153028/0300"
-            onChange={e => set('counterpartyAccount')(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground mt-1">
-            Předčíslí je významné — <code>123-294153028/0300</code> se nespáruje s <code>294153028/0300</code>.
-          </p>
+          <Label htmlFor="pr-vs">Variabilní symbol</Label>
+          <Input id="pr-vs" value={form.vs} onChange={e => set('vs')(e.target.value)} />
         </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <Label>Variabilní symbol</Label>
-            <Input value={form.vs} onChange={e => set('vs')(e.target.value)} />
-          </div>
-          <div>
-            <Label>Specifický symbol</Label>
-            <Input value={form.ss} onChange={e => set('ss')(e.target.value)} />
-          </div>
-          <div>
-            <Label>Konstantní symbol</Label>
-            <Input value={form.ks} onChange={e => set('ks')(e.target.value)} />
-          </div>
+        <div>
+          <Label htmlFor="pr-ss">Specifický symbol</Label>
+          <Input id="pr-ss" value={form.ss} onChange={e => set('ss')(e.target.value)} />
         </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>Částka od (Kč)</Label>
-            <Input value={form.amountFrom} onChange={e => set('amountFrom')(e.target.value)} />
-          </div>
-          <div>
-            <Label>Částka do (Kč)</Label>
-            <Input value={form.amountTo} onChange={e => set('amountTo')(e.target.value)} />
-          </div>
+        <div>
+          <Label htmlFor="pr-ks">Konstantní symbol</Label>
+          <Input id="pr-ks" value={form.ks} onChange={e => set('ks')(e.target.value)} />
         </div>
-        {badAmount && (
-          <p className="text-sm text-destructive">{AMOUNT_HELP}</p>
-        )}
-        {suggested && !rule && (
-          <p className="text-xs text-muted-foreground">
-            Předvyplněno z aktuálního měsíčního předpisu ({fmtKc(expectedMonthlyTotal)}) ±10 %.
-          </p>
-        )}
+      </div>
 
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} />
-          Párovat automaticky
-        </label>
-
-        {err && <p className="text-sm text-destructive">{err}</p>}
-
-        <div className="flex justify-between">
-          <div>
-            {rule && (
-              <Button
-                variant="outline"
-                disabled={remove.isPending}
-                onClick={() => { if (confirm('Smazat pravidlo párování?')) { setErr(null); remove.mutate(); } }}
-              >Smazat pravidlo</Button>
-            )}
-          </div>
-          <div className="space-x-2">
-            <Button variant="outline" onClick={onClose}>Zrušit</Button>
-            <Button
-              disabled={save.isPending || badAmount}
-              onClick={() => {
-                setErr(null);
-                if (badAmount) { setErr(AMOUNT_HELP); return; }
-                save.mutate();
-              }}
-            >
-              {save.isPending ? 'Ukládám…' : 'Uložit'}
-            </Button>
-          </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <div className="mb-1 flex items-center gap-1.5"><Label htmlFor="pr-from" className="mb-0">Částka od (Kč)</Label><Hint label="K čemu je rozmezí částky">Platba z banky se k pronájmu přiřadí jen tehdy, když její částka leží v tomto rozmezí a sedí i ostatní vyplněná kritéria. Prázdné pole znamená jakoukoliv částku.</Hint></div>
+          <Input id="pr-from" value={form.amountFrom} onChange={e => set('amountFrom')(e.target.value)} />
         </div>
-      </Card>
-    </div>
+        <div>
+          <Label htmlFor="pr-to">Částka do (Kč)</Label>
+          <Input id="pr-to" value={form.amountTo} onChange={e => set('amountTo')(e.target.value)} />
+        </div>
+      </div>
+      {badAmount && (
+        <p className="text-sm text-late">{AMOUNT_HELP}</p>
+      )}
+      {suggested && !rule && expectedMonthlyTotal !== null && (
+        <p className="text-xs text-soft">
+          Předvyplněno z aktuálního měsíčního předpisu ({fmtKcExact(expectedMonthlyTotal)}) ±10 %.
+        </p>
+      )}
+
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} />
+        Párovat automaticky
+      </label>
+
+      {err && <p className="text-sm text-late">{err}</p>}
+    </Modal>
   );
 }
 
@@ -229,74 +222,52 @@ export function PairingCard({ contractId, expectedMonthlyTotal }: { contractId: 
     queryFn: () => api.get<RuleResponse>(`/api/contracts/${contractId}/payment-rule`),
   });
 
-  if (isError && !data) {
-    return (
-      <Card className="p-6 space-y-3">
-        <h2 className="text-lg font-semibold">Párování plateb</h2>
-        <p className="text-sm text-destructive">Nepodařilo se načíst data.</p>
-        <Button size="sm" variant="outline" onClick={() => refetch()}>Zkusit znovu</Button>
-      </Card>
-    );
-  }
-  if (!data) {
-    return (
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-3">Párování plateb</h2>
-        <p className="text-sm text-muted-foreground">Načítání…</p>
-      </Card>
-    );
-  }
-
-  const { rule, health } = data;
-  const show = (v: string | null) => v ?? ANY;
+  const rule = data?.rule ?? null;
+  const show = (v: string | null) => v ?? <span className="font-normal text-soft">{ANY}</span>;
+  const amount = (v: number | null) => !rule ? <span className="font-normal text-soft">—</span> : v === null ? <span className="font-normal text-soft">{ANY}</span> : fmtKcExact(v);
 
   return (
     <>
-      <Card className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Párování plateb</h2>
-          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-            {rule ? 'Upravit' : 'Nastavit'}
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-3">
-          <HealthField health={health} />
-          <div>
-            <span className="text-muted-foreground text-sm">Částka od</span>
-            <p className="font-medium">{!rule ? '—' : rule.amountFrom === null ? ANY : fmtKc(rule.amountFrom)}</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-sm">Částka do</span>
-            <p className="font-medium">{!rule ? '—' : rule.amountTo === null ? ANY : fmtKc(rule.amountTo)}</p>
-          </div>
-        </div>
-
-        {rule ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 border-t pt-4">
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-3">
+          <CardTitle>Párování plateb</CardTitle>
+          {data && (
+            <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+              {rule ? 'Upravit' : 'Nastavit'}
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {isError && !data ? (
             <div>
-              <span className="text-muted-foreground text-xs">Číslo účtu</span>
-              <p className="font-medium text-sm">{show(rule.counterpartyAccount)}</p>
+              <p className="mb-3 text-sm text-late">Nepodařilo se načíst data.</p>
+              <Button size="sm" variant="outline" onClick={() => refetch()}>Zkusit znovu</Button>
             </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Variabilní symbol</span>
-              <p className="font-medium text-sm">{show(rule.vs)}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Specifický symbol</span>
-              <p className="font-medium text-sm">{show(rule.ss)}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Konstantní symbol</span>
-              <p className="font-medium text-sm">{show(rule.ks)}</p>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground border-t pt-4">
-            Bez pravidla se platby k tomuto pronájmu nespárují automaticky —
-            zůstanou v Nastavení → Nepřiřazené platby.
-          </p>
-        )}
+          ) : !data ? (
+            <p className="text-sm text-soft">Načítání…</p>
+          ) : (
+            <>
+              <KV>
+                <KVRow label="Stav"><HealthValue health={data.health} /></KVRow>
+                <KVRow label="Částka od">{amount(rule?.amountFrom ?? null)}</KVRow>
+                <KVRow label="Částka do">{amount(rule?.amountTo ?? null)}</KVRow>
+                {rule && (
+                  <>
+                    <KVRow label="Číslo účtu">{show(rule.counterpartyAccount)}</KVRow>
+                    <KVRow label="Variabilní symbol">{show(rule.vs)}</KVRow>
+                    <KVRow label="Specifický symbol">{show(rule.ss)}</KVRow>
+                    <KVRow label="Konstantní symbol">{show(rule.ks)}</KVRow>
+                  </>
+                )}
+              </KV>
+              {!rule && (
+                <p className="mt-3 border-t border-rule pt-3 text-sm text-soft">
+                  Bez pravidla se platby k tomuto pronájmu nespárují automaticky a zůstanou v Nastavení mezi nepřiřazenými platbami.
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
       </Card>
 
       {open && (

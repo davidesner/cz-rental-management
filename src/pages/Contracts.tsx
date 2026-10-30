@@ -1,79 +1,63 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '@/lib/api';
-import { parseKorun } from '@/lib/money';
+import { Plus } from 'lucide-react';
+import { fmtDate, fmtKc } from '@/lib/format';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
+import { NewContractDialog } from './contract/NewContractDialog';
+import { Seg } from '@/components/ui/seg';
+import { PageHeader } from '@/components/ui/page-header';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
-import { TableError } from '@/components/ui/table-error';
+import { TableEmpty, TableError } from '@/components/ui/table-error';
+import { isEndedContract, useContracts, useCurrentTermsMap, type ContractListRow } from '@/hooks/useContracts';
 
-interface Property { id: string; name: string; }
-interface Tenant { id: string; name: string; }
-interface Contract {
-  id: string;
-  propertyId: string;
-  tenantId: string;
-  propertyName: string;
-  tenantName: string;
-  startDate: string;
-  endDate: string | null;
-  securityDeposit: number | null;
-}
+type Filter = 'active' | 'ended' | 'all';
 
 export function ContractsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { data, isError, refetch } = useQuery({ queryKey: ['contracts'], queryFn: () => api.get<{ contracts: Contract[] }>('/api/contracts') });
-  const { data: propertiesData } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
-  const { data: tenantsData } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
+  const { data, isError, refetch } = useContracts();
+  const [filter, setFilter] = useState<Filter>('active');
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ propertyId: '', tenantId: '', startDate: '', endDate: '', securityDeposit: '' });
-  const [err, setErr] = useState<string | null>(null);
 
-  const properties = propertiesData?.properties ?? [];
-  const tenants = tenantsData?.tenants ?? [];
+  const all = data?.contracts ?? [];
+  const { map: termsMap } = useCurrentTermsMap(all.map(c => c.id));
 
-  // Kauce is optional: empty means "none" (null on the wire), same as before.
-  // An unparseable value must not silently take that same null path.
-  const securityDeposit = parseKorun(form.securityDeposit);
-  const securityDepositInvalid = securityDeposit.kind === 'invalid';
+  // "Aktivní" is everything not yet over, so a lease signed for next month is
+  // listed with the running ones rather than hidden among the ended.
+  const matches = (c: ContractListRow) => filter === 'all' ? true : filter === 'active' ? !isEndedContract(c) : isEndedContract(c);
+  const rows = all.filter(matches).sort((a, b) => b.startDate.localeCompare(a.startDate));
+  const counts = { active: all.filter(c => !isEndedContract(c)).length, ended: all.filter(c => isEndedContract(c)).length };
 
-  const create = useMutation({
-    mutationFn: () => {
-      const depositHalere = securityDeposit.kind === 'value' ? securityDeposit.halere : null;
-      return api.post<{ contract: Contract }>('/api/contracts', {
-        propertyId: form.propertyId,
-        tenantId: form.tenantId,
-        startDate: form.startDate,
-        endDate: form.endDate || null,
-        securityDeposit: depositHalere,
-      });
-    },
-    onSuccess: () => {
-      setOpen(false);
-      setForm({ propertyId: '', tenantId: '', startDate: '', endDate: '', securityDeposit: '' });
-      qc.invalidateQueries({ queryKey: ['contracts'] });
-    },
-    onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
-  });
+  const empty = filter === 'active' ? 'Žádný běžící pronájem.' : filter === 'ended' ? 'Žádný ukončený pronájem.' : 'Zatím žádné pronájmy.';
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Pronájmy</h1>
-        <Button onClick={() => { setErr(null); setOpen(true); }}>Nový pronájem</Button>
-      </div>
+    <>
+      <PageHeader
+        title="Pronájmy"
+        actions={<>
+          <Seg
+            label="Filtr pronájmů"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: 'active', label: data ? `Aktivní (${counts.active})` : 'Aktivní' },
+              { value: 'ended', label: data ? `Ukončené (${counts.ended})` : 'Ukončené' },
+              { value: 'all', label: 'Všechny' },
+            ]}
+          />
+          <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" strokeWidth={2.2} />Nový pronájem</Button>
+        </>}
+      />
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nájemník</TableHead>
               <TableHead>Nemovitost</TableHead>
-              <TableHead>Výše nájmu</TableHead>
+              <TableHead className="num">Výše nájmu</TableHead>
               <TableHead>Období</TableHead>
             </TableRow>
           </TableHeader>
@@ -82,95 +66,51 @@ export function ContractsPage() {
               <TableError cols={4} onRetry={() => refetch()} />
             ) : !data ? (
               <TableSkeleton cols={4} />
-            ) : data.contracts.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Zatím žádné pronájmy.</TableCell>
-              </TableRow>
+            ) : rows.length === 0 ? (
+              <TableEmpty cols={4}>{empty}</TableEmpty>
             ) : (
-              data.contracts.map(c => (
-                <TableRow
-                  key={c.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/contracts/${c.id}`)}
-                >
-                  <TableCell className="font-medium">{c.tenantName}</TableCell>
-                  <TableCell>
-                    <Link
-                      to={`/properties/${c.propertyId}`}
-                      className="underline text-primary hover:opacity-70"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      {c.propertyName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">—</TableCell>
-                  <TableCell>
-                    {c.startDate} – {c.endDate ?? 'běží'}
-                  </TableCell>
-                </TableRow>
-              ))
+              rows.map(c => {
+                const t = termsMap[c.id];
+                return (
+                  <TableRow
+                    key={c.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/contracts/${c.id}`)}
+                  >
+                    <TableCell>
+                      <Link to={`/contracts/${c.id}`} className="font-medium text-ink" onClick={e => e.stopPropagation()}>{c.tenantName}</Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link to={`/properties/${c.propertyId}`} className="text-ink" onClick={e => e.stopPropagation()}>{c.propertyName}</Link>
+                    </TableCell>
+                    <TableCell className="num">
+                      {t === undefined ? <span className="text-wait">…</span>
+                        : t.term ? <>
+                            <div>{fmtKc(t.term.baseRent)}</div>
+                            {t.monthlyTotal !== null && t.monthlyTotal !== t.term.baseRent && <div className="text-sm text-soft">celkem {fmtKc(t.monthlyTotal)}</div>}
+                          </>
+                        : <span className="text-soft">bez podmínek</span>}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {fmtDate(c.startDate)} až {c.endDate ? fmtDate(c.endDate) : <span className="text-soft">dosud</span>}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </Card>
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setOpen(false)}>
-          <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Nový pronájem</h2>
-            <div>
-              <Label>Nemovitost</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                value={form.propertyId}
-                onChange={e => setForm({ ...form, propertyId: e.target.value })}
-              >
-                <option value="">Vyber nemovitost…</option>
-                {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <Label>Nájemník</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                value={form.tenantId}
-                onChange={e => setForm({ ...form, tenantId: e.target.value })}
-              >
-                <option value="">Vyber nájemníka…</option>
-                {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <Label>Datum začátku</Label>
-              <Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
-            </div>
-            <div>
-              <Label>Datum konce (volitelné)</Label>
-              <Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
-            </div>
-            <div>
-              <Label>Kauce (Kč)</Label>
-              <Input type="text" placeholder="35000,50" value={form.securityDeposit} onChange={e => setForm({ ...form, securityDeposit: e.target.value })} />
-              {securityDepositInvalid && (
-                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Splatnost (den + aktuální/následující měsíc) se nastavuje na detailu pronájmu při přidání podmínek (initial terms / amendment).
-            </p>
-            {err && <p className="text-sm text-destructive">{err}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
-              <Button
-                onClick={() => create.mutate()}
-                disabled={!form.propertyId || !form.tenantId || !form.startDate || securityDepositInvalid || create.isPending}
-              >
-                Vytvořit
-              </Button>
-            </div>
-          </Card>
-        </div>
+        <NewContractDialog
+          onClose={() => setOpen(false)}
+          onCreated={(newId) => {
+            qc.invalidateQueries({ queryKey: ['contracts'] });
+            navigate(`/contracts/${newId}`);
+          }}
+        />
       )}
-    </div>
+    </>
   );
 }

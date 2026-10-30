@@ -76,11 +76,11 @@ export function OAuthConsentPage() {
           )}
         </CardHeader>
         {state.kind === 'loading' && (
-          <CardContent><p className="text-sm text-muted-foreground">Načítám…</p></CardContent>
+          <CardContent><p className="text-sm text-soft">Načítám…</p></CardContent>
         )}
         {state.kind === 'invalid' && (
           <CardContent>
-            <p role="alert" className="text-sm text-destructive">Neplatný požadavek na připojení.</p>
+            <p role="alert" className="text-sm text-late">Neplatný požadavek na připojení.</p>
           </CardContent>
         )}
         {info && (
@@ -90,22 +90,22 @@ export function OAuthConsentPage() {
                 Bude moci číst a měnit nemovitosti, nájemníky, smlouvy, platby, vyúčtování a bankovní integrace
                 se stejnými právy, jako máte vy.
               </p>
-              <p className="text-muted-foreground">
+              <p className="text-soft">
                 Přesměrování na: <span className="font-medium text-foreground">{info.redirectHost}</span>
               </p>
               {info.loopback && (
-                <p role="alert" className="rounded-md border border-destructive/50 p-3 text-destructive">
+                <p role="alert" className="rounded-md bg-late-soft p-3 text-ink">
                   Aplikace běží na tomto počítači. Povolte ji, jen pokud jste ji právě sami spustili.
                 </p>
               )}
               {blocked && (
-                <p role="alert" className="text-destructive">
+                <p role="alert" className="text-late">
                   Nejdřív si změňte heslo (<a className="underline" href="/change-password">Změnit heslo</a>),
                   pak připojení zopakujte.
                 </p>
               )}
               {failed && (
-                <p role="alert" className="text-destructive">Odpověď se nepodařilo odeslat, zkuste to znovu.</p>
+                <p role="alert" className="text-late">Odpověď se nepodařilo odeslat, zkuste to znovu.</p>
               )}
             </CardContent>
             <CardFooter className="flex justify-end gap-2">

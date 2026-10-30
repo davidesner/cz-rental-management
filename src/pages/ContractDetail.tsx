@@ -1,17 +1,32 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { computeDeductibleForPeriod } from '@/lib/proration';
 import { api, apiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Hint } from '@/components/ui/hint';
+import { Modal } from '@/components/ui/modal';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { PageHeader } from '@/components/ui/page-header';
+import { KV, KVRow } from '@/components/ui/kv';
+import { Seg } from '@/components/ui/seg';
+import { Status } from '@/components/ui/status';
+import { Notice } from '@/components/ui/notice';
+import { Pager, usePager } from '@/components/ui/pager';
+import { Crumb } from '@/components/Layout';
+import { breakdownRange } from '@/hooks/useContracts';
+import { useReminders, dueLabel, reconciliationDeadline, type AgendaItem } from '@/hooks/useReminders';
+import { Agenda, reminderItems } from '@/components/Agenda';
+import { cn } from '@/lib/utils';
+import { fmtDate, fmtDateTime, fmtKc, fmtKcExact, fmtKcSigned, fmtMonth, fmtRange, plural, todayIso } from '@/lib/format';
 import { formatSymbols } from '@/lib/symbols';
 import { parseKorun } from '@/lib/money';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
-import { TableError } from '@/components/ui/table-error';
+import { TableEmpty, TableError } from '@/components/ui/table-error';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DuplicatePaymentError } from '@/components/DuplicatePaymentError';
 import { PairingCard } from './contract/PairingCard';
@@ -44,7 +59,7 @@ interface ContractTerm {
 }
 
 function DocRefLink({ value }: { value: string | null }) {
-  if (!value) return <span className="text-muted-foreground">—</span>;
+  if (!value) return <span className="text-soft">—</span>;
   const isUrl = /^https?:\/\//.test(value);
   if (isUrl) {
     return (
@@ -53,7 +68,7 @@ function DocRefLink({ value }: { value: string | null }) {
       </a>
     );
   }
-  return <span className="text-xs text-muted-foreground" title={value}>{value.length > 24 ? value.slice(0, 22) + '…' : value}</span>;
+  return <span className="text-xs text-soft" title={value}>{value.length > 24 ? value.slice(0, 22) + '…' : value}</span>;
 }
 
 interface Utility {
@@ -176,6 +191,7 @@ interface PaymentBreakdownData {
 
 type Kind = 'rent' | 'services' | 'electricity' | 'gas' | 'internet' | 'water' | 'other';
 const KINDS_TO_SHOW: Kind[] = ['rent', 'services', 'electricity', 'gas', 'internet', 'water', 'other'];
+const KIND_LABEL_CS: Record<string, string> = { rent: 'Nájem', services: 'Služby (SVJ)', electricity: 'Elektřina', gas: 'Plyn', internet: 'Internet', water: 'Voda', other: 'Ostatní' };
 
 function deriveMatchPeriodClient(
   kind: Kind,
@@ -194,17 +210,6 @@ function deriveMatchPeriodClient(
   const from = candidates.reduce((min, s) => s.periodFrom < min ? s.periodFrom : min, candidates[0]!.periodFrom);
   const to = candidates.reduce((max, s) => s.periodTo > max ? s.periodTo : max, candidates[0]!.periodTo);
   return { from, to, source: 'from-cost-statements', count: candidates.length };
-}
-
-function fmtKc(halere: number) {
-  return (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
-}
-
-function fmtKcSigned(halere: number) {
-  const s = (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
-  if (halere < 0) return <span className="text-red-600">{s}</span>;
-  if (halere > 0) return <span className="text-green-600">+{s}</span>;
-  return <span className="text-muted-foreground">{s}</span>;
 }
 
 function utilKindLabel(kind: string): string {
@@ -228,8 +233,6 @@ function periodsOverlap(
   const bEndsBeforeA = endB !== null && endB < startA;
   return !aEndsBeforeB && !bEndsBeforeA;
 }
-
-const SELECT_CLS = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 
 // ─── Podmínky (unified terms + utilities timeline) ────────────────────────────
 
@@ -269,107 +272,106 @@ interface PodminkyTableProps {
 }
 
 function PodminkyTable({ terms, utilities, onEditRow, isPending, isError, onRetry }: PodminkyTableProps) {
-  const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
-
   // Which utility kinds appear at all in this contract
   const presentKinds = UTILITY_KINDS.filter(k => utilities.some(u => u.kind === k));
 
-  // All unique transition dates from both tables
+  // All unique transition dates from both tables, newest first.
   const dates = Array.from(new Set([
     ...terms.map(t => t.validFrom),
     ...utilities.map(u => u.validFrom),
-  ])).sort();
+  ])).sort().reverse();
 
   const cols = 8 + presentKinds.length + (onEditRow ? 1 : 0);
+  const SOURCE_LABEL: Record<string, string> = { initial: 'Počáteční', addendum: 'Dodatek', change: 'Změna' };
 
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Platnost od</TableHead>
-            <TableHead>Nájem</TableHead>
-            <TableHead>Záloha SVJ</TableHead>
-            {presentKinds.map(k => <TableHead key={k}>{UTILITY_LABEL[k]}</TableHead>)}
-            <TableHead>Σ Měsíčně</TableHead>
-            <TableHead>Splatnost</TableHead>
-            <TableHead>Zdroj</TableHead>
-            <TableHead>Doklad</TableHead>
-            <TableHead>Poznámka</TableHead>
-            {onEditRow && <TableHead className="w-12"></TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {isError ? (
-            <TableError cols={cols} onRetry={onRetry} />
-          ) : isPending ? (
-            <TableSkeleton cols={cols} />
-          ) : dates.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={cols} className="text-center text-sm text-muted-foreground py-4">Zatím žádné podmínky. Přidej první.</TableCell>
-            </TableRow>
-          ) : (
-          dates.map(d => {
-            const activeTerm = validAt(terms, d);
-            const baseRent = activeTerm?.baseRent ?? 0;
-            const serviceAdvance = activeTerm?.serviceAdvance ?? 0;
-            const utilByKind: Partial<Record<UtilityKind, number>> = {};
-            let utilSum = 0;
-            for (const k of presentKinds) {
-              const u = validAt(utilities.filter(x => x.kind === k), d);
-              if (u) {
-                utilByKind[k] = u.monthlyAdvance;
-                utilSum += u.monthlyAdvance;
-              }
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Platnost od</TableHead>
+          <TableHead className="num">Nájem</TableHead>
+          <TableHead className="num">Záloha SVJ</TableHead>
+          {presentKinds.map(k => <TableHead key={k} className="num">{UTILITY_LABEL[k]}</TableHead>)}
+          <TableHead className="num">Měsíčně</TableHead>
+          <TableHead>Splatnost</TableHead>
+          <TableHead>Zdroj</TableHead>
+          <TableHead>Doklad</TableHead>
+          <TableHead>Poznámka</TableHead>
+          {onEditRow && <TableHead><span className="sr-only">Akce</span></TableHead>}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {isError ? (
+          <TableError cols={cols} onRetry={onRetry} />
+        ) : isPending ? (
+          <TableSkeleton cols={cols} />
+        ) : dates.length === 0 ? (
+          <TableEmpty cols={cols}>Zatím žádné podmínky. Přidej první změnu.</TableEmpty>
+        ) : (
+        dates.map(d => {
+          const activeTerm = validAt(terms, d);
+          const baseRent = activeTerm?.baseRent ?? 0;
+          const serviceAdvance = activeTerm?.serviceAdvance ?? 0;
+          const utilByKind: Partial<Record<UtilityKind, number>> = {};
+          let utilSum = 0;
+          for (const k of presentKinds) {
+            const u = validAt(utilities.filter(x => x.kind === k), d);
+            if (u) {
+              utilByKind[k] = u.monthlyAdvance;
+              utilSum += u.monthlyAdvance;
             }
-            const total = baseRent + serviceAdvance + utilSum;
-            // Highlight the latest open row (active term with no validTo)
-            const isLatest = activeTerm?.validTo === null || activeTerm?.validTo === undefined;
-            // Collect notes from active term and active utilities
-            const noteParts: string[] = [];
-            if (activeTerm?.note) noteParts.push(`smlouva: ${activeTerm.note}`);
-            for (const k of presentKinds) {
-              const u = validAt(utilities.filter(x => x.kind === k), d);
-              if (u?.note) noteParts.push(`${UTILITY_LABEL[k]}: ${u.note}`);
-            }
+          }
+          const total = baseRent + serviceAdvance + utilSum;
+          // The open row (active term with no validTo) is the one in force today.
+          const isLatest = activeTerm?.validTo === null || activeTerm?.validTo === undefined;
+          // Collect notes from active term and active utilities
+          const noteParts: string[] = [];
+          if (activeTerm?.note) noteParts.push(activeTerm.note);
+          for (const k of presentKinds) {
+            const u = validAt(utilities.filter(x => x.kind === k), d);
+            if (u?.note && u.validFrom === d) noteParts.push(`${UTILITY_LABEL[k]}: ${u.note}`);
+          }
 
-            return (
-              <TableRow key={d} className={isLatest ? 'bg-accent/30' : ''}>
-                <TableCell className="font-medium">{d}</TableCell>
-                <TableCell>{fmt(baseRent)}</TableCell>
-                <TableCell>{fmt(serviceAdvance)}</TableCell>
-                {presentKinds.map(k => (
-                  <TableCell key={k}>{utilByKind[k] !== undefined ? fmt(utilByKind[k]!) : '—'}</TableCell>
-                ))}
-                <TableCell className="font-semibold">{fmt(total)}</TableCell>
-                <TableCell className="text-xs whitespace-nowrap">
-                  {activeTerm ? `do ${activeTerm.paymentDueDay}. ${activeTerm.paymentAppliesTo === 'next' ? 'předch.' : 'akt.'} m.` : '—'}
+          return (
+            <TableRow key={d} className="rem">
+              <TableCell className="whitespace-nowrap">
+                <span className="font-medium">{fmtDate(d)}</span>
+                {isLatest && <span className="ml-2 text-xs font-medium text-accent">platí</span>}
+              </TableCell>
+              <TableCell className="num">{fmtKc(baseRent)}</TableCell>
+              <TableCell className="num">{fmtKc(serviceAdvance)}</TableCell>
+              {presentKinds.map(k => (
+                <TableCell key={k} className="num">{utilByKind[k] !== undefined ? fmtKc(utilByKind[k]!) : <span className="text-soft">—</span>}</TableCell>
+              ))}
+              <TableCell className="num font-semibold">{fmtKc(total)}</TableCell>
+              <TableCell className="whitespace-nowrap">
+                {activeTerm ? `do ${activeTerm.paymentDueDay}. ${activeTerm.paymentAppliesTo === 'next' ? 'předch.' : 'akt.'} měsíce` : '—'}
+              </TableCell>
+              <TableCell>{activeTerm?.validFrom === d ? (SOURCE_LABEL[activeTerm.source] ?? activeTerm.source) : <span className="text-soft">—</span>}</TableCell>
+              <TableCell className="whitespace-nowrap">
+                {activeTerm?.validFrom === d ? <DocRefLink value={activeTerm?.documentRef ?? null} /> : <span className="text-soft">—</span>}
+              </TableCell>
+              <TableCell className="max-w-md truncate text-sm text-soft" title={noteParts.join(' · ')}>
+                {noteParts.join(' · ') || '—'}
+              </TableCell>
+              {onEditRow && (
+                <TableCell className="text-right">
+                  <button
+                    type="button"
+                    className="acts text-sm text-soft hover:text-accent"
+                    onClick={() => onEditRow(d)}
+                  >Upravit</button>
                 </TableCell>
-                <TableCell className="text-xs">{activeTerm?.source ?? '—'}</TableCell>
-                <TableCell className="text-xs whitespace-nowrap">
-                  {activeTerm?.validFrom === d ? <DocRefLink value={activeTerm?.documentRef ?? null} /> : <span className="text-muted-foreground">—</span>}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-md truncate" title={noteParts.join(' · ')}>
-                  {noteParts.join(' · ') || '—'}
-                </TableCell>
-                {onEditRow && (
-                  <TableCell className="w-12">
-                    <button
-                      className="text-xs text-muted-foreground hover:text-primary px-1"
-                      onClick={() => onEditRow(d)}
-                      title="Upravit"
-                    >Upravit</button>
-                  </TableCell>
-                )}
-              </TableRow>
-            );
-          })
-          )}
-        </TableBody>
-      </Table>
-    </div>
+              )}
+            </TableRow>
+          );
+        })
+        )}
+      </TableBody>
+    </Table>
   );
 }
+
 
 // ─── CostStatement create dialog (extracted for reuse) ────────────────────────
 
@@ -380,7 +382,7 @@ interface CostStatementDialogProps {
   onCreated: () => void;
 }
 
-function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }: CostStatementDialogProps) {
+export function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }: CostStatementDialogProps) {
   const [form, setForm] = useState({
     propertyId: fixedPropertyId,
     kind: 'services',
@@ -445,8 +447,8 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
     const repTariff = tariffs.find(t =>
       t.validFrom <= form.periodFrom && (t.validTo === null || form.periodFrom < t.validTo)
     );
-    const deductibleNote = repTariff?.deductibleNote ?? 'EL deductible';
-    const note = `FO portion (${deductibleNote}) × period (${daysCovered} dní) = ${(totalHaler / 100).toFixed(2)} Kč`;
+    const deductibleNote = repTariff?.deductibleNote ?? 'odečitatelná část z evidenčního listu';
+    const note = `Odečitatelná část (${deductibleNote}) za ${daysCovered} dní = ${(totalHaler / 100).toFixed(2)} Kč`;
     setForm(prev => ({ ...prev, adjustmentAmount: (-totalHaler / 100).toFixed(2), adjustmentNote: note }));
     setAutoFillLabel('(automaticky z evidenčního listu)');
   }, [adjustmentTouched, form.kind, form.propertyId, form.periodFrom, form.periodTo, tariffsQuery.data]);
@@ -481,13 +483,19 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">Nový výkaz nákladů</h2>
+    <Modal title="Nový výkaz nákladů" onClose={onClose} footer={<>
+        <Button variant="outline" onClick={onClose}>Zrušit</Button>
+        <Button
+          onClick={() => create.mutate()}
+          disabled={!form.propertyId || totalAmountInvalid || adjustmentAmountInvalid || (periodMode === 'custom' && (!form.periodFrom || !form.periodTo)) || create.isPending}
+        >
+          Vytvořit
+        </Button>
+    </>}>
         <div>
           <Label>Nemovitost</Label>
           <select
-            className={SELECT_CLS}
+            className="select-native"
             value={form.propertyId}
             disabled={!!fixedPropertyId}
             onChange={e => {
@@ -502,7 +510,7 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
         <div>
           <Label>Druh</Label>
           <select
-            className={SELECT_CLS}
+            className="select-native"
             value={form.kind}
             onChange={e => {
               setAdjustmentTouched(false); setAutoFillLabel(null);
@@ -518,7 +526,7 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
           </select>
         </div>
         <div>
-          <Label>Období</Label>
+          <div className="mb-1 flex items-center gap-1.5"><Label className="mb-0">Období</Label><Hint label="K čemu je období">Období říká, co náklad pokrývá. Při vyúčtování nájemníkovi se podle něj párují i platby stejného druhu, pokud období začíná uvnitř vyúčtovávaného roku. Náklad přes přelom roku rozděl na dva záznamy, každý ve svém kalendářním roce.</Hint></div>
           <div className="flex gap-2 mb-2">
             <Button type="button" variant={periodMode === 'year' ? 'default' : 'outline'} size="sm" onClick={() => setPeriodMode('year')}>Rok</Button>
             <Button type="button" variant={periodMode === 'custom' ? 'default' : 'outline'} size="sm" onClick={() => setPeriodMode('custom')}>Vlastní</Button>
@@ -527,9 +535,9 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
             <div className="space-y-1">
               <Input type="number" min={2000} max={2100} value={year} onChange={e => { setYearTouched(true); setYear(parseInt(e.target.value, 10) || new Date().getFullYear()); }} />
               {!yearTouched && form.propertyId && form.kind && (
-                <p className="text-xs text-muted-foreground">Návrh: další rok bez vyúčtování pro tuto kombinaci.</p>
+                <p className="text-xs text-soft">Návrh: další rok bez vyúčtování pro tuto kombinaci.</p>
               )}
-              <p className="text-xs text-muted-foreground">{`Od ${year}-01-01 do ${year}-12-31`}</p>
+              <p className="text-xs text-soft">{`Od ${year}-01-01 do ${year}-12-31`}</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
@@ -543,25 +551,23 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
               </div>
             </div>
           )}
-          <p className="text-xs text-muted-foreground mt-1 leading-snug">
-            <strong>Tip:</strong> <code>periodFrom</code>/<code>periodTo</code> určují co náklad pokrývá. Při reconciliaci se tento period použije i pro <strong>matching plateb</strong> tohoto druhu — pokud <code>periodFrom</code> startuje uvnitř reconciliation období. Pro proporcionální rozdělení přes year boundary vytvoř dva statementy, každý ve svém kalendářním roce.
-          </p>
         </div>
         <div>
           <Label>Celková částka (Kč)</Label>
           <Input type="text" placeholder="35000,50" value={form.totalAmount} onChange={e => setForm({ ...form, totalAmount: e.target.value })} />
           {form.totalAmount !== '' && totalAmountInvalid && (
-            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+            <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
           )}
         </div>
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Label>Částka úpravy (Kč, se znaménkem)</Label>
-            {autoFillLabel && !adjustmentTouched && <span className="text-xs text-muted-foreground italic">{autoFillLabel}</span>}
-          </div>
+          <div className="mb-1 flex items-center gap-1.5">
+              <Label className="mb-0">Částka úpravy (Kč)</Label>
+              <Hint label="K čemu je úprava">Část nákladů, kterou nájemník neplatí, třeba fond oprav nebo odměny výboru v předpisu SVJ. Záporná částka se od celkových nákladů odečte, kladná přičte. Předvyplní se z evidenčního listu nemovitosti podle délky období; můžeš ji přepsat.</Hint>
+              {autoFillLabel && !adjustmentTouched && <span className="text-xs text-soft">{autoFillLabel}</span>}
+            </div>
           <Input type="text" placeholder="0.00" value={form.adjustmentAmount} onChange={e => { setAdjustmentTouched(true); setAutoFillLabel(null); setForm({ ...form, adjustmentAmount: e.target.value }); }} />
           {adjustmentAmountInvalid && (
-            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. -350 nebo 35000,50.</p>
+            <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. -350 nebo 35000,50.</p>
           )}
         </div>
         <div>
@@ -572,18 +578,8 @@ function CostStatementDialog({ fixedPropertyId, properties, onClose, onCreated }
           <Label>Reference dokumentu (volitelné)</Label>
           <Input value={form.documentRef} onChange={e => setForm({ ...form, documentRef: e.target.value })} />
         </div>
-        {err && <p className="text-sm text-destructive">{err}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Zrušit</Button>
-          <Button
-            onClick={() => create.mutate()}
-            disabled={!form.propertyId || totalAmountInvalid || adjustmentAmountInvalid || (periodMode === 'custom' && (!form.periodFrom || !form.periodTo)) || create.isPending}
-          >
-            Vytvořit
-          </Button>
-        </div>
-      </Card>
-    </div>
+        {err && <p className="text-sm text-late">{err}</p>}
+    </Modal>
   );
 }
 
@@ -634,14 +630,20 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">Nová platba</h2>
+    <Modal title="Nová platba" onClose={onClose} footer={<>
+        <Button variant="outline" onClick={onClose}>Zrušit</Button>
+        <Button
+          onClick={() => create.mutate({})}
+          disabled={amountInvalid || !form.paidAt || create.isPending}
+        >
+          Vytvořit
+        </Button>
+    </>}>
         <div>
           <Label>Částka (Kč)</Label>
           <Input type="text" placeholder="35000,50" value={form.amount} onChange={e => setField({ amount: e.target.value })} />
           {form.amount !== '' && amountInvalid && (
-            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+            <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
           )}
         </div>
         <div>
@@ -659,7 +661,7 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
         <div>
           <Label>Zdroj</Label>
           <select
-            className={SELECT_CLS}
+            className="select-native"
             value={form.source}
             onChange={e => setField({ source: e.target.value as 'manual' | 'bank' })}
           >
@@ -684,17 +686,7 @@ function PaymentDialog({ fixedContractId, onClose, onCreated }: PaymentDialogPro
           pending={create.isPending}
           onForce={() => create.mutate({ allowDuplicate: true })}
         />
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Zrušit</Button>
-          <Button
-            onClick={() => create.mutate({})}
-            disabled={amountInvalid || !form.paidAt || create.isPending}
-          >
-            Vytvořit
-          </Button>
-        </div>
-      </Card>
-    </div>
+    </Modal>
   );
 }
 
@@ -748,9 +740,15 @@ function ComputeDialog({ contractId, onClose, onCreated }: ComputeDialogProps) {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">Spočítat vyúčtování nájemníkovi</h2>
+    <Modal title="Spočítat vyúčtování nájemníkovi" onClose={onClose} className="max-w-lg" footer={<>
+        <Button variant="outline" onClick={onClose}>Zrušit</Button>
+        <Button
+          onClick={() => computeMutation.mutate()}
+          disabled={!form.periodFrom || !form.periodTo || computeMutation.isPending}
+        >
+          Spočítat
+        </Button>
+    </>}>
         <div>
           <Label>Období od</Label>
           <Input type="date" value={form.periodFrom} onChange={e => setForm({ ...form, periodFrom: e.target.value })} />
@@ -761,25 +759,25 @@ function ComputeDialog({ contractId, onClose, onCreated }: ComputeDialogProps) {
         </div>
 
         {preview && preview.length > 0 && (
-          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-            <p className="text-sm font-semibold">Per-kind period preview</p>
-            <p className="text-xs text-muted-foreground">
-              Reconciliace {form.periodFrom} → {form.periodTo}
+          <div className="rounded-md border bg-side p-3 space-y-2">
+            <p className="text-sm font-semibold">Období párování plateb podle druhu</p>
+            <p className="text-xs text-soft">
+              Vyúčtování za {fmtDate(form.periodFrom)} až {fmtDate(form.periodTo)}
             </p>
             <div className="space-y-1">
               {preview.map(p => (
                 <div key={p.kind} className="flex items-center gap-2 text-xs">
-                  <span className="w-20 font-medium text-muted-foreground">{p.kind}</span>
-                  <span className={`font-mono ${p.differs ? 'text-amber-700 font-semibold' : 'text-foreground'}`}>
-                    {p.from} → {p.to}
+                  <span className="w-24 font-medium text-soft">{KIND_LABEL_CS[p.kind] ?? p.kind}</span>
+                  <span className={p.differs ? 'font-medium' : undefined}>
+                    {fmtDate(p.from)} až {fmtDate(p.to)}
                   </span>
-                  <span className="text-muted-foreground">
+                  <span className="text-soft">
                     {p.source === 'from-cost-statements'
-                      ? `(z ${p.count} statement${p.count === 1 ? 'u' : 'ů'})`
-                      : '(default, žádný cost statement)'}
+                      ? `podle ${p.count === 1 ? 'vyúčtování nákladů' : `${p.count} vyúčtování nákladů`}`
+                      : 'období vyúčtování, bez vyúčtování nákladů'}
                   </span>
                   {p.differs && (
-                    <span className="text-amber-600 font-semibold">⚠ liší se od defaultu</span>
+                    <span className="font-medium text-late">liší se od období vyúčtování</span>
                   )}
                 </div>
               ))}
@@ -787,18 +785,8 @@ function ComputeDialog({ contractId, onClose, onCreated }: ComputeDialogProps) {
           </div>
         )}
 
-        {err && <p className="text-sm text-destructive">{err}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Zrušit</Button>
-          <Button
-            onClick={() => computeMutation.mutate()}
-            disabled={!form.periodFrom || !form.periodTo || computeMutation.isPending}
-          >
-            Spočítat
-          </Button>
-        </div>
-      </Card>
-    </div>
+        {err && <p className="text-sm text-late">{err}</p>}
+    </Modal>
   );
 }
 
@@ -929,9 +917,15 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">Přidat změnu</h2>
+    <Modal title="Přidat změnu" onClose={onClose} className="max-w-lg" footer={<>
+        <Button variant="outline" onClick={onClose}>Zrušit</Button>
+        <Button
+          onClick={handleSubmit}
+          disabled={!form.validFrom || requiredAmountInvalid || anyUtilityInvalid || newUtilityInvalid || submitting}
+        >
+          {submitting ? 'Ukládám…' : 'Přidat'}
+        </Button>
+    </>}>
         <div>
           <Label>Platnost od</Label>
           <Input type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} />
@@ -940,14 +934,14 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
           <Label>Nájem (Kč)</Label>
           <Input type="text" placeholder="35000,50" value={form.baseRentCzk} onChange={e => setForm({ ...form, baseRentCzk: e.target.value })} />
           {form.baseRentCzk !== '' && baseRent.kind === 'invalid' && (
-            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+            <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
           )}
         </div>
         <div>
           <Label>Záloha SVJ (Kč)</Label>
           <Input type="text" placeholder="35000,50" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
           {form.serviceAdvanceCzk !== '' && serviceAdvance.kind === 'invalid' && (
-            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+            <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
           )}
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -956,9 +950,9 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
             <Input type="number" min={1} max={31} value={form.paymentDueDay} onChange={e => setForm({ ...form, paymentDueDay: e.target.value })} />
           </div>
           <div>
-            <Label>Platba za</Label>
+            <div className="mb-1 flex items-center gap-1.5"><Label className="mb-0">Platba za</Label><Hint label="Jak se počítá splatnost">„Aktuální měsíc“ znamená, že nájem za říjen je splatný v říjnu. „Následující měsíc“ znamená placení předem: nájem za listopad je splatný už v říjnu.</Hint></div>
             <select
-              className={SELECT_CLS}
+              className="select-native"
               value={form.paymentAppliesTo}
               onChange={e => setForm({ ...form, paymentAppliesTo: e.target.value as 'current' | 'next' })}
             >
@@ -970,7 +964,7 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
         <div>
           <Label>Zdroj</Label>
           <select
-            className={SELECT_CLS}
+            className="select-native"
             value={form.source}
             onChange={e => setForm({ ...form, source: e.target.value as 'initial' | 'addendum' | 'change' })}
           >
@@ -995,7 +989,7 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
         {presentKinds.length > 0 && (
           <div className="space-y-2">
             <p className="text-sm font-medium">Energie</p>
-            <p className="text-xs text-muted-foreground">Ponech prázdné = beze změny. Vymazání hodnoty energii neodstraní (mazání řádku zatím není podporované). Opravu existujícího řádku dělej přes Upravit v tabulce.</p>
+            <p className="text-xs text-soft">Ponech prázdné = beze změny. Vymazání hodnoty energii neodstraní (mazání řádku zatím není podporované). Opravu existujícího řádku dělej přes Upravit v tabulce.</p>
             {presentKinds.map(k => (
               <div key={k}>
                 <Label className="text-sm">{UTILITY_LABEL[k]} (Kč)</Label>
@@ -1006,7 +1000,7 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
                   onChange={e => setForm({ ...form, utilities: { ...form.utilities, [k]: e.target.value } })}
                 />
                 {utilityInvalid(k) && (
-                  <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+                  <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
                 )}
               </div>
             ))}
@@ -1018,7 +1012,7 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
             <p className="text-sm font-medium">Přidat další energii</p>
             <div className="flex gap-2">
               <select
-                className={SELECT_CLS}
+                className="select-native"
                 value={newUtilityKind}
                 onChange={e => setNewUtilityKind(e.target.value as UtilityKind | '')}
               >
@@ -1034,23 +1028,13 @@ function PodminkyDialog({ contractId, terms, utilities, onClose, onCreated }: Po
               />
             </div>
             {newUtilityInvalid && (
-              <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+              <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
             )}
           </div>
         )}
 
-        {err && <p className="text-sm text-destructive">{err}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Zrušit</Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!form.validFrom || requiredAmountInvalid || anyUtilityInvalid || newUtilityInvalid || submitting}
-          >
-            {submitting ? 'Ukládám…' : 'Přidat'}
-          </Button>
-        </div>
-      </Card>
-    </div>
+        {err && <p className="text-sm text-late">{err}</p>}
+    </Modal>
   );
 }
 
@@ -1146,10 +1130,13 @@ function EditPodminkyDialog({ contractId, date, terms, utilities, onClose, onUpd
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">Upravit podmínky</h2>
-        <p className="text-xs text-muted-foreground">
+    <Modal title="Upravit podmínky" onClose={onClose} className="max-w-lg" footer={<>
+        <Button variant="outline" onClick={onClose} disabled={submitting}>Zrušit</Button>
+        <Button onClick={handleSubmit} disabled={termAmountsInvalid || utilAmountsInvalid || submitting}>
+          {submitting ? 'Ukládám…' : 'Uložit'}
+        </Button>
+    </>}>
+        <p className="text-xs text-soft">
           Platnost od <strong>{date}</strong> (datum nelze změnit — pro přesun v čase smaž a přidej nové).
         </p>
 
@@ -1159,14 +1146,14 @@ function EditPodminkyDialog({ contractId, date, terms, utilities, onClose, onUpd
               <Label>Nájem (Kč)</Label>
               <Input type="text" value={form.baseRentCzk} onChange={e => setForm({ ...form, baseRentCzk: e.target.value })} />
               {form.baseRentCzk !== '' && baseRent.kind === 'invalid' && (
-                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+                <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
               )}
             </div>
             <div>
               <Label>Záloha SVJ (Kč)</Label>
               <Input type="text" value={form.serviceAdvanceCzk} onChange={e => setForm({ ...form, serviceAdvanceCzk: e.target.value })} />
               {form.serviceAdvanceCzk !== '' && serviceAdvance.kind === 'invalid' && (
-                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+                <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
               )}
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -1175,9 +1162,9 @@ function EditPodminkyDialog({ contractId, date, terms, utilities, onClose, onUpd
                 <Input type="number" min={1} max={31} value={form.paymentDueDay} onChange={e => setForm({ ...form, paymentDueDay: e.target.value })} />
               </div>
               <div>
-                <Label>Platba za</Label>
+                <div className="mb-1 flex items-center gap-1.5"><Label className="mb-0">Platba za</Label><Hint label="Jak se počítá splatnost">„Aktuální měsíc“ znamená, že nájem za říjen je splatný v říjnu. „Následující měsíc“ znamená placení předem: nájem za listopad je splatný už v říjnu.</Hint></div>
                 <select
-                  className={SELECT_CLS}
+                  className="select-native"
                   value={form.paymentAppliesTo}
                   onChange={e => setForm({ ...form, paymentAppliesTo: e.target.value as 'current' | 'next' })}
                 >
@@ -1189,7 +1176,7 @@ function EditPodminkyDialog({ contractId, date, terms, utilities, onClose, onUpd
             <div>
               <Label>Zdroj</Label>
               <select
-                className={SELECT_CLS}
+                className="select-native"
                 value={form.source}
                 onChange={e => setForm({ ...form, source: e.target.value as 'initial' | 'addendum' | 'change' })}
               >
@@ -1212,7 +1199,7 @@ function EditPodminkyDialog({ contractId, date, terms, utilities, onClose, onUpd
             </div>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-soft">
             K tomuto datu se nemění nájem ani záloha SVJ — jen energie níže.
           </p>
         )}
@@ -1229,7 +1216,7 @@ function EditPodminkyDialog({ contractId, date, terms, utilities, onClose, onUpd
                   onChange={e => setUtilForm({ ...utilForm, [u.id]: { ...utilForm[u.id]!, amountCzk: e.target.value } })}
                 />
                 {utilAmount(u.id).kind === 'invalid' && (
-                  <p className="text-sm text-destructive">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+                  <p className="text-sm text-late">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
                 )}
                 <Input
                   placeholder="Poznámka (volitelné)"
@@ -1245,22 +1232,15 @@ function EditPodminkyDialog({ contractId, date, terms, utilities, onClose, onUpd
           <div className="space-y-1 border-t pt-4">
             <p className="text-sm font-medium">Energie platné k tomuto datu, ale beze změny</p>
             {inheritedUtils.map(u => (
-              <p key={u.id} className="text-xs text-muted-foreground">
+              <p key={u.id} className="text-xs text-soft">
                 {UTILITY_LABEL[u.kind as UtilityKind]}: {(u.monthlyAdvance / 100).toLocaleString('cs-CZ')} Kč — platí od {u.validFrom}, uprav na tom řádku.
               </p>
             ))}
           </div>
         )}
 
-        {err && <p className="text-sm text-destructive">{err}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose} disabled={submitting}>Zrušit</Button>
-          <Button onClick={handleSubmit} disabled={termAmountsInvalid || utilAmountsInvalid || submitting}>
-            {submitting ? 'Ukládám…' : 'Uložit'}
-          </Button>
-        </div>
-      </Card>
-    </div>
+        {err && <p className="text-sm text-late">{err}</p>}
+    </Modal>
   );
 }
 
@@ -1295,9 +1275,15 @@ function RentReductionDialog({ contractId, prefillMonth, onClose, onCreated }: R
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">Přidat srážku nájmu</h2>
+    <Modal title="Přidat srážku nájmu" onClose={onClose} footer={<>
+        <Button variant="outline" onClick={onClose}>Zrušit</Button>
+        <Button
+          onClick={() => create.mutate()}
+          disabled={!form.forMonth || amountInvalid || create.isPending}
+        >
+          Přidat
+        </Button>
+    </>}>
         <div>
           <Label>Měsíc (1. den měsíce)</Label>
           <Input type="date" value={form.forMonth} onChange={e => setForm({ ...form, forMonth: e.target.value })} />
@@ -1306,28 +1292,17 @@ function RentReductionDialog({ contractId, prefillMonth, onClose, onCreated }: R
           <Label>Částka srážky (Kč)</Label>
           <Input type="text" placeholder="35000,50" value={form.amountCzk} onChange={e => setForm({ ...form, amountCzk: e.target.value })} />
           {form.amountCzk !== '' && amountInvalid && (
-            <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+            <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
           )}
         </div>
         <div>
           <Label>Důvod (volitelné)</Label>
           <Input value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Např. nájemník uhradil opravu pronajímatele" />
         </div>
-        {err && <p className="text-sm text-destructive">{err}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Zrušit</Button>
-          <Button
-            onClick={() => create.mutate()}
-            disabled={!form.forMonth || amountInvalid || create.isPending}
-          >
-            Přidat
-          </Button>
-        </div>
-      </Card>
-    </div>
+        {err && <p className="text-sm text-late">{err}</p>}
+    </Modal>
   );
 }
-
 // ─── Měsíční rozpis ──────────────────────────────────────────────────────────
 
 interface MesicniRozpisProps {
@@ -1335,19 +1310,21 @@ interface MesicniRozpisProps {
   contract: Contract;
 }
 
+const MONTHS_PER_PAGE = 12;
+
 function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
   const qc = useQueryClient();
   const [rrDialogOpen, setRrDialogOpen] = useState(false);
   const [prefillMonth, setPrefillMonth] = useState<string | undefined>(undefined);
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
 
-  const today = new Date().toISOString().slice(0, 10);
-  const periodTo = contract.endDate ?? today;
+  const today = todayIso();
+  const { from, to } = breakdownRange(contract, today);
 
   const breakdown = useQuery({
-    queryKey: ['payment-breakdown', contractId],
+    queryKey: ['payment-breakdown', contractId, from, to],
     queryFn: () => api.get<PaymentBreakdownData>(
-      `/api/contracts/${contractId}/payment-breakdown?from=${contract.startDate}&to=${periodTo}`
+      `/api/contracts/${contractId}/payment-breakdown?from=${from}&to=${to}`
     ),
     enabled: !!contract,
   });
@@ -1356,6 +1333,19 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
     mutationFn: (rid: string) => api.delete(`/api/contracts/${contractId}/rent-reductions/${rid}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['payment-breakdown', contractId] }),
   });
+
+  // Newest first, and only months that have come due: the current month and
+  // earlier, plus a later month whose due date already passed (rent paid in
+  // advance). A contract that ends next year would otherwise list months
+  // nobody can pay yet. Months after the contract's end that carry nothing
+  // are dropped too; they exist only so late payments can be matched.
+  const currentMonth = today.slice(0, 7);
+  const months = (breakdown.data?.months ?? [])
+    .filter(m => m.month <= currentMonth || m.dueDate <= today)
+    .filter(m => !(m.daysActive === 0 && m.effectiveExpected === 0 && m.receivedTotal === 0))
+    .slice()
+    .reverse();
+  const pager = usePager(months, MONTHS_PER_PAGE);
 
   function toggleExpand(month: string) {
     setExpandedMonths(prev => {
@@ -1370,165 +1360,167 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
   };
   const UTIL_ORDER: UtilityKindBE[] = ['electricity', 'gas', 'internet', 'water', 'other'];
 
-  if (breakdown.isLoading) return <p className="text-sm text-muted-foreground py-4">Načítám rozpis…</p>;
-  if (breakdown.error) return <p className="text-sm text-destructive py-4">Chyba při načítání rozpisu.</p>;
-
-  const months = breakdown.data?.months ?? [];
-  if (months.length === 0) return <p className="text-sm text-muted-foreground py-4">Žádné měsíce v období smlouvy.</p>;
+  if (breakdown.isLoading) return <p className="px-5 py-6 text-sm text-soft">Načítám rozpis…</p>;
+  if (breakdown.error) {
+    return (
+      <div className="px-5 py-6">
+        <p className="mb-3 text-sm text-late">Chyba při načítání rozpisu.</p>
+        <Button size="sm" variant="outline" onClick={() => breakdown.refetch()}>Zkusit znovu</Button>
+      </div>
+    );
+  }
+  if (months.length === 0) return <p className="px-5 py-6 text-sm text-soft">Zatím žádný měsíc k rozpisu.</p>;
 
   // Which utility kinds have any non-zero expected across all months
   const activeKinds = UTIL_ORDER.filter(k => months.some(m => m.expected.utilities[k] > 0));
+  const COLS = 8;
 
   return (
     <>
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-8"></TableHead>
-              <TableHead>Měsíc</TableHead>
-              <TableHead>Splatnost</TableHead>
-              <TableHead className="text-right">Plán</TableHead>
-              <TableHead className="text-right">Srážka</TableHead>
-              <TableHead className="text-right">Předepsáno</TableHead>
-              <TableHead className="text-right">Zaplaceno</TableHead>
-              <TableHead className="text-right">Rozdíl</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {months.map(row => {
-              const diff = row.receivedTotal - row.effectiveExpected;
-              const isExpanded = expandedMonths.has(row.month);
-              const reductionEntry = breakdown.data?.rentReductions.find(r => r.forMonth === `${row.month}-01`);
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-8"><span className="sr-only">Rozbalit</span></TableHead>
+            <TableHead>Měsíc</TableHead>
+            <TableHead>Splatnost</TableHead>
+            <TableHead className="num"><span className="inline-flex items-center gap-1">Plán<Hint label="Co je plán">Měsíční předpis podle smlouvy: nájem, záloha SVJ a energie.</Hint></span></TableHead>
+            <TableHead className="num"><span className="inline-flex items-center gap-1">Srážka<Hint label="Co je srážka">Jednorázové snížení nájmu v daném měsíci, třeba když nájemník zaplatil opravu za pronajímatele. Snižuje nájem, ne zálohy.</Hint></span></TableHead>
+            <TableHead className="num"><span className="inline-flex items-center gap-1">Předepsáno<Hint label="Co je předepsáno">Plán po odečtení srážky, tedy částka, kterou měl nájemník za měsíc skutečně zaplatit. Platba se nejdřív počítá na nájem, pak na zálohu SVJ a energie.</Hint></span></TableHead>
+            <TableHead className="num">Zaplaceno</TableHead>
+            <TableHead className="num">Rozdíl</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {pager.slice.map(row => {
+            const diff = row.receivedTotal - row.effectiveExpected;
+            const isExpanded = expandedMonths.has(row.month);
+            const reductionEntry = breakdown.data?.rentReductions.find(r => r.forMonth === `${row.month}-01`);
+            const open = isExpanded;
 
-              return (
-                <>
-                  <TableRow
-                    key={row.month}
-                    className={row.daysActive === 0 ? 'opacity-40' : ''}
-                  >
-                    <TableCell className="p-1">
-                      <button
-                        className="text-xs text-muted-foreground hover:text-foreground px-1"
-                        onClick={() => toggleExpand(row.month)}
-                        title={isExpanded ? 'Skrýt alokaci' : 'Zobrazit alokaci'}
-                      >
-                        {isExpanded ? '▲' : '▼'}
-                      </button>
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <span>{row.month}</span>
-                      {row.isLate && (
-                        <span className="ml-2 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700" title={`Pozdě o ${row.maxLateDays} dní`}>
-                          +{row.maxLateDays} dní
+            return (
+              <Fragment key={row.month}>
+                <TableRow className={cn('rem', row.daysActive === 0 && 'opacity-40')}>
+                  <TableCell className="py-2.5 pr-0">
+                    <button
+                      type="button"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-soft hover:bg-hover hover:text-ink"
+                      onClick={() => toggleExpand(row.month)}
+                      aria-expanded={open}
+                      aria-label={open ? `Skrýt rozpis za ${fmtMonth(row.month)}` : `Zobrazit rozpis za ${fmtMonth(row.month)}`}
+                    >
+                      {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <span className="font-medium">{fmtMonth(row.month)}</span>
+                    {row.isLate && (
+                      <span className="ml-2 text-sm text-late">pozdě o {plural(row.maxLateDays, 'den', 'dny', 'dní')}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-soft">{fmtDate(row.dueDate)}</TableCell>
+                  <TableCell className="num">{fmtKc(row.expected.total)}</TableCell>
+                  <TableCell className="num">
+                    {reductionEntry ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span title={reductionEntry.reason ?? 'Bez poznámky'} className={reductionEntry.reason ? 'cursor-help underline decoration-dotted underline-offset-2' : undefined}>
+                          {fmtKc(reductionEntry.amount)}
                         </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{row.dueDate ?? '—'}</TableCell>
-                    <TableCell className="text-right">{fmtKc(row.expected.total)}</TableCell>
-                    <TableCell className="text-right">
-                      {reductionEntry ? (
-                        <span className="flex items-center justify-end gap-1">
-                          <span
-                            className="text-amber-600 cursor-help"
-                            title={reductionEntry.reason ?? 'Bez poznámky'}
-                          >
-                            {fmtKc(reductionEntry.amount)}
-                            {reductionEntry.reason && <sup className="text-[10px] ml-0.5">ℹ</sup>}
-                          </span>
-                          <button
-                            className="text-destructive hover:opacity-70 text-xs"
-                            title="Smazat srážku"
-                            onClick={() => {
-                              const msg = reductionEntry.reason
-                                ? `Smazat srážku ${fmtKc(reductionEntry.amount)} (${reductionEntry.reason}) za měsíc ${row.month}?`
-                                : `Smazat srážku ${fmtKc(reductionEntry.amount)} za měsíc ${row.month}?`;
-                              if (confirm(msg)) deleteReduction.mutate(reductionEntry.id);
-                            }}
-                          >
-                            ✕
-                          </button>
-                        </span>
-                      ) : (
                         <button
-                          className="text-xs text-muted-foreground hover:text-primary"
+                          type="button"
+                          className="acts text-xs text-soft hover:text-late"
+                          aria-label="Smazat srážku"
+                          title="Smazat srážku"
                           onClick={() => {
-                            setPrefillMonth(`${row.month}-01`);
-                            setRrDialogOpen(true);
+                            const msg = reductionEntry.reason
+                              ? `Smazat srážku ${fmtKc(reductionEntry.amount)} (${reductionEntry.reason}) za ${fmtMonth(row.month)}?`
+                              : `Smazat srážku ${fmtKc(reductionEntry.amount)} za ${fmtMonth(row.month)}?`;
+                            if (confirm(msg)) deleteReduction.mutate(reductionEntry.id);
                           }}
                         >
-                          + Přidat
+                          ✕
                         </button>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">{fmtKc(row.effectiveExpected)}</TableCell>
-                    <TableCell className="text-right">{fmtKc(row.receivedTotal)}</TableCell>
-                    <TableCell className="text-right">{fmtKcSigned(diff)}</TableCell>
-                  </TableRow>
-                  {isExpanded && (
-                    <TableRow key={`${row.month}-detail`} className="bg-muted/30">
-                      <TableCell colSpan={8} className="py-3 px-6">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
-                          <div>
-                            <p className="text-muted-foreground">Nájem uhrazen</p>
-                            <p className="font-medium">{fmtKc(row.allocation.baseRentPaid)} <span className="text-muted-foreground">/ {fmtKc(row.expected.baseRent)}</span></p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Záloha SVJ</p>
-                            <p className="font-medium">{fmtKc(row.allocation.servicePaid)} <span className="text-muted-foreground">/ {fmtKc(row.expected.serviceAdvance)}</span></p>
-                          </div>
-                          {activeKinds.map(k => (
-                            <div key={k}>
-                              <p className="text-muted-foreground">{UTIL_LABEL[k]}</p>
-                              <p className="font-medium">{fmtKc(row.allocation.utilityPaid[k])} <span className="text-muted-foreground">/ {fmtKc(row.expected.utilities[k])}</span></p>
-                            </div>
-                          ))}
-                          {row.allocation.surplus > 0 && (
-                            <div>
-                              <p className="text-muted-foreground">Přeplatek</p>
-                              <p className="font-medium text-green-600">{fmtKc(row.allocation.surplus)}</p>
-                            </div>
-                          )}
-                          {row.allocation.deficitTotal > 0 && (
-                            <div>
-                              <p className="text-muted-foreground">Dluh celkem</p>
-                              <p className="font-medium text-red-600">{fmtKc(row.allocation.deficitTotal)}</p>
-                            </div>
-                          )}
-                          {row.daysActive < row.daysInMonth && (
-                            <div>
-                              <p className="text-muted-foreground">Aktivní dny</p>
-                              <p className="font-medium">{row.daysActive} / {row.daysInMonth}</p>
-                            </div>
-                          )}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="acts text-sm text-soft hover:text-accent"
+                        onClick={() => {
+                          setPrefillMonth(`${row.month}-01`);
+                          setRrDialogOpen(true);
+                        }}
+                      >
+                        + Přidat
+                      </button>
+                    )}
+                  </TableCell>
+                  <TableCell className="num">{fmtKc(row.effectiveExpected)}</TableCell>
+                  <TableCell className="num">{fmtKc(row.receivedTotal)}</TableCell>
+                  <TableCell className={cn('num font-medium', diff < 0 ? 'text-late' : diff > 0 ? 'text-accent' : 'text-soft')}>{fmtKcSigned(diff)}</TableCell>
+                </TableRow>
+                {isExpanded && (
+                  <TableRow>
+                    <TableCell colSpan={COLS} className="bg-side px-5 py-3.5 group-hover/row:bg-side">
+                      <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-x-6 gap-y-3 text-sm">
+                        <div>
+                          <div className="text-soft">Nájem uhrazen</div>
+                          <div className="font-medium">{fmtKc(row.allocation.baseRentPaid)} <span className="font-normal text-soft">/ {fmtKc(row.expected.baseRent)}</span></div>
                         </div>
-                        {(row.appliedPayments ?? []).length > 0 && (
-                          <div className="mt-3 border-t pt-2">
-                            <p className="text-xs text-muted-foreground mb-1">Přiřazené platby (FIFO)</p>
-                            <div className="space-y-1">
-                              {(row.appliedPayments ?? []).map(ap => (
-                                <div key={ap.paymentId} className="flex items-center gap-3 text-xs">
-                                  <span className="text-muted-foreground">{ap.paidAt}</span>
-                                  <span className="font-medium">{fmtKc(ap.amount)}</span>
-                                  {ap.lateDays > 0 ? (
-                                    <span className="text-red-600 font-semibold">pozdě o {ap.lateDays} dní</span>
-                                  ) : (
-                                    <span className="text-green-600">včas</span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
+                        <div>
+                          <div className="text-soft">Záloha SVJ</div>
+                          <div className="font-medium">{fmtKc(row.allocation.servicePaid)} <span className="font-normal text-soft">/ {fmtKc(row.expected.serviceAdvance)}</span></div>
+                        </div>
+                        {activeKinds.map(k => (
+                          <div key={k}>
+                            <div className="text-soft">{UTIL_LABEL[k]}</div>
+                            <div className="font-medium">{fmtKc(row.allocation.utilityPaid[k])} <span className="font-normal text-soft">/ {fmtKc(row.expected.utilities[k])}</span></div>
+                          </div>
+                        ))}
+                        {row.allocation.surplus > 0 && (
+                          <div>
+                            <div className="text-soft">Přeplatek</div>
+                            <div className="font-medium text-accent">{fmtKc(row.allocation.surplus)}</div>
                           </div>
                         )}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+                        {row.allocation.deficitTotal > 0 && (
+                          <div>
+                            <div className="text-soft">Dluh celkem</div>
+                            <div className="font-medium text-late">{fmtKc(row.allocation.deficitTotal)}</div>
+                          </div>
+                        )}
+                        {row.daysActive < row.daysInMonth && (
+                          <div>
+                            <div className="text-soft">Aktivní dny</div>
+                            <div className="font-medium">{row.daysActive} / {row.daysInMonth}</div>
+                          </div>
+                        )}
+                      </div>
+                      {(row.appliedPayments ?? []).length > 0 && (
+                        <div className="mt-3 border-t border-line pt-3">
+                          <div className="mb-1.5 text-sm text-soft">Přiřazené platby</div>
+                          <div className="space-y-1">
+                            {(row.appliedPayments ?? []).map(ap => (
+                              <div key={ap.paymentId} className="flex items-center gap-4 text-sm">
+                                <span className="text-soft">{fmtDate(ap.paidAt)}</span>
+                                <span className="font-medium">{fmtKc(ap.amount)}</span>
+                                {ap.lateDays > 0 ? (
+                                  <span className="text-late">pozdě o {plural(ap.lateDays, 'den', 'dny', 'dní')}</span>
+                                ) : (
+                                  <span className="text-accent">včas</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
+      <Pager page={pager.page} pageCount={pager.pageCount} from={pager.from} to={pager.to} total={pager.total} unit="měsíců" onPage={pager.setPage} prevLabel="Novější měsíce" nextLabel="Starší měsíce" />
 
       {rrDialogOpen && (
         <RentReductionDialog
@@ -1542,7 +1534,106 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
   );
 }
 
+// ─── Události ────────────────────────────────────────────────────────────────
+
+interface UdalostiProps {
+  contractId: string;
+  contract: Contract;
+  terms: ContractTerm[];
+  reconciliations: Reconciliation[];
+}
+
+const TERM_SOURCE: Record<string, string> = { initial: 'Počáteční podmínky', addendum: 'Dodatek ke smlouvě', change: 'Změna podmínek' };
+
+/**
+ * What happened and what is coming up on this lease: open deadlines and
+ * reminders on top, the history underneath. Deadlines are derived from the
+ * data (next rent, end of the lease, an unfinished reconciliation); reminders
+ * are the manual ones tied to this contract.
+ */
+function UdalostiTab({ contractId, contract, terms, reconciliations }: UdalostiProps) {
+  const today = todayIso();
+  const { from, to } = breakdownRange(contract, today);
+  const breakdown = useQuery({
+    queryKey: ['payment-breakdown', contractId, from, to],
+    queryFn: () => api.get<PaymentBreakdownData>(`/api/contracts/${contractId}/payment-breakdown?from=${from}&to=${to}`),
+  });
+  const reminders = useReminders();
+
+  const derived: AgendaItem[] = [];
+  const next = (breakdown.data?.months ?? []).find(m => m.dueDate >= today && m.allocation.deficitTotal > 0);
+  if (next) derived.push({ key: 'due', date: next.dueDate, title: 'Splatnost nájmu', ref: `${fmtMonth(next.month)}, ${fmtKc(next.allocation.deficitTotal)}`, href: `/contracts/${contractId}?tab=platby`, reminderId: null, done: false, ...dueLabel(next.dueDate, today) });
+  if (contract.endDate && contract.endDate >= today) derived.push({ key: 'end', date: contract.endDate, title: 'Končí nájemní smlouva', ref: 'prodloužení nebo předání bytu', href: `/contracts/${contractId}`, reminderId: null, done: false, ...dueLabel(contract.endDate, today) });
+  for (const r of reconciliations) {
+    if (r.status !== 'draft') continue;
+    const deadline = reconciliationDeadline(r.periodTo);
+    derived.push({ key: `rec:${r.id}`, date: deadline, title: `Dokončit vyúčtování ${fmtDate(r.periodFrom)} až ${fmtDate(r.periodTo)}`, ref: 'nájemníkovi do 4 měsíců po konci období', href: `/reconciliations/${r.id}`, reminderId: null, done: false, ...dueLabel(deadline, today) });
+  }
+  const manual = reminderItems((reminders.query.data ?? []).filter(r => r.contractId === contractId), () => `/contracts/${contractId}?tab=udalosti`, () => '');
+  const items = [...manual.filter(i => !i.done), ...derived].sort((a, b) => a.date.localeCompare(b.date)).concat(manual.filter(i => i.done));
+
+  // History, newest first.
+  const history: Array<{ date: string; title: string; detail: string; href?: string }> = [];
+  history.push({ date: contract.startDate, title: 'Začátek nájmu', detail: contract.securityDeposit != null ? `kauce ${fmtKc(contract.securityDeposit)}` : '' });
+  for (const t of terms) {
+    history.push({ date: t.validFrom, title: TERM_SOURCE[t.source] ?? t.source, detail: `nájem ${fmtKc(t.baseRent)}, záloha SVJ ${fmtKc(t.serviceAdvance)}, splatnost do ${t.paymentDueDay}. dne${t.note ? `, ${t.note}` : ''}` });
+  }
+  for (const r of reconciliations) {
+    if (!r.computedAt) continue;
+    history.push({ date: r.computedAt.slice(0, 10), title: r.status === 'finalized' ? 'Vyúčtování finalizováno' : 'Vyúčtování spočítáno', detail: `${fmtDate(r.periodFrom)} až ${fmtDate(r.periodTo)}`, href: `/reconciliations/${r.id}` });
+  }
+  if (contract.endDate && contract.endDate < today) history.push({ date: contract.endDate, title: 'Konec nájmu', detail: '' });
+  history.sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Agenda
+        title="Termíny a připomínky"
+        items={items}
+        isPending={reminders.query.isPending || breakdown.isPending}
+        newDefaults={{ contractId }}
+        emptyText="Nic nečeká. Nájem je zaplacený a žádná připomínka není otevřená."
+      />
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <CardTitle>Historie</CardTitle>
+          <CardDescription>Co se na smlouvě stalo, od nejnovějšího.</CardDescription>
+        </CardHeader>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Datum</TableHead>
+              <TableHead>Událost</TableHead>
+              <TableHead>Podrobnosti</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {history.map((h, i) => (
+              <TableRow key={i}>
+                <TableCell className="whitespace-nowrap">{fmtDate(h.date)}</TableCell>
+                <TableCell className="font-medium">{h.href ? <Link to={h.href} className="text-ink">{h.title}</Link> : h.title}</TableCell>
+                <TableCell className="text-soft">{h.detail || '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
+
+const STATUS_LABEL: Record<string, { label: string; tone: 'ok' | 'wait' | 'soft' }> = {
+  draft: { label: 'Návrh', tone: 'wait' },
+  finalized: { label: 'Finalizováno', tone: 'ok' },
+};
+
+const CS_KIND_LABEL: Record<string, string> = {
+  services: 'Služby (SVJ)', electricity: 'Elektřina', gas: 'Plyn', internet: 'Internet', water: 'Voda', other: 'Ostatní',
+};
+
+const PAYMENTS_PER_PAGE = 10;
 
 export function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -1605,6 +1696,8 @@ export function ContractDetailPage() {
     queryFn: () => api.get<{ payments: Payment[] }>(`/api/payments?contractId=${id}`),
     enabled: !!id,
   });
+  const paymentsSorted = [...(paymentsData?.payments ?? [])].sort((a, b) => b.paidAt.localeCompare(a.paidAt));
+  const paymentsPager = usePager(paymentsSorted, PAYMENTS_PER_PAGE);
 
   const [paymentDeleteErr, setPaymentDeleteErr] = useState<string | null>(null);
 
@@ -1614,6 +1707,7 @@ export function ContractDetailPage() {
       setPaymentDeleteErr(null);
       qc.invalidateQueries({ queryKey: ['payments-by-contract', id] });
       qc.invalidateQueries({ queryKey: ['payment-breakdown', id] });
+      qc.invalidateQueries({ queryKey: ['payments'] });
       // A deleted bank-sourced payment returns its bank_transaction to the
       // Nepřiřazené platby inbox (paymentId is SET NULL) — refresh it so the
       // returned transaction shows up without a manual reload.
@@ -1633,10 +1727,10 @@ export function ContractDetailPage() {
   const filteredStatements = contract
     ? allStatements.filter(s =>
         periodsOverlap(s.periodFrom, s.periodTo, contract.startDate, contract.endDate ?? null)
-      )
+      ).sort((a, b) => b.periodFrom.localeCompare(a.periodFrom))
     : [];
 
-  const reconciliations = reconciliationsData?.reconciliations ?? [];
+  const reconciliations = [...(reconciliationsData?.reconciliations ?? [])].sort((a, b) => b.periodFrom.localeCompare(a.periodFrom));
 
   // ── Monthly total ──────────────────────────────────────────────────────────
   const monthlyTotal = currentTerm
@@ -1645,17 +1739,11 @@ export function ContractDetailPage() {
       currentUtilities.reduce((sum, u) => sum + u.monthlyAdvance, 0)
     : null;
 
-  // ── Podmínky dialog state ──────────────────────────────────────────────────
+  // ── Dialog state ───────────────────────────────────────────────────────────
   const [podminkyOpen, setPodminkyOpen] = useState(false);
   const [editRowDate, setEditRowDate] = useState<string | null>(null);
-
-  // ── Cost statement dialog state ────────────────────────────────────────────
   const [csOpen, setCsOpen] = useState(false);
-
-  // ── Reconciliation compute dialog state ───────────────────────────────────
   const [reconcileOpen, setReconcileOpen] = useState(false);
-
-  // ── Payment create dialog state ────────────────────────────────────────────
   const [paymentOpen, setPaymentOpen] = useState(false);
 
   // ── Tab management ──────────────────────────────────────────────────────────
@@ -1667,193 +1755,174 @@ export function ContractDetailPage() {
       return n;
     }, { replace: true });
   };
+  const [payView, setPayView] = useState<'rozpis' | 'prijate'>(searchParams.get('action') === 'new' ? 'prijate' : 'rozpis');
+
+  // ?tab=platby&action=new (the dashboard's "Přidat platbu") opens the payment
+  // dialog straight away and drops the flag from the URL.
+  useEffect(() => {
+    if (searchParams.get('action') !== 'new' || !id) return;
+    setPayView('prijate');
+    setPaymentOpen(true);
+    setSearchParams(prev => {
+      const n = new URLSearchParams(prev);
+      n.delete('action');
+      return n;
+    }, { replace: true });
+  }, [searchParams, setSearchParams, id]);
+
+  const termsFailed = (termsError && !termsData) || (utilitiesError && !utilitiesData);
+  const termsPending = !termsData || !utilitiesData;
+  const retryTerms = () => { if (!termsData) termsRefetch(); if (!utilitiesData) utilitiesRefetch(); };
+  const sluzbyTotal = (currentTerm?.serviceAdvance ?? 0) + currentUtilities.reduce((s, u) => s + u.monthlyAdvance, 0);
 
   return (
-    <div className="space-y-6">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div>
-        <Link to="/contracts" className="text-sm text-muted-foreground hover:underline">← Pronájmy</Link>
-        <h1 className="text-3xl font-bold mt-1">Pronájem</h1>
-        {contract && (
-          <p className="text-muted-foreground mt-1">
-            <span className="font-medium text-foreground" title="Nájemník">
-              {contract.tenantName}
-            </span>
-            {' · '}
-            <Link
-              to={`/properties/${contract.propertyId}`}
-              className="underline text-primary hover:opacity-70"
-            >
-              {contract.propertyName}
-            </Link>
-          </p>
-        )}
-      </div>
+    <>
+      <PageHeader
+        crumb={<Crumb to="/contracts">Pronájmy</Crumb>}
+        title={contract ? <Link to={`/properties/${contract.propertyId}`} className="text-ink hover:no-underline">{contract.propertyName}</Link> : ' '}
+        sub={contract && <>Nájemník · <span className="text-ink">{contract.tenantName}</span></>}
+      />
 
-      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList>
+        <TabsList aria-label="Sekce pronájmu">
           <TabsTrigger value="prehled">Přehled</TabsTrigger>
           <TabsTrigger value="platby">Platby</TabsTrigger>
           <TabsTrigger value="sluzby">Služby / Energie</TabsTrigger>
-          <TabsTrigger value="vyuctovani">Vyúčtování (nájemci)</TabsTrigger>
+          <TabsTrigger value="vyuctovani">Vyúčtování nájemníkovi</TabsTrigger>
+          <TabsTrigger value="udalosti">Události</TabsTrigger>
         </TabsList>
 
         {/* ── Tab 1: Přehled ─────────────────────────────────────────────── */}
-        <TabsContent value="prehled" className="space-y-6">
-          {/* Sekce Smlouva */}
-          {contract && (
-            <Card className="p-6 space-y-2">
-              <h2 className="text-lg font-semibold mb-3">Smlouva</h2>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Platnost</span>
-                  <p className="font-medium">{contract.startDate} – {contract.endDate ?? 'běží'}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Kauce</span>
-                  <p className="font-medium">{contract.securityDeposit != null ? fmtKc(contract.securityDeposit) : '—'}</p>
-                </div>
-                {(() => {
-                  const openTerms = (termsData?.terms ?? []).find(t => t.validTo === null || t.validTo === undefined);
-                  return openTerms ? (
-                    <div>
-                      <span className="text-muted-foreground">Splatnost (aktuální)</span>
-                      <p className="font-medium">
-                        do {openTerms.paymentDueDay}. dne {openTerms.paymentAppliesTo === 'next' ? 'předchozího' : 'aktuálního'} měsíce
-                      </p>
-                    </div>
-                  ) : null;
-                })()}
-                {contract.note && (
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground">Poznámka</span>
-                    <p className="font-medium">{contract.note}</p>
-                  </div>
-                )}
-              </div>
+        <TabsContent value="prehled" className="flex flex-col gap-5">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-5">
+            {/* Smlouva */}
+            <Card>
+              <CardHeader><CardTitle>Smlouva</CardTitle></CardHeader>
+              <CardContent>
+                {contract ? (
+                  <KV>
+                    <KVRow label="Platnost">{fmtRange(contract.startDate, contract.endDate)}</KVRow>
+                    <KVRow label="Kauce">{contract.securityDeposit != null ? fmtKc(contract.securityDeposit) : <span className="text-soft">—</span>}</KVRow>
+                    <KVRow label="Splatnost (aktuální)">
+                      {currentTerm
+                        ? `do ${currentTerm.paymentDueDay}. dne ${currentTerm.paymentAppliesTo === 'next' ? 'předchozího' : 'aktuálního'} měsíce`
+                        : <span className="text-soft">—</span>}
+                    </KVRow>
+                    {contract.note && <KVRow label="Poznámka" wide>{contract.note}</KVRow>}
+                  </KV>
+                ) : <p className="text-sm text-soft">Načítání…</p>}
+              </CardContent>
             </Card>
-          )}
 
-          {/* Sekce Aktuální podmínky */}
-          <Card className="p-6">
-            <h2 className="text-lg font-semibold mb-3">Aktuální podmínky</h2>
-            {(termsError && !termsData) || (utilitiesError && !utilitiesData) ? (
-              <div className="py-4">
-                <p className="text-sm text-destructive mb-3">Nepodařilo se načíst data.</p>
-                <Button size="sm" variant="outline" onClick={() => { if (!termsData) termsRefetch(); if (!utilitiesData) utilitiesRefetch(); }}>Zkusit znovu</Button>
-              </div>
-            ) : !termsData || !utilitiesData ? (
-              <p className="text-sm text-muted-foreground py-4">Načítání…</p>
-            ) : !currentTerm && currentUtilities.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Žádné aktuální podmínky.</p>
-            ) : (() => {
-                const sluzbyTotal = (currentTerm?.serviceAdvance ?? 0) + currentUtilities.reduce((s, u) => s + u.monthlyAdvance, 0);
-                return (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-3 text-sm">
+            {/* Aktuální podmínky */}
+            <Card>
+              <CardHeader><CardTitle>Aktuální podmínky</CardTitle></CardHeader>
+              <CardContent>
+                {termsFailed ? (
+                  <div>
+                    <p className="mb-3 text-sm text-late">Nepodařilo se načíst data.</p>
+                    <Button size="sm" variant="outline" onClick={retryTerms}>Zkusit znovu</Button>
+                  </div>
+                ) : termsPending ? (
+                  <p className="text-sm text-soft">Načítání…</p>
+                ) : !currentTerm && currentUtilities.length === 0 ? (
+                  <p className="text-sm text-soft">Žádné aktuální podmínky. Přidej první změnu v historii smlouvy níže.</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-4">
                       <div>
-                        <p className="text-muted-foreground">Nájem</p>
-                        <p className="font-medium text-base">{fmtKc(currentTerm?.baseRent ?? 0)}</p>
+                        <div className="text-sm text-soft">Nájem</div>
+                        <div className="text-[18px] font-semibold tracking-[-0.01em]">{fmtKc(currentTerm?.baseRent ?? 0)}</div>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Služby (celkem)</p>
-                        <p className="font-medium text-base">{fmtKc(sluzbyTotal)}</p>
+                        <div className="text-sm text-soft">Služby celkem</div>
+                        <div className="text-[18px] font-semibold tracking-[-0.01em]">{fmtKc(sluzbyTotal)}</div>
                       </div>
                       {monthlyTotal !== null && (
                         <div>
-                          <p className="text-muted-foreground">Měsíčně celkem</p>
-                          <p className="font-bold text-base">{fmtKc(monthlyTotal)}</p>
+                          <div className="text-sm text-soft">Měsíčně celkem</div>
+                          <div className="text-[18px] font-semibold tracking-[-0.01em]">{fmtKc(monthlyTotal)}</div>
                         </div>
                       )}
                     </div>
                     {sluzbyTotal > 0 && (
-                      <div className="border-t pt-3">
-                        <p className="text-xs text-muted-foreground mb-2">Rozklad složek služeb</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm">
-                          {currentTerm && currentTerm.serviceAdvance > 0 && (
-                            <div>
-                              <p className="text-muted-foreground text-xs">Záloha SVJ</p>
-                              <p className="font-medium">{fmtKc(currentTerm.serviceAdvance)}</p>
-                            </div>
-                          )}
-                          {currentUtilities.map(u => (
-                            <div key={u.id}>
-                              <p className="text-muted-foreground text-xs">{utilKindLabel(u.kind)}</p>
-                              <p className="font-medium">{fmtKc(u.monthlyAdvance)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <KV className="mt-4 border-t border-rule pt-3">
+                        {currentTerm && currentTerm.serviceAdvance > 0 && <KVRow label="Záloha SVJ">{fmtKc(currentTerm.serviceAdvance)}</KVRow>}
+                        {currentUtilities.map(u => <KVRow key={u.id} label={utilKindLabel(u.kind)}>{fmtKc(u.monthlyAdvance)}</KVRow>)}
+                      </KV>
                     )}
-                  </div>
-                );
-              })()}
-          </Card>
+                  </>
+                )}
+              </CardContent>
+            </Card>
 
-          {/* Sekce Párování plateb */}
-          {id && <PairingCard contractId={id} expectedMonthlyTotal={monthlyTotal} />}
+            {/* Párování plateb */}
+            {id && <PairingCard contractId={id} expectedMonthlyTotal={monthlyTotal} />}
+          </div>
 
-          {/* Sekce Historie smlouvy */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Historie smlouvy</CardTitle>
-              <Button onClick={() => setPodminkyOpen(true)}>Přidat změnu</Button>
+          {/* Historie smlouvy */}
+          <Card className="overflow-hidden">
+            <CardHeader className="flex-row items-center justify-between gap-3">
+              <div>
+                <CardTitle>Historie smlouvy</CardTitle>
+                <CardDescription>Nájem, zálohy a splatnost v čase. Každá změna platí od svého data.</CardDescription>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setPodminkyOpen(true)}><Plus className="h-3.5 w-3.5" strokeWidth={2.2} />Přidat změnu</Button>
             </CardHeader>
-            <CardContent>
-              <PodminkyTable
-                terms={terms}
-                utilities={utilities}
-                onEditRow={(d) => setEditRowDate(d)}
-                isPending={!termsData || !utilitiesData}
-                isError={(termsError && !termsData) || (utilitiesError && !utilitiesData)}
-                onRetry={() => { if (!termsData) termsRefetch(); if (!utilitiesData) utilitiesRefetch(); }}
-              />
-            </CardContent>
+            <PodminkyTable
+              terms={terms}
+              utilities={utilities}
+              onEditRow={(d) => setEditRowDate(d)}
+              isPending={termsPending}
+              isError={termsFailed}
+              onRetry={retryTerms}
+            />
           </Card>
         </TabsContent>
 
         {/* ── Tab 2: Platby ──────────────────────────────────────────────── */}
-        <TabsContent value="platby" className="space-y-4">
-          {/* Měsíční rozpis */}
-          {id && contract && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <TabsContent value="platby" className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Seg
+              label="Pohled na platby"
+              value={payView}
+              onChange={setPayView}
+              options={[{ value: 'rozpis', label: 'Měsíční rozpis' }, { value: 'prijate', label: 'Přijaté platby' }]}
+            />
+            {id && payView === 'prijate' && (
+              <Button onClick={() => setPaymentOpen(true)}><Plus className="h-4 w-4" strokeWidth={2.2} />Nová platba</Button>
+            )}
+          </div>
+
+          {payView === 'rozpis' && id && contract && (
+            <Card className="overflow-hidden">
+              <CardHeader>
                 <CardTitle>Měsíční rozpis</CardTitle>
+                <CardDescription>Předpis, srážky a přiřazené platby po měsících, od nejnovějšího.</CardDescription>
               </CardHeader>
-              <CardContent className="pt-0">
-                <MesicniRozpis contractId={id} contract={contract} />
-              </CardContent>
+              <MesicniRozpis contractId={id} contract={contract} />
             </Card>
           )}
 
-          {/* Platby tabulka */}
-          <Card>
-            <div className="p-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Platby</h2>
-                {id && (
-                  <Button size="sm" onClick={() => setPaymentOpen(true)}>Nová platba</Button>
-                )}
-              </div>
-              {paymentDeleteErr && (
-                <Card className="p-4 border-destructive bg-red-50 flex items-start justify-between gap-4">
-                  <p className="text-sm text-red-900">{paymentDeleteErr}</p>
-                  <Button size="sm" variant="outline" onClick={() => setPaymentDeleteErr(null)}>Zavřít</Button>
-                </Card>
-              )}
-              <div className="overflow-hidden border rounded-md">
+          {payView === 'prijate' && (
+            <>
+              {paymentDeleteErr && <Notice kind="err" onClose={() => setPaymentDeleteErr(null)}>{paymentDeleteErr}</Notice>}
+              <Card className="overflow-hidden">
+                <CardHeader>
+                  <CardTitle>Přijaté platby</CardTitle>
+                  <CardDescription>Platby přiřazené k tomuto pronájmu, od nejnovější.</CardDescription>
+                </CardHeader>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Datum</TableHead>
-                      <TableHead>Částka</TableHead>
+                      <TableHead className="num">Částka</TableHead>
                       <TableHead>Protistrana</TableHead>
-                      <TableHead>Číslo účtu</TableHead>
+                      <TableHead>Číslo účtu a symboly</TableHead>
                       <TableHead>Zdroj</TableHead>
                       <TableHead>Externí ID</TableHead>
                       <TableHead>Poznámka</TableHead>
-                      <TableHead className="w-12"></TableHead>
+                      <TableHead><span className="sr-only">Akce</span></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1861,37 +1930,34 @@ export function ContractDetailPage() {
                       <TableError cols={8} onRetry={() => paymentsDataRefetch()} />
                     ) : !paymentsData ? (
                       <TableSkeleton cols={8} />
-                    ) : paymentsData.payments.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">Žádné platby pro tento pronájem.</TableCell>
-                      </TableRow>
+                    ) : paymentsSorted.length === 0 ? (
+                      <TableEmpty cols={8}>Žádné platby pro tento pronájem.</TableEmpty>
                     ) : (
-                      paymentsData.payments.map(p => (
-                        <TableRow key={p.id}>
-                          <TableCell>{p.paidAt}</TableCell>
-                          <TableCell>{fmtKc(p.amount)}</TableCell>
-                          <TableCell>{p.counterparty ?? '—'}</TableCell>
+                      paymentsPager.slice.map(p => (
+                        <TableRow key={p.id} className="rem">
+                          <TableCell className="whitespace-nowrap">{fmtDate(p.paidAt)}</TableCell>
+                          <TableCell className="num font-medium">{fmtKcExact(p.amount)}</TableCell>
+                          <TableCell>{p.counterparty ?? <span className="text-soft">—</span>}</TableCell>
                           {/* Folded into the account cell, which is already the
                               bank-identifiers cell, rather than widening a
                               seven-column table to ten. */}
-                          <TableCell className="text-xs text-muted-foreground">
+                          <TableCell className="text-sm text-soft">
                             <div>{p.counterpartyAccount ?? '—'}</div>
                             {formatSymbols(p) && <div>{formatSymbols(p)}</div>}
                           </TableCell>
-                          <TableCell>{p.source}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{p.externalId ?? '—'}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={p.note ?? undefined}>
+                          <TableCell className="text-soft">{p.source === 'bank' ? 'banka' : p.source === 'manual' ? 'ručně' : p.source}</TableCell>
+                          <TableCell className="max-w-[10rem] truncate text-sm text-soft" title={p.externalId ?? undefined}>{p.externalId ?? '—'}</TableCell>
+                          <TableCell className="max-w-xs truncate text-sm text-soft" title={p.note ?? p.description ?? undefined}>
                             {p.note ?? p.description ?? '—'}
                           </TableCell>
-                          <TableCell className="w-12">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive"
+                          <TableCell className="text-right">
+                            <button
+                              type="button"
+                              className="acts text-sm text-soft hover:text-late disabled:opacity-50"
                               disabled={deletePayment.isPending}
                               title="Smazat platbu"
                               onClick={() => {
-                                const base = `Smazat platbu ${fmtKc(p.amount)} ze dne ${p.paidAt}?`;
+                                const base = `Smazat platbu ${fmtKcExact(p.amount)} ze dne ${fmtDate(p.paidAt)}?`;
                                 const msg = p.source === 'bank'
                                   ? `${base} Pokud k ní existuje navázaná bankovní transakce, vrátí se zpět do Nepřiřazených plateb k novému přiřazení.`
                                   : base;
@@ -1899,163 +1965,161 @@ export function ContractDetailPage() {
                               }}
                             >
                               Smazat
-                            </Button>
+                            </button>
                           </TableCell>
                         </TableRow>
                       ))
                     )}
                   </TableBody>
                 </Table>
-              </div>
-            </div>
-          </Card>
+                <Pager page={paymentsPager.page} pageCount={paymentsPager.pageCount} from={paymentsPager.from} to={paymentsPager.to} total={paymentsPager.total} unit="plateb" onPage={paymentsPager.setPage} prevLabel="Novější platby" nextLabel="Starší platby" />
+              </Card>
+            </>
+          )}
         </TabsContent>
 
         {/* ── Tab 3: Služby / Energie ────────────────────────────────────── */}
         <TabsContent value="sluzby">
-          <Card>
-            <div className="p-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Vyúčtování nákladů</h2>
-                {contract && (
-                  <Button size="sm" onClick={() => setCsOpen(true)}>Nové vyúčtování nákladů</Button>
-                )}
+          <Card className="overflow-hidden">
+            <CardHeader className="flex-row items-center justify-between gap-3">
+              <div>
+                <CardTitle>Vyúčtování nákladů</CardTitle>
+                <CardDescription>Skutečné náklady od SVJ a dodavatelů za období pronájmu.</CardDescription>
               </div>
-              <div className="overflow-hidden border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Druh</TableHead>
-                      <TableHead>Období</TableHead>
-                      <TableHead>Celkem</TableHead>
-                      <TableHead>Úprava</TableHead>
-                      <TableHead>Reconciliable</TableHead>
-                      <TableHead>Poznámka k úpravě</TableHead>
-                      <TableHead>Doklad</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {costStatementsDataError && !costStatementsData ? (
-                      <TableError cols={7} onRetry={() => costStatementsDataRefetch()} />
-                    ) : !costStatementsData ? (
-                      <TableSkeleton cols={7} />
-                    ) : filteredStatements.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Žádné výkazy nákladů pro toto období.</TableCell>
+              {contract && (
+                <Button size="sm" variant="outline" onClick={() => setCsOpen(true)}><Plus className="h-3.5 w-3.5" strokeWidth={2.2} />Nové vyúčtování nákladů</Button>
+              )}
+            </CardHeader>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Druh</TableHead>
+                  <TableHead>Období</TableHead>
+                  <TableHead className="num">Celkem</TableHead>
+                  <TableHead className="num"><span className="inline-flex items-center gap-1">Úprava<Hint label="Co je úprava">Část nákladů, kterou nese pronajímatel a nájemníkovi se nevyúčtovává, třeba fond oprav v předpisu SVJ.</Hint></span></TableHead>
+                  <TableHead className="num">K vyúčtování</TableHead>
+                  <TableHead>Poznámka k úpravě</TableHead>
+                  <TableHead>Doklad</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {costStatementsDataError && !costStatementsData ? (
+                  <TableError cols={7} onRetry={() => costStatementsDataRefetch()} />
+                ) : !costStatementsData ? (
+                  <TableSkeleton cols={7} />
+                ) : filteredStatements.length === 0 ? (
+                  <TableEmpty cols={7}>Žádné vyúčtování nákladů pro toto období.</TableEmpty>
+                ) : (
+                  filteredStatements.map(s => {
+                    const adj = s.adjustmentAmount ?? 0;
+                    const reconciliable = s.totalAmount + adj;
+                    return (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium">{CS_KIND_LABEL[s.kind] ?? s.kind}</TableCell>
+                        <TableCell className="whitespace-nowrap">{fmtDate(s.periodFrom)} až {fmtDate(s.periodTo)}</TableCell>
+                        <TableCell className="num">{fmtKc(s.totalAmount)}</TableCell>
+                        <TableCell className={cn('num', adj < 0 ? 'text-late' : adj > 0 ? 'text-accent' : 'text-soft')}>{s.adjustmentAmount != null && adj !== 0 ? fmtKcSigned(adj) : '—'}</TableCell>
+                        <TableCell className="num font-semibold">{fmtKc(reconciliable)}</TableCell>
+                        <TableCell className="max-w-xs truncate text-sm text-soft" title={s.adjustmentNote ?? undefined}>
+                          {s.adjustmentNote ?? '—'}
+                        </TableCell>
+                        <TableCell><DocRefLink value={s.documentRef} /></TableCell>
                       </TableRow>
-                    ) : (
-                      filteredStatements.map(s => {
-                        const adj = s.adjustmentAmount ?? 0;
-                        const reconciliable = s.totalAmount + adj;
-                        return (
-                          <TableRow key={s.id}>
-                            <TableCell>{s.kind}</TableCell>
-                            <TableCell>{s.periodFrom} – {s.periodTo}</TableCell>
-                            <TableCell>{fmtKc(s.totalAmount)}</TableCell>
-                            <TableCell>{s.adjustmentAmount != null ? fmtKcSigned(s.adjustmentAmount) : <span className="text-muted-foreground">—</span>}</TableCell>
-                            <TableCell className="font-bold">{fmtKc(reconciliable)}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
-                              {s.adjustmentNote ?? '—'}
-                            </TableCell>
-                            <TableCell>{
-                              s.documentRef
-                                ? /^https?:\/\//.test(s.documentRef)
-                                  ? <a href={s.documentRef} target="_blank" rel="noreferrer" className="text-primary underline text-xs">odkaz</a>
-                                  : <span className="text-xs text-muted-foreground" title={s.documentRef}>{s.documentRef.slice(0, 20)}{s.documentRef.length > 20 ? '…' : ''}</span>
-                                : <span className="text-muted-foreground">—</span>
-                            }</TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           </Card>
         </TabsContent>
 
-        {/* ── Tab 3: Vyúčtování (nájemci) ────────────────────────────────── */}
+        {/* ── Tab 4: Vyúčtování nájemníkovi ──────────────────────────────── */}
         <TabsContent value="vyuctovani">
-          <Card>
-            <div className="p-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Vyúčtování nájemníkovi</h2>
-                {id && (
-                  <Button size="sm" onClick={() => setReconcileOpen(true)}>Spočítat nové vyúčtování</Button>
-                )}
+          <Card className="overflow-hidden">
+            <CardHeader className="flex-row items-center justify-between gap-3">
+              <div>
+                <CardTitle>Vyúčtování nájemníkovi</CardTitle>
+                <CardDescription>Roční porovnání zaplacených záloh se skutečnými náklady.</CardDescription>
               </div>
-              <div className="overflow-hidden border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Období</TableHead>
-                      <TableHead>Stav</TableHead>
-                      <TableHead>Celkový rozdíl</TableHead>
-                      <TableHead></TableHead>
-                      <TableHead>Akce</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {reconciliationsDataError && !reconciliationsData ? (
-                      <TableError cols={5} onRetry={() => reconciliationsDataRefetch()} />
-                    ) : !reconciliationsData ? (
-                      <TableSkeleton cols={5} />
-                    ) : reconciliations.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Žádná vyúčtování pro tento pronájem.</TableCell>
+              {id && (
+                <Button size="sm" variant="outline" onClick={() => setReconcileOpen(true)}><Plus className="h-3.5 w-3.5" strokeWidth={2.2} />Spočítat nové vyúčtování</Button>
+              )}
+            </CardHeader>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Období</TableHead>
+                  <TableHead>Stav</TableHead>
+                  <TableHead className="num">Celkový rozdíl</TableHead>
+                  <TableHead><span className="sr-only">Akce</span></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {reconciliationsDataError && !reconciliationsData ? (
+                  <TableError cols={4} onRetry={() => reconciliationsDataRefetch()} />
+                ) : !reconciliationsData ? (
+                  <TableSkeleton cols={4} />
+                ) : reconciliations.length === 0 ? (
+                  <TableEmpty cols={4}>Žádná vyúčtování pro tento pronájem.</TableEmpty>
+                ) : (
+                  reconciliations.map(r => {
+                    const totalDiff = (r.items ?? []).reduce((sum, i) => sum + i.difference, 0);
+                    const st = STATUS_LABEL[r.status] ?? { label: r.status, tone: 'soft' as const };
+                    return (
+                      <TableRow key={r.id} className="rem">
+                        <TableCell className="whitespace-nowrap">
+                          <Link to={`/reconciliations/${r.id}`} className="font-medium text-ink">{fmtDate(r.periodFrom)} až {fmtDate(r.periodTo)}</Link>
+                        </TableCell>
+                        <TableCell>
+                          <Status tone={st.tone}>{st.label}</Status>
+                          {r.computedAt && <div className="text-sm text-soft">spočítáno {fmtDateTime(r.computedAt)}</div>}
+                        </TableCell>
+                        <TableCell className={cn('num font-semibold', totalDiff < 0 ? 'text-late' : totalDiff > 0 ? 'text-accent' : 'text-soft')}>
+                          {fmtKcSigned(totalDiff)}
+                          <div className="text-sm font-normal text-soft">{totalDiff > 0 ? 'vrátit nájemníkovi' : totalDiff < 0 ? 'nájemník doplácí' : 'vyrovnáno'}</div>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-right">
+                          <Link to={`/reconciliations/${r.id}`} className="text-sm">Otevřít</Link>
+                          <span className="acts">
+                            <button
+                              type="button"
+                              className="ml-3.5 text-sm text-soft hover:text-ink disabled:opacity-50"
+                              disabled={recomputeReconciliation.isPending}
+                              onClick={() => {
+                                const msg = r.status === 'finalized'
+                                  ? 'Přepočítat finalizované vyúčtování? Uložené hodnoty se přepíšou.'
+                                  : 'Přepočítat toto vyúčtování?';
+                                if (confirm(msg)) recomputeReconciliation.mutate(r.id);
+                              }}
+                            >
+                              Přepočítat
+                            </button>
+                            <button
+                              type="button"
+                              className="ml-3.5 text-sm text-soft hover:text-late disabled:opacity-50"
+                              disabled={deleteReconciliation.isPending}
+                              onClick={() => {
+                                const msg = r.status === 'finalized'
+                                  ? 'Smazat finalizované vyúčtování? Tohle nejde vrátit.'
+                                  : 'Smazat toto vyúčtování?';
+                                if (confirm(msg)) deleteReconciliation.mutate(r.id);
+                              }}
+                            >
+                              Smazat
+                            </button>
+                          </span>
+                        </TableCell>
                       </TableRow>
-                    ) : (
-                      reconciliations.map(r => {
-                        const totalDiff = (r.items ?? []).reduce((sum, i) => sum + i.difference, 0);
-                        return (
-                          <TableRow key={r.id}>
-                            <TableCell>{r.periodFrom} – {r.periodTo}</TableCell>
-                            <TableCell>{r.status}</TableCell>
-                            <TableCell>{fmtKc(totalDiff)}</TableCell>
-                            <TableCell>
-                              <Button size="sm" variant="outline" onClick={() => navigate(`/reconciliations/${r.id}`)}>Otevřít</Button>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={recomputeReconciliation.isPending}
-                                  onClick={() => {
-                                    const msg = r.status === 'finalized'
-                                      ? 'Přepočítat FINALIZOVANÉ vyúčtování?'
-                                      : 'Přepočítat toto vyúčtování?';
-                                    if (confirm(msg)) recomputeReconciliation.mutate(r.id);
-                                  }}
-                                >
-                                  Přepočítat
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-destructive hover:text-destructive"
-                                  disabled={deleteReconciliation.isPending}
-                                  onClick={() => {
-                                    const msg = r.status === 'finalized'
-                                      ? 'Smazat FINALIZOVANÉ vyúčtování?'
-                                      : 'Smazat toto vyúčtování?';
-                                    if (confirm(msg)) deleteReconciliation.mutate(r.id);
-                                  }}
-                                >
-                                  Smazat
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           </Card>
+        </TabsContent>
+        {/* ── Tab 5: Události ────────────────────────────────────────────── */}
+        <TabsContent value="udalosti">
+          {id && contract ? <UdalostiTab contractId={id} contract={contract} terms={terms} reconciliations={reconciliations} /> : <p className="text-sm text-soft">Načítání…</p>}
         </TabsContent>
       </Tabs>
 
@@ -2066,6 +2130,7 @@ export function ContractDetailPage() {
           onClose={() => setPaymentOpen(false)}
           onCreated={() => {
             qc.invalidateQueries({ queryKey: ['payments-by-contract', id] });
+            qc.invalidateQueries({ queryKey: ['payments'] });
             // Without this, staleTime: 30_000 on payment-breakdown means
             // Měsíční rozpis can show pre-payment allocation for up to 30s
             // after creating a payment — the delete mutation above already
@@ -2125,6 +2190,6 @@ export function ContractDetailPage() {
           }}
         />
       )}
-    </div>
+    </>
   );
 }

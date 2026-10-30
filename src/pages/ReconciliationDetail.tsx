@@ -3,9 +3,16 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { fmtDate, fmtDateTime, fmtKc, fmtKcSigned, fmtMonth } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
+import { PageHeader } from '@/components/ui/page-header';
+import { Status } from '@/components/ui/status';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
+import { Crumb } from '@/components/Layout';
+import { Hint } from '@/components/ui/hint';
 
 interface CostStatementEntry {
   id: string;
@@ -57,137 +64,124 @@ interface Reconciliation {
   items: ReconciliationItem[];
 }
 
-function fmtKc(halere: number) {
-  return (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
+const KIND_LABEL: Record<string, string> = {
+  rent: 'Nájem', services: 'Služby (SVJ)', electricity: 'Elektřina', gas: 'Plyn', internet: 'Internet', water: 'Voda', other: 'Ostatní',
+};
+
+const STATUS: Record<string, { label: string; tone: 'ok' | 'wait' | 'soft' }> = {
+  draft: { label: 'Návrh', tone: 'wait' },
+  finalized: { label: 'Finalizováno', tone: 'ok' },
+};
+
+function diffTone(h: number) {
+  return h < 0 ? 'text-late' : h > 0 ? 'text-accent' : 'text-soft';
 }
 
-function fmtKcSigned(halere: number) {
-  const s = (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
-  const sign = halere >= 0 ? '+' : '';
-  return sign + s;
+/** "Vyúčtování za rok 2026" when the period is a calendar year, otherwise the dates. */
+function titleFor(from: string, to: string): string {
+  const y = from.slice(0, 4);
+  if (from === `${y}-01-01` && to === `${y}-12-31`) return `Vyúčtování za rok ${y}`;
+  return `Vyúčtování ${fmtDate(from)} až ${fmtDate(to)}`;
 }
 
 function ItemBreakdownPanel({ breakdown }: { breakdown: ItemBreakdown | undefined }) {
   if (!breakdown || (breakdown.costStatements.length === 0 && breakdown.months.length === 0)) {
-    return (
-      <div className="px-4 py-3 text-xs text-muted-foreground italic">Žádné podklady.</div>
-    );
+    return <div className="px-5 py-3 text-sm text-soft">Žádné podklady.</div>;
   }
 
   const costTotal = breakdown.costStatements.reduce(
     (s, cs) => s + cs.totalAmount + cs.adjustmentAmount, 0
   );
   const paidTotal = breakdown.months.reduce((s, m) => s + m.paidThisKind, 0);
+  const sub = 'px-3 py-1.5 text-sm first:pl-0 last:pr-0 group-hover/row:bg-transparent';
+  const subHead = 'border-b-0 bg-transparent px-3 py-1 first:pl-0 last:pr-0';
 
   return (
-    <div className="bg-muted/30 border-t px-4 py-3 space-y-4">
-      {/* Gap warning */}
+    <div className="space-y-4 bg-side px-5 py-4">
       {breakdown.gaps && breakdown.gaps.length > 0 && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          <p className="font-semibold mb-1">⚠ Mezera v podkladech</p>
-          <p className="mb-1">
-            Mezi cost statementy tohoto druhu chybí podklad pro:
-          </p>
-          <ul className="list-disc ml-5">
-            {breakdown.gaps.map((g, i) => (
-              <li key={i}>{g.from} – {g.to}</li>
-            ))}
-          </ul>
-          <p className="mt-1 text-amber-700">
-            Platby v tom období se nepárují s žádným nákladem. Doplň cost statement nebo zkontroluj že je to záměr.
-          </p>
-        </div>
+        <Notice kind="warn">
+          <div className="font-semibold">Mezera v podkladech</div>
+          <div>Pro tento druh chybí vyúčtování nákladů za: {breakdown.gaps.map(g => `${fmtDate(g.from)} až ${fmtDate(g.to)}`).join(', ')}.</div>
+          <div className="text-soft">Platby v tom období se nepárují s žádným nákladem. Doplň vyúčtování nákladů, nebo zkontroluj, že je to záměr.</div>
+        </Notice>
       )}
-      {/* Cost statements */}
-      <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-          Reálné náklady — podklady
-        </p>
-        {breakdown.costStatements.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">Žádné doklady.</p>
-        ) : (
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="text-left text-muted-foreground border-b">
-                <th className="pb-1 pr-3 font-medium">Období</th>
-                <th className="pb-1 pr-3 font-medium text-right">Celková částka</th>
-                <th className="pb-1 pr-3 font-medium text-right">Korekce</th>
-                <th className="pb-1 pr-3 font-medium">Poznámka ke korekci</th>
-                <th className="pb-1 font-medium">Doklad</th>
-              </tr>
-            </thead>
-            <tbody>
-              {breakdown.costStatements.map((cs) => (
-                <tr key={cs.id} className="border-b border-border/40">
-                  <td className="py-1 pr-3 whitespace-nowrap">{cs.periodFrom} – {cs.periodTo}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums">{fmtKc(cs.totalAmount)}</td>
-                  <td className={`py-1 pr-3 text-right tabular-nums ${cs.adjustmentAmount < 0 ? 'text-destructive' : cs.adjustmentAmount > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
-                    {cs.adjustmentAmount !== 0 ? fmtKcSigned(cs.adjustmentAmount) : '—'}
-                  </td>
-                  <td className="py-1 pr-3 text-muted-foreground">{cs.adjustmentNote ?? '—'}</td>
-                  <td className="py-1">{
-                    cs.documentRef
-                      ? /^https?:\/\//.test(cs.documentRef)
-                        ? <a href={cs.documentRef} target="_blank" rel="noreferrer" className="text-primary underline">odkaz</a>
-                        : <span className="text-muted-foreground">{cs.documentRef}</span>
-                      : <span className="text-muted-foreground">—</span>
-                  }</td>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-x-8 gap-y-4">
+        <div>
+          <div className="mb-1 text-sm font-medium">Skutečné náklady</div>
+          {breakdown.costStatements.length === 0 ? (
+            <p className="text-sm text-soft">Žádné vyúčtování nákladů.</p>
+          ) : (
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <TableHead className={subHead}>Období</TableHead>
+                  <TableHead className={cn(subHead, 'num')}>Částka</TableHead>
+                  <TableHead className={cn(subHead, 'num')}>Korekce</TableHead>
+                  <TableHead className={subHead}>Doklad</TableHead>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td className="pt-1 pr-3 font-semibold" colSpan={1}>Σ k vyúčtování</td>
-                <td colSpan={1}></td>
-                <td colSpan={1}></td>
-                <td colSpan={2} className="pt-1 text-right font-semibold tabular-nums">{fmtKc(costTotal)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {breakdown.costStatements.map((cs) => (
+                  <tr key={cs.id}>
+                    <TableCell className={cn(sub, 'whitespace-nowrap')}>{fmtDate(cs.periodFrom)} až {fmtDate(cs.periodTo)}</TableCell>
+                    <TableCell className={cn(sub, 'num')}>{fmtKc(cs.totalAmount)}</TableCell>
+                    <TableCell className={cn(sub, 'num', diffTone(cs.adjustmentAmount))} title={cs.adjustmentNote ?? undefined}>
+                      {cs.adjustmentAmount !== 0 ? fmtKcSigned(cs.adjustmentAmount) : '—'}
+                    </TableCell>
+                    <TableCell className={sub}>{
+                      cs.documentRef
+                        ? /^https?:\/\//.test(cs.documentRef)
+                          ? <a href={cs.documentRef} target="_blank" rel="noreferrer">odkaz</a>
+                          : <span className="text-soft" title={cs.documentRef}>{cs.documentRef.length > 24 ? cs.documentRef.slice(0, 22) + '…' : cs.documentRef}</span>
+                        : <span className="text-soft">—</span>
+                    }</TableCell>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <TableCell className={cn(sub, 'font-semibold')}>K vyúčtování</TableCell>
+                  <TableCell className={cn(sub, 'num font-semibold')} colSpan={3}>{fmtKc(costTotal)}</TableCell>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
 
-      {/* Monthly allocations */}
-      <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-          Zaplaceno — měsíční alokace
-        </p>
-        {breakdown.months.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">Žádné měsíce.</p>
-        ) : (
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="text-left text-muted-foreground border-b">
-                <th className="pb-1 pr-3 font-medium">Měsíc</th>
-                <th className="pb-1 pr-3 font-medium text-right">Aktivní dny</th>
-                <th className="pb-1 pr-3 font-medium text-right text-muted-foreground/70 italic">Celk. předpis</th>
-                <th className="pb-1 pr-3 font-medium text-right text-muted-foreground/70 italic">Přijato celkem</th>
-                <th className="pb-1 pr-3 font-medium text-right text-foreground">Předpis (druh)</th>
-                <th className="pb-1 font-medium text-right text-foreground">Zaplaceno (druh)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {breakdown.months.map((m) => (
-                <tr key={m.month} className="border-b border-border/40">
-                  <td className="py-1 pr-3 font-medium">{m.month}</td>
-                  <td className="py-1 pr-3 text-right text-muted-foreground">
-                    {m.daysActive}/{m.daysInMonth}
-                  </td>
-                  <td className="py-1 pr-3 text-right tabular-nums text-muted-foreground/70 italic">{fmtKc(m.expectedTotal)}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums text-muted-foreground/70 italic">{fmtKc(m.receivedTotal)}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums">{fmtKc(m.expectedThisKind)}</td>
-                  <td className="py-1 text-right tabular-nums font-semibold">{fmtKc(m.paidThisKind)}</td>
+        <div>
+          <div className="mb-1 text-sm font-medium">Zaplaceno po měsících</div>
+          {breakdown.months.length === 0 ? (
+            <p className="text-sm text-soft">Žádné měsíce.</p>
+          ) : (
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <TableHead className={subHead}>Měsíc</TableHead>
+                  <TableHead className={cn(subHead, 'num')}>Předpis druhu</TableHead>
+                  <TableHead className={cn(subHead, 'num')}>Zaplaceno druhu</TableHead>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td className="pt-1 pr-3 font-semibold" colSpan={5}>Σ zaplaceno (druh)</td>
-                <td className="pt-1 text-right font-semibold tabular-nums">{fmtKc(paidTotal)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {breakdown.months.map((m) => (
+                  <tr key={m.month}>
+                    <TableCell className={cn(sub, 'whitespace-nowrap')}>
+                      {fmtMonth(m.month)}
+                      {m.daysActive < m.daysInMonth && <span className="ml-2 text-soft">{m.daysActive}/{m.daysInMonth} dní</span>}
+                    </TableCell>
+                    <TableCell className={cn(sub, 'num')}>{fmtKc(m.expectedThisKind)}</TableCell>
+                    <TableCell className={cn(sub, 'num font-medium')}>{fmtKc(m.paidThisKind)}</TableCell>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <TableCell className={cn(sub, 'font-semibold')} colSpan={2}>Zaplaceno celkem</TableCell>
+                  <TableCell className={cn(sub, 'num font-semibold')}>{fmtKc(paidTotal)}</TableCell>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -201,7 +195,6 @@ function ReconciliationItemRow({
   live: { actualCost: number; paid: number; difference: number } | null;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [tooltipVisible, setTooltipVisible] = useState(false);
 
   const mp = item.breakdown?.matchPeriod;
   const mpSource = item.breakdown?.matchPeriodSource;
@@ -209,89 +202,56 @@ function ReconciliationItemRow({
   const naturalFrom = item.breakdown?.matchPeriodNaturalFrom;
   const isShifted = Boolean(naturalFrom);
 
-  const periodLabel = mp
-    ? `${mp.from} – ${mp.to}`
-    : '—';
+  const periodLabel = mp ? `${fmtDate(mp.from)} až ${fmtDate(mp.to)}` : '—';
 
   const sourceLabel = isShifted
-    ? '(ze statementu, posunuto)'
+    ? 'z vyúčtování nákladů, posunuto'
     : mpSource === 'from-cost-statements'
-      ? '(ze statementu)'
-      : '(default)';
+      ? 'z vyúčtování nákladů'
+      : 'období vyúčtování';
 
-  // Show tooltip when matchPeriod differs from default OR when auto-shift was applied
   const tooltipText = isShifted && mp && naturalFrom
-    ? `Matching období bylo posunuto z ${naturalFrom} na ${mp.from}, protože měsíc ${naturalFrom.slice(0, 7)} už pokrývá předchozí vyúčtování stejného druhu (cost statement co končí v tom měsíci). Tím se brání double-count platby na boundary mezi dvěma cykly.`
+    ? `Období párování bylo posunuto z ${fmtDate(naturalFrom)} na ${fmtDate(mp.from)}, protože měsíc ${fmtMonth(naturalFrom)} už pokrývá předchozí vyúčtování nákladů stejného druhu. Platba na rozhraní dvou cyklů se tak nezapočítá dvakrát.`
     : mpDiffers && mp
-      ? `Matching období je odvozeno z cost statementu (${mp.from} až ${mp.to}). Pokud existuje cost statement daného druhu jehož periodFrom startuje uvnitř reconciliation období, jeho period (sjednocený přes víc statementů) určuje matching okno pro platby. Jinak default = reconciliation období.`
-      : '';
+      ? `Období párování plateb je odvozeno z vyúčtování nákladů (${fmtDate(mp.from)} až ${fmtDate(mp.to)}). Když vyúčtování nákladů tohoto druhu začíná uvnitř období vyúčtování, jeho období určuje, které platby se započítají.`
+      : undefined;
 
   return (
     <>
-      <TableRow
-        className="cursor-pointer hover:bg-muted/50"
-        onClick={() => setExpanded(e => !e)}
-      >
+      <TableRow className="cursor-pointer" onClick={() => setExpanded(e => !e)}>
         <TableCell>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             {expanded
-              ? <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              : <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              ? <ChevronDown className="h-4 w-4 flex-none text-soft" />
+              : <ChevronRight className="h-4 w-4 flex-none text-soft" />
             }
-            {item.kind}
-            {live && (
-              <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
-                změna
-              </span>
-            )}
+            <span className="font-medium">{KIND_LABEL[item.kind] ?? item.kind}</span>
+            {live && <span className="ml-1 text-xs font-medium text-late">změna</span>}
           </div>
         </TableCell>
         <TableCell>
-          <div className="flex items-center gap-1 text-sm">
-            <span className={mpDiffers ? 'text-amber-700 font-medium' : 'text-muted-foreground'}>
-              {periodLabel}
-            </span>
-            <span className="text-xs text-muted-foreground">{sourceLabel}</span>
-            {(mpDiffers || isShifted) && tooltipText && (
-              <div className="relative inline-block">
-                <button
-                  className={`${isShifted ? 'text-amber-600 hover:text-amber-700' : 'text-blue-500 hover:text-blue-700'} text-xs leading-none`}
-                  onMouseEnter={() => setTooltipVisible(true)}
-                  onMouseLeave={() => setTooltipVisible(false)}
-                  onClick={e => e.stopPropagation()}
-                  aria-label="Informace o matching období"
-                >
-                  ⓘ
-                </button>
-                {tooltipVisible && (
-                  <div className="absolute z-50 left-0 top-5 w-72 rounded-md border bg-popover p-3 text-xs text-popover-foreground shadow-md">
-                    {tooltipText}
-                  </div>
-                )}
-              </div>
-            )}
+          <div className={cn('whitespace-nowrap', mpDiffers && 'font-medium')}>{periodLabel}</div>
+          <div className="text-sm text-soft" title={tooltipText}>
+            {sourceLabel}
+            {tooltipText && <span aria-label="Vysvětlení" className="ml-1 cursor-help underline decoration-dotted underline-offset-2">proč</span>}
           </div>
         </TableCell>
-        <TableCell className="text-right">
+        <TableCell className="num">
           <div>{fmtKc(item.paid)}</div>
-          {live && <div className="text-xs text-blue-700">{fmtKc(live.paid)} (aktuální)</div>}
+          {live && <div className="text-sm text-soft">aktuálně {fmtKc(live.paid)}</div>}
         </TableCell>
-        <TableCell className="text-right">
+        <TableCell className="num">
           <div>{fmtKc(item.actualCost)}</div>
-          {live && <div className="text-xs text-blue-700">{fmtKc(live.actualCost)} (aktuální)</div>}
+          {live && <div className="text-sm text-soft">aktuálně {fmtKc(live.actualCost)}</div>}
         </TableCell>
-        <TableCell className={`text-right font-medium ${item.difference < 0 ? 'text-destructive' : 'text-green-600'}`}>
-          <div>{fmtKc(item.difference)}</div>
-          {live && (
-            <div className={`text-xs ${live.difference < 0 ? 'text-destructive' : 'text-blue-700'}`}>
-              {fmtKc(live.difference)} (aktuální)
-            </div>
-          )}
+        <TableCell className={cn('num font-medium', diffTone(item.difference))}>
+          <div>{fmtKcSigned(item.difference)}</div>
+          {live && <div className={cn('text-sm font-normal', diffTone(live.difference))}>aktuálně {fmtKcSigned(live.difference)}</div>}
         </TableCell>
       </TableRow>
       {expanded && (
-        <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={5} className="p-0">
+        <TableRow>
+          <TableCell colSpan={5} className="p-0 group-hover/row:bg-transparent">
             <ItemBreakdownPanel breakdown={item.breakdown} />
           </TableCell>
         </TableRow>
@@ -313,25 +273,15 @@ export function ReconciliationDetailPage() {
 
   const rec = data?.reconciliation;
 
-  // Fetch contract + related tenant/property to display readable name (not the cuid)
+  // Fetch contract to display readable tenant + property names (not the cuid)
   const { data: contractData } = useQuery({
-    queryKey: ['contract', rec?.contractId],
-    queryFn: () => api.get<{ contract: { id: string; propertyId: string; tenantId: string } }>(
+    queryKey: ['contracts', rec?.contractId],
+    queryFn: () => api.get<{ contract: { id: string; propertyId: string; tenantId: string; propertyName: string; tenantName: string } }>(
       `/api/contracts/${rec!.contractId}`
     ),
     enabled: !!rec?.contractId,
   });
   const contract = contractData?.contract;
-  const { data: tenantsData } = useQuery({
-    queryKey: ['tenants'],
-    queryFn: () => api.get<{ tenants: Array<{ id: string; name: string }> }>('/api/tenants'),
-  });
-  const { data: propertiesData } = useQuery({
-    queryKey: ['properties'],
-    queryFn: () => api.get<{ properties: Array<{ id: string; name: string }> }>('/api/properties'),
-  });
-  const tenantName = contract && tenantsData?.tenants.find(t => t.id === contract.tenantId)?.name;
-  const propertyName = contract && propertiesData?.properties.find(p => p.id === contract.propertyId)?.name;
 
   const finalize = useMutation({
     mutationFn: () => api.patch<{ reconciliation: Reconciliation }>(`/api/reconciliations/${id}/finalize`, {}),
@@ -347,6 +297,7 @@ export function ReconciliationDetailPage() {
     mutationFn: () => api.delete<void>(`/api/reconciliations/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reconciliations'] });
+      qc.invalidateQueries({ queryKey: ['reconciliations-by-contract'] });
       if (rec?.contractId) {
         navigate(`/contracts/${rec.contractId}?tab=vyuctovani`, { replace: true });
       } else {
@@ -384,67 +335,73 @@ export function ReconciliationDetailPage() {
   const liveTotalDiff = itemsWithLive.reduce((sum, it) => sum + it.liveDifference, 0);
   const isStale = itemsWithLive.some((it) => it.stale);
 
-  if (isLoading) return <div className="p-8 text-muted-foreground">Načítání…</div>;
+  if (isLoading) return <p className="text-sm text-soft">Načítání…</p>;
   // Only a real 404 means "nenalezeno" — a failed request must not be reported
   // as a missing reconciliation.
   if (isError && !(error instanceof ApiError && error.status === 404)) {
     return (
-      <div className="p-8 space-y-3">
-        <p className="text-sm text-destructive">Nepodařilo se načíst vyúčtování.</p>
+      <div className="space-y-3">
+        <p className="text-sm text-late">Nepodařilo se načíst vyúčtování.</p>
         <Button size="sm" variant="outline" onClick={() => refetch()}>Zkusit znovu</Button>
       </div>
     );
   }
-  if (!r) return <div className="p-8 text-muted-foreground">Nenalezeno.</div>;
+  if (!r) return <p className="text-sm text-soft">Vyúčtování nenalezeno.</p>;
+
+  const st = STATUS[r.status] ?? { label: r.status, tone: 'soft' as const };
+  const backTo = `/contracts/${r.contractId}?tab=vyuctovani`;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        {rec ? (
-          <Link
-            to={`/contracts/${rec.contractId}?tab=vyuctovani`}
-            className="text-sm text-muted-foreground hover:underline"
+    <>
+      <PageHeader
+        crumb={<><Crumb to="/contracts">Pronájmy</Crumb> / <Crumb to={backTo}>{contract?.tenantName ?? 'Pronájem'}</Crumb></>}
+        title={titleFor(r.periodFrom, r.periodTo)}
+        sub={<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+          {contract && <Link to={backTo}>{contract.tenantName} · {contract.propertyName}</Link>}
+          <span>{fmtDate(r.periodFrom)} až {fmtDate(r.periodTo)}</span>
+          <Status tone={st.tone}>{st.label}</Status>
+          {r.computedAt && <span>spočítáno {fmtDateTime(r.computedAt)}</span>}
+        </span>}
+        actions={<>
+          <Button
+            variant="outline"
+            className="text-late hover:text-late"
+            onClick={() => {
+              const msg = r.status === 'finalized'
+                ? 'Smazat finalizované vyúčtování? Tohle nejde vrátit.'
+                : 'Smazat toto vyúčtování?';
+              if (confirm(msg)) deleteMutation.mutate();
+            }}
+            disabled={deleteMutation.isPending}
           >
-            ← Zpět na pronájem
-          </Link>
-        ) : (
-          <span className="text-sm text-muted-foreground">← Zpět</span>
-        )}
-        <h1 className="text-3xl font-bold">Vyúčtování</h1>
-      </div>
-
-      <Card className="p-6 space-y-2">
-        <p>
-          <span className="font-medium">Pronájem:</span>{' '}
-          {tenantName && propertyName ? (
-            <Link to={`/contracts/${r.contractId}?tab=vyuctovani`} className="text-primary hover:underline">
-              {tenantName} · {propertyName}
-            </Link>
-          ) : (
-            <span className="text-muted-foreground">{r.contractId}</span>
+            Smazat
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const msg = r.status === 'finalized'
+                ? 'Přepočítat finalizované vyúčtování? Uložené položky se nahradí novým výpočtem.'
+                : 'Přepočítat toto vyúčtování? Uložené položky se nahradí.';
+              if (confirm(msg)) recompute.mutate();
+            }}
+            disabled={recompute.isPending}
+          >
+            Přepočítat
+          </Button>
+          {r.status === 'draft' && (
+            <Button onClick={() => finalize.mutate()} disabled={finalize.isPending}>Finalizovat</Button>
           )}
-        </p>
-        <p><span className="font-medium">Období:</span> {r.periodFrom} – {r.periodTo}</p>
-        <p><span className="font-medium">Stav:</span> {r.status}</p>
-        {r.computedAt && <p><span className="font-medium">Spočítáno dne:</span> {r.computedAt}</p>}
-      </Card>
+        </>}
+      />
 
       {isStale && (
-        <div className="rounded-md border border-amber-400 bg-amber-50 p-4 text-sm">
-          <p className="font-semibold text-amber-900">
-            ⚠ Podklady se od posledního výpočtu změnily
-          </p>
-          <p className="text-amber-900 mt-1">
-            Hodnoty zaplacené / skutečných nákladů níže (modře) jsou{' '}
-            <strong>fresh</strong> z aktuálních plateb, srážek a vyúčtování nákladů.{' '}
-            Persistovaný stav (černě, finalizovaný) je z času posledního výpočtu.
-            {r.status === 'draft' ? (
-              <> Klikni „Přepočítat" pro aktualizaci.</>
-            ) : (
-              <> Vyúčtování je <strong>finalized</strong>; pro novou pravdu klikni „Přepočítat" (přepíše snapshot).</>
-            )}
-          </p>
-        </div>
+        <Notice kind="warn">
+          <div className="font-semibold">Podklady se od posledního výpočtu změnily</div>
+          <div className="text-soft">
+            U položek označených „změna" je pod uloženou hodnotou aktuální hodnota z plateb, srážek a vyúčtování nákladů.
+            {r.status === 'draft' ? ' Přepočítat uloží aktuální stav.' : ' Vyúčtování je finalizované; Přepočítat přepíše uložený stav aktuálním.'}
+          </div>
+        </Notice>
       )}
 
       <Card className="overflow-hidden">
@@ -452,10 +409,10 @@ export function ReconciliationDetailPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Druh</TableHead>
-              <TableHead>Období</TableHead>
-              <TableHead className="text-right">Zaplaceno</TableHead>
-              <TableHead className="text-right">Předepsáno / Náklady</TableHead>
-              <TableHead className="text-right">Rozdíl</TableHead>
+              <TableHead><span className="inline-flex items-center gap-1">Období párování plateb<Hint label="Co je období párování">Měsíce, jejichž platby se u tohoto druhu započítají. U nájmu je to období vyúčtování. U služeb a energií se řídí obdobím vyúčtování nákladů, pokud začíná uvnitř vyúčtovávaného roku, aby se platba na přelomu roku nepočítala dvakrát.</Hint></span></TableHead>
+              <TableHead className="num">Zaplaceno</TableHead>
+              <TableHead className="num">Předepsáno / náklady</TableHead>
+              <TableHead className="num">Rozdíl</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -468,28 +425,24 @@ export function ReconciliationDetailPage() {
             ))}
             {items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-6">Žádné položky.</TableCell>
+                <TableCell colSpan={5} className="py-8 text-center text-sm text-soft">Žádné položky.</TableCell>
               </TableRow>
             )}
           </TableBody>
           {items.length > 0 && (
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={4} className="font-medium">
-                  Celkový rozdíl {isStale && <span className="text-xs text-muted-foreground">(persistovaný)</span>}
+                <TableCell colSpan={4}>
+                  Celkový rozdíl
+                  <span className="ml-2 font-normal text-soft">{totalDiff > 0 ? 'vrátit nájemníkovi' : totalDiff < 0 ? 'nájemník doplácí' : 'vyrovnáno'}</span>
+                  {isStale && <span className="ml-2 text-sm font-normal text-soft">(uložený)</span>}
                 </TableCell>
-                <TableCell className={`text-right font-bold ${totalDiff < 0 ? 'text-destructive' : 'text-green-600'}`}>
-                  {fmtKc(totalDiff)}
-                </TableCell>
+                <TableCell className={cn('num', diffTone(totalDiff))}>{fmtKcSigned(totalDiff)}</TableCell>
               </TableRow>
               {isStale && (
                 <TableRow>
-                  <TableCell colSpan={4} className="font-medium text-blue-700">
-                    Celkový rozdíl (aktuální, fresh z podkladů)
-                  </TableCell>
-                  <TableCell className={`text-right font-bold text-blue-700`}>
-                    {fmtKc(liveTotalDiff)}
-                  </TableCell>
+                  <TableCell colSpan={4} className="font-normal text-soft">Celkový rozdíl aktuálně z podkladů</TableCell>
+                  <TableCell className={cn('num', diffTone(liveTotalDiff))}>{fmtKcSigned(liveTotalDiff)}</TableCell>
                 </TableRow>
               )}
             </TableFooter>
@@ -497,40 +450,10 @@ export function ReconciliationDetailPage() {
         </Table>
       </Card>
 
-      <div className="flex gap-3">
-        {r.status === 'draft' && (
-          <Button
-            onClick={() => finalize.mutate()}
-            disabled={finalize.isPending}
-          >
-            Finalizovat
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          onClick={() => {
-            const msg = r.status === 'finalized'
-              ? 'Přepočítat FINALIZOVANÉ vyúčtování? Stávající položky budou nahrazeny novým výpočtem.'
-              : 'Přepočítat toto vyúčtování? Stávající položky budou nahrazeny.';
-            if (confirm(msg)) recompute.mutate();
-          }}
-          disabled={recompute.isPending}
-        >
-          Přepočítat
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={() => {
-            const msg = r.status === 'finalized'
-              ? 'Smazat FINALIZOVANÉ vyúčtování? Toto je nevratné.'
-              : 'Smazat toto vyúčtování?';
-            if (confirm(msg)) deleteMutation.mutate();
-          }}
-          disabled={deleteMutation.isPending}
-        >
-          Smazat
-        </Button>
-      </div>
-    </div>
+      <p className="text-sm text-soft">
+        Kladný rozdíl znamená, že nájemník zaplatil na zálohách víc, než stály skutečné náklady, a částka se mu vrací. Záporný rozdíl doplácí.
+        Období párování plateb se u služeb a energií řídí vyúčtováním nákladů, které začíná uvnitř období vyúčtování.
+      </p>
+    </>
   );
 }

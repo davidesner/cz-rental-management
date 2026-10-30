@@ -255,6 +255,24 @@ export const rentReduction = pgTable('rent_reduction', {
   contractMonth: uniqueIndex('rent_reduction_contract_month_idx').on(t.contractId, t.forMonth),
 }));
 
+// ----- reminders (manual to-dos with a due date) -----
+
+export const reminder = pgTable('reminder', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  dueDate: date('due_date', { mode: 'string' }).notNull(),
+  note: text('note'),
+  // Optional link to what the reminder is about. Either may be set; a
+  // contract implies its property for access checks.
+  contractId: text('contract_id').references(() => contract.id, { onDelete: 'set null' }),
+  propertyId: text('property_id').references(() => property.id, { onDelete: 'set null' }),
+  doneAt: timestamp('done_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  orgDue: index('reminder_org_due_idx').on(t.orgId, t.dueDate),
+}));
+
 // ----- bank integration + payment pairing -----
 
 export const bankIntegration = pgTable('bank_integration', {

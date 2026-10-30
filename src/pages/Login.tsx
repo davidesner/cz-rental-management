@@ -4,14 +4,14 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AuthShell } from '@/components/AuthShell';
 import { useQueryClient } from '@tanstack/react-query';
 import { oauthQueryFromLocation } from '@/lib/oauth';
 
 interface LoginForm { email: string; password: string }
 
 export function LoginPage() {
-  const { register, handleSubmit } = useForm<LoginForm>();
+  const { register, handleSubmit, formState } = useForm<LoginForm>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -41,27 +41,19 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Přihlásit</CardTitle>
-          <CardDescription>Vítej zpátky na správě pronájmu.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-            <div>
-              <Label htmlFor="email">E-mail</Label>
-              <Input id="email" type="email" {...register('email', { required: true })} />
-            </div>
-            <div>
-              <Label htmlFor="password">Heslo</Label>
-              <Input id="password" type="password" {...register('password', { required: true })} />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full">Přihlásit</Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <AuthShell title="Přihlásit" description="Vítej zpátky na správě pronájmu.">
+      <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
+        <div>
+          <Label htmlFor="email">E-mail</Label>
+          <Input id="email" type="email" autoComplete="username" {...register('email', { required: true })} />
+        </div>
+        <div>
+          <Label htmlFor="password">Heslo</Label>
+          <Input id="password" type="password" autoComplete="current-password" {...register('password', { required: true })} />
+        </div>
+        {error && <p className="text-sm text-late">{error}</p>}
+        <Button type="submit" className="w-full" disabled={formState.isSubmitting}>Přihlásit</Button>
+      </form>
+    </AuthShell>
   );
 }

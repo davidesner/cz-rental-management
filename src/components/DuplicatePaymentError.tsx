@@ -38,7 +38,7 @@ export function DuplicatePaymentError({ error, onForce, pending, label = 'Přest
   const isDuplicateConflict = error instanceof ApiError && error.status === 409;
   return (
     <div className="space-y-2">
-      <p className="text-sm text-destructive">{apiErrorMessage(error)}</p>
+      <p className="text-sm text-late">{apiErrorMessage(error)}</p>
       {isDuplicateConflict && (
         <Button type="button" variant="outline" size="sm" onClick={onForce} disabled={pending}>
           {label}

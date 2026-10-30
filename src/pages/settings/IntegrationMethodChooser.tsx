@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Modal } from '@/components/ui/modal';
 
 // Data-driven on purpose. `bank_integration.kind` is a DB enum with exactly
 // one value today ('kb_email'), but it exists as a discriminator so a second
@@ -9,8 +9,8 @@ import { Card } from '@/components/ui/card';
 export const METHODS = [
   {
     kind: 'kb_email' as const,
-    title: 'KB+ e-mailové notifikace',
-    description: 'Sbírá e-maily "Přijali jsme platbu" z Komerční banky přes IMAP. Potřebuješ mailbox, kam notifikace chodí, a App Password.',
+    title: 'E-mailové notifikace Komerční banky',
+    description: 'Sbírá e-maily „Přijali jsme platbu“ z internetového bankovnictví přes IMAP. Potřebuješ schránku, kam notifikace chodí, a heslo pro aplikace.',
   },
 ] as const;
 
@@ -26,31 +26,26 @@ interface Props {
 // and cannot change.
 export function IntegrationMethodChooser({ onClose, onSelect }: Props) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-lg p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <div>
-          <h2 className="text-xl font-semibold">Nová bankovní integrace</h2>
-          <p className="text-sm text-muted-foreground mt-1">Vyber způsob, jakým se mají sbírat platby.</p>
-        </div>
-
-        <div className="space-y-2">
-          {METHODS.map(m => (
-            <button
-              key={m.kind}
-              type="button"
-              onClick={() => onSelect(m.kind)}
-              className="w-full text-left rounded-md border p-4 hover:bg-muted transition-colors"
-            >
-              <div className="font-medium">{m.title}</div>
-              <div className="text-sm text-muted-foreground mt-1">{m.description}</div>
-            </button>
-          ))}
-        </div>
-
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={onClose}>Zrušit</Button>
-        </div>
-      </Card>
-    </div>
+    <Modal
+      title="Nová bankovní integrace"
+      description="Vyber způsob, jakým se mají sbírat platby."
+      onClose={onClose}
+      className="max-w-lg"
+      footer={<Button variant="outline" onClick={onClose}>Zrušit</Button>}
+    >
+      <div className="space-y-2">
+        {METHODS.map(m => (
+          <button
+            key={m.kind}
+            type="button"
+            onClick={() => onSelect(m.kind)}
+            className="w-full rounded-lg border border-line p-4 text-left transition-colors hover:bg-side"
+          >
+            <div className="font-medium">{m.title}</div>
+            <div className="mt-1 text-sm text-soft">{m.description}</div>
+          </button>
+        ))}
+      </div>
+    </Modal>
   );
 }

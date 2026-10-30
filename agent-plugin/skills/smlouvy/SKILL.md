@@ -1,6 +1,6 @@
 ---
 name: smlouvy
-description: Generování a reformat smluv a dodatků pro rental-management. Dva režimy — "learn template" (vyrobí Typst šablonu z existujícího PDF/DOCX dokumentu), "render document" (z uložené šablony + dat z MCP vyrobí čistý PDF). Aktivuj když user řekne "vyrob smlouvu", "udělej dodatek", "učeš tu starou smlouvu", "vytvoř template z dokumentu" apod.
+description: Generování smluv, dodatků a předávacích protokolů z Typst šablon. Dva režimy — "learn template" (vyrobí šablonu z existujícího PDF/DOCX), "render document" (z uložené šablony + dat z MCP vyrobí PDF). Aktivuj když user řekne "vyrob smlouvu", "udělej dodatek", "předávací protokol", "učeš tu starou smlouvu", "vytvoř template z dokumentu".
 ---
 
 # Contract & Amendment Documents
@@ -24,7 +24,10 @@ Předpokládá MCP server `rental-management` připojený.
 ## Konvence
 
 - **Šablony** žijí v pracovní složce: `_agent/smlouvy/` (sdílené napříč nemovitostmi) NEBO `<složka>/_agent/smlouvy/` (per-property). Sdílené má přednost při nejasnosti. Pracovní složku a mapping název → složka najdeš v `AGENTS.md` v jejím kořeni.
-- **`templates/lease-cs.typ` v tomto skillu** je generic reference starting point — čti ji jako výchozí bod, naučené šablony ukládej do pracovní složky.
+- **`templates/` v tomto skillu** jsou generic reference starting pointy: `lease-cs.typ`
+  (smlouva CZ), `lease-en.typ` (smlouva EN pro zahraničního nájemce, umí víc
+  pronajímatelů i cestovní doklad) a `handover-en.typ` (předávací protokol jako
+  příloha). Čti je jako výchozí bod, naučené šablony ukládej do pracovní složky.
 - **Variable convention**: `{{namespace.field}}` syntaxe (mustache-style). Skill string-replace before compile, ne native Typst inputs (jednodušší debug).
 - **Output**: PDF + `.typ` source vedle sebe, default `<složka>/najem/<rok>-<najemce>/`.
 - **Naming**: `<TENANT>-<KIND>_<descriptor>_<lang>.pdf`, např. `NOVAK-DODATEK_5-od-7_26_CZ.pdf` (kebab/snake mix podle stylu user).
@@ -206,3 +209,86 @@ Když user řekne "ulož template" nebo "tohle si pamatuj":
 - **Long unicode characters**: New Computer Modern má dobrou CZ podporu, ale pokud naseká glyphy, zkus `font: "Linux Libertine"` nebo `font: "Source Serif Pro"`.
 - **Page numbers / footers**: `#set page(numbering: "1")` nebo custom footer přes `#set page(footer: ...)`.
 - **Multi-tenant docs**: pokud má smlouva více nájemníků, použij Typst loop `#for t in tenants [ ... ]` místo fixed placeholders.
+
+## Kogentní ustanovení, která šablona nesmí porušit
+
+U nájmu bytu se podle § 2235 odst. 1 OZ nepřihlíží k ujednáním zkracujícím
+nájemcova práva (§ 2235–2301). Než převezmeš klauzuli ze staré smlouvy:
+
+- **Jistota se úročí ze zákona.** § 2254 odst. 2 dává nájemci úroky z jistoty od
+  jejího poskytnutí bez ohledu na ujednání; šablony to říkají výslovně a
+  **odkazují na zákonnou sazbu**, protože na její výši se doktrína neshoduje.
+  Ve Workflow A hledej ve zdrojovém dokumentu větu o neúročení jistoty: je
+  neúčinná, nahraď ji a řekni uživateli, že na jeho podepsaných smlouvách nárok
+  na úrok běží dál.
+- **Vyklizení po skončení nájmu drž na vymahatelné variantě:** delší lhůta,
+  písemná výzva, inventura s fotkami a uskladnění na náklad nájemce.
+  Svépomocné vyklizení ani prodej věcí pronajímatel nemá. Nárok na nájem
+  a služby do skutečného předání drží, ten nech.
+- **Okruh uživatelů piš jako „nájemce a členů jeho domácnosti".** § 2272 dává
+  nájemci právo přijmout do domácnosti kohokoli; souhlas si lze vyhradit, ale
+  ne u osob blízkých, takže plošný zákaz neobstojí.
+- **Úrok z prodlení cituj podle § 1970 OZ a NV č. 351/2013 Sb.** Staré vzory
+  mají NV č. 142/1994 Sb., které se na nájem bytu už nepoužije.
+- **Lhůta pro vyúčtování služeb** je kogentní — viz skill `rocni-vyuctovani`.
+
+## Pravidla platná pro každou smlouvu
+
+- **Doručování rozděl:** běžná komunikace a vyúčtování mailem, **výpověď a dodatky
+  poštou**. § 2286 vyžaduje písemnou formu a u prostého mailu je sporné určení
+  jednající osoby (§ 562).
+- **Tučně jen data zakládající povinnost**, ne data narození ani délky lhůt.
+- **Je-li jednotka v SJM**, jsou pronajímateli oba manželé: v čl. 1 místo
+  „výlučný vlastník", a dodatky i výpověď podepisují oba.
+
+## Cizojazyčná smlouva
+
+`templates/lease-en.typ` je anglický protějšek `lease-cs.typ`, navíc `idDoc`
+(cestovní doklad místo rodného čísla), `bankVs` a `noticeEmail`.
+
+**Vždy přidej odstavec o jazyku a rozhodném právu:** české právo, strany
+potvrzují, že jazyku rozumí, tato jazyková verze má při rozporu s překladem
+přednost, spory řeší české soudy. Kde je v závorce český termín, platí pro
+jednání s úřady ten.
+
+## Předávací protokol
+
+`templates/handover-en.typ`. Do inventáře patří **věci, které se dají rozbít**:
+spotřebiče, nábytek, sanita, závěsy. Popisuj je **druhově** („built-in
+dishwasher"), ne názvem produktu.
+
+Sestav ho z faktur v `<nemovitost>/rekonstrukce/`, ale **ověř proti fotkám bytu** —
+faktury nezachytí, co se pořídilo jinde.
+
+- **U dvoutarifního elektroměru vyžaduj oba registry (VT i NT).**
+- **Kontaktní osobu pro vstup za nepřítomnosti nájemce (§ 2269) dej do protokolu,
+  ne do smlouvy.** Mění se pak bez dodatku. Povinnost je navíc vázaná na konkrétní
+  nepřítomnost, takže jméno ve smlouvě nájemce nezbavuje povinnosti ji oznámit.
+
+## Typst: co spolehlivě spadne
+
+- Closure nemodifikuje zachycenou proměnnou (`let k = 0; let next() = { k += 1; k }`).
+  Číslování odstavců řeš offsetem.
+- `;` hned za `#promenna` v markupu se sežere → rozděl na dvě věty.
+- `#` uvnitř těla funkce je chyba, tělo je code mode.
+- Hodnota vkládaná do šablony jako Typst literál musí být uvozená (`"six"`),
+  jinak je z ní neznámá proměnná.
+- Buňka s tečkovanou linkou potřebuje `align: (left, center + top)`, jinak linka
+  skončí uprostřed zalomené buňky.
+
+## Po renderu vždy zkontroluj PDF
+
+```bash
+pdftotext -layout output.pdf - > check.txt
+grep -c "{{" check.txt
+grep -n "Landlords has\|Landlords's\|is not remedy\|Tenant sublet the" check.txt
+```
+
+Projdi všechny tři a teprve pak dokument odevzdej:
+
+- **Placeholdery:** `grep -c "{{"` vrací 0.
+- **Částky a data:** každá částka a datum v PDF sedí s `contract_terms_list`
+  a `contracts_get`. Grep na `CZK` je vytáhne všechny najednou.
+- **Shoda podmětu s přísudkem** u cizojazyčné šablony: `#LL's` vyrobí
+  „Landlords's", proto na přivlastňovací pád vlastní proměnná, a u záporu patří
+  `does/do`, ne `is/are`.

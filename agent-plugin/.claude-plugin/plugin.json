@@ -1,6 +1,6 @@
 {
   "name": "rental-management",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Správa pronájmu: konektor na rental-management (remote MCP, přihlášení přes OAuth) a skilly pro roční vyúčtování, smlouvy a dodatky nad pracovní složkou s dokumenty.",
   "author": {
     "name": "David Esner",

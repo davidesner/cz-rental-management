@@ -420,4 +420,27 @@ describe('payment-breakdown endpoint', () => {
 
     await client.close();
   });
+
+  it('an auto-renewing contract keeps expecting rent after its original end date', async () => {
+    const { client, app, cookie, contract } = await bootstrap();
+    const patch = (body: object) => app.request(`/api/contracts/${contract.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify(body),
+    });
+    const breakdown = async () => (await (await app.request(
+      `/api/contracts/${contract.id}/payment-breakdown?from=2024-12-01&to=2025-01-31`,
+      { headers: { cookie } },
+    )).json() as any).months;
+
+    await patch({ endDate: '2024-12-31' });
+    let months = await breakdown();
+    expect(months.find((m: any) => m.month === '2024-12').expected.total).toBe(412000);
+    expect(months.find((m: any) => m.month === '2025-01').expected.total).toBe(0);
+
+    await patch({ autoRenew: true, renewalMonths: 12 });
+    months = await breakdown();
+    expect(months.find((m: any) => m.month === '2024-12').expected.total).toBe(412000);
+    expect(months.find((m: any) => m.month === '2025-01').expected.total).toBe(412000);
+
+    await client.close();
+  });
 });

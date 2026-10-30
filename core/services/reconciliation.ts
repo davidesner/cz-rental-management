@@ -6,6 +6,7 @@ import { AppError } from '../errors.js';
 import { expectedForMonth, allocate, UTILITY_ORDER, type UtilityKind } from '../lib/allocation.js';
 import { matchPayments, computeDueDate, type MonthSlot } from '../lib/payment-matching.js';
 import { validAt } from '../lib/temporal.js';
+import { effectiveEndDate, type RenewableContract } from '../lib/contract-period.js';
 
 type Kind = 'rent' | 'services' | UtilityKind;
 
@@ -179,7 +180,7 @@ function deriveMatchPeriod(
  * compute items with full breakdown. Does not touch the DB.
  */
 function computeItemsWithBreakdown(
-  contractRow: { id: string; startDate: string; endDate: string | null },
+  contractRow: { id: string; startDate: string } & RenewableContract,
   periodFrom: string,
   periodTo: string,
   terms: Array<{ validFrom: string; validTo: string | null; baseRent: number; serviceAdvance: number; paymentDueDay: number; paymentAppliesTo: string }>,
@@ -216,6 +217,10 @@ function computeItemsWithBreakdown(
   const unionTo = [periodTo, ...Array.from(matchPeriodsPerKind.values()).map(m => m.to)]
     .reduce((max, d) => d > max ? d : max);
 
+  // A renewing lease runs through the whole union span, not just up to its
+  // original end date.
+  const contractEnd = effectiveEndDate(contractRow, unionTo);
+
   // Build month slots for FIFO matching — over union span
   const slots: MonthSlot[] = [];
   for (const { year, month } of eachMonthInPeriod(unionFrom, unionTo)) {
@@ -223,7 +228,7 @@ function computeItemsWithBreakdown(
     const monthFirst = `${monthStr}-01`;
     const exp = expectedForMonth(
       year, month,
-      contractRow.startDate, contractRow.endDate,
+      contractRow.startDate, contractEnd,
       terms.map(t => ({ validFrom: t.validFrom, validTo: t.validTo, baseRent: t.baseRent, serviceAdvance: t.serviceAdvance })),
       utilities.map(u => ({ kind: u.kind as UtilityKind, validFrom: u.validFrom, validTo: u.validTo, monthlyAdvance: u.monthlyAdvance })),
     );
@@ -364,7 +369,7 @@ function computeItemsWithBreakdown(
  */
 async function buildItemsWithBreakdown(
   db: DB,
-  contractRow: { id: string; orgId: string; propertyId: string; startDate: string; endDate: string | null },
+  contractRow: { id: string; orgId: string; propertyId: string; startDate: string } & RenewableContract,
   periodFrom: string,
   periodTo: string,
   placeholderRecId: string,

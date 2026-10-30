@@ -8,6 +8,7 @@
 // closed on both sides — a single open amount bound identifies nothing and is
 // refused. Matching itself stays permissive and does not re-check this.
 import { accountsEqual } from './account-number.js';
+import { effectiveEndDate } from './contract-period.js';
 
 export interface MatchableTransaction {
   amount: number;      // haléře
@@ -31,6 +32,8 @@ export interface MatchingRule {
   // joins them in.
   contractStartDate: string;
   contractEndDate: string | null;
+  contractAutoRenew: boolean;
+  contractRenewalMonths: number | null;
 }
 
 export type MatchResult =
@@ -54,7 +57,13 @@ function symbolMatches(ruleValue: string | null, txValue: string | null): boolea
 
 function contractActiveOn(rule: MatchingRule, date: string): boolean {
   if (date < rule.contractStartDate) return false;
-  if (rule.contractEndDate !== null && date > rule.contractEndDate) return false;
+  // A renewing lease is still running after its original end date.
+  const end = effectiveEndDate({
+    endDate: rule.contractEndDate,
+    autoRenew: rule.contractAutoRenew,
+    renewalMonths: rule.contractRenewalMonths,
+  }, date);
+  if (end !== null && date > end) return false;
   return true;
 }
 

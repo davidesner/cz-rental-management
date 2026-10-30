@@ -73,6 +73,8 @@ export async function loadCandidateRules(db: DB, orgId: string): Promise<Matchin
       active: paymentMatchingRule.active,
       contractStartDate: contract.startDate,
       contractEndDate: contract.endDate,
+      contractAutoRenew: contract.autoRenew,
+      contractRenewalMonths: contract.renewalMonths,
     })
     .from(paymentMatchingRule)
     .innerJoin(contract, eq(contract.id, paymentMatchingRule.contractId))

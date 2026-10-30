@@ -3,12 +3,16 @@ import { and, eq } from 'drizzle-orm';
 import type { DB } from '../db/client.js';
 import { contract, property, tenant } from '../db/schema.js';
 import { AppError } from '../errors.js';
+import { effectiveEndDate } from '../lib/contract-period.js';
 
 export interface ContractInput {
   propertyId: string;
   tenantId: string;
   startDate: string; // YYYY-MM-DD
   endDate?: string | null;
+  // Automatic renewal (prolongace) by renewalMonths after endDate.
+  autoRenew?: boolean;
+  renewalMonths?: number | null;
   securityDeposit?: number | null; // haléře
   note?: string | null;
 }
@@ -20,11 +24,34 @@ export interface ContractRow {
   tenantId: string;
   startDate: string;
   endDate: string | null;
+  autoRenew: boolean;
+  renewalMonths: number | null;
+  // endDate rolled forward through renewals as of today; equals endDate for a
+  // contract that does not renew.
+  effectiveEndDate: string | null;
   securityDeposit: number | null;
   note: string | null;
   createdAt: Date;
   propertyName: string;
   tenantName: string;
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function withEffectiveEnd<T extends { endDate: string | null; autoRenew: boolean; renewalMonths: number | null }>(row: T): T & { effectiveEndDate: string | null } {
+  return { ...row, effectiveEndDate: effectiveEndDate(row, todayIso()) };
+}
+
+// Renewal is defined relative to the original end, so it needs both an end and
+// a period length to roll it forward by.
+function validateRenewal(c: { endDate: string | null; autoRenew: boolean; renewalMonths: number | null }) {
+  if (!c.autoRenew) return;
+  if (c.endDate === null) throw new AppError('validation', 'autoRenew requires endDate');
+  if (c.renewalMonths === null || !Number.isInteger(c.renewalMonths) || c.renewalMonths < 1) {
+    throw new AppError('validation', 'autoRenew requires renewalMonths >= 1');
+  }
 }
 
 async function verifyOwnership(db: DB, orgId: string, propertyId: string, tenantId: string, allowedPropertyIds: string[] | null) {
@@ -42,6 +69,9 @@ async function verifyOwnership(db: DB, orgId: string, propertyId: string, tenant
 
 export async function createContract(db: DB, orgId: string, allowedPropertyIds: string[] | null, input: ContractInput): Promise<ContractRow> {
   await verifyOwnership(db, orgId, input.propertyId, input.tenantId, allowedPropertyIds);
+  const autoRenew = input.autoRenew ?? false;
+  const renewalMonths = input.renewalMonths ?? null;
+  validateRenewal({ endDate: input.endDate ?? null, autoRenew, renewalMonths });
   const id = createId();
   await db.insert(contract).values({
     id, orgId,
@@ -49,6 +79,8 @@ export async function createContract(db: DB, orgId: string, allowedPropertyIds: 
     tenantId: input.tenantId,
     startDate: input.startDate,
     endDate: input.endDate ?? null,
+    autoRenew,
+    renewalMonths,
     securityDeposit: input.securityDeposit ?? null,
     note: input.note ?? null,
   });
@@ -70,6 +102,8 @@ const contractSelect = {
   tenantId: contract.tenantId,
   startDate: contract.startDate,
   endDate: contract.endDate,
+  autoRenew: contract.autoRenew,
+  renewalMonths: contract.renewalMonths,
   securityDeposit: contract.securityDeposit,
   note: contract.note,
   createdAt: contract.createdAt,
@@ -84,8 +118,8 @@ export async function listContracts(db: DB, orgId: string, allowedPropertyIds: s
     .innerJoin(property, eq(property.id, contract.propertyId))
     .innerJoin(tenant, eq(tenant.id, contract.tenantId))
     .where(eq(contract.orgId, orgId));
-  if (allowedPropertyIds === null) return rows;
-  return rows.filter(r => allowedPropertyIds.includes(r.propertyId));
+  const visible = allowedPropertyIds === null ? rows : rows.filter(r => allowedPropertyIds.includes(r.propertyId));
+  return visible.map(withEffectiveEnd);
 }
 
 export async function getContract(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null): Promise<ContractRow> {
@@ -99,15 +133,26 @@ export async function getContract(db: DB, orgId: string, id: string, allowedProp
   if (allowedPropertyIds !== null && !allowedPropertyIds.includes(row.propertyId)) {
     throw new AppError('forbidden', 'no access to contract\'s property');
   }
-  return row;
+  return withEffectiveEnd(row);
 }
 
 export async function updateContract(db: DB, orgId: string, id: string, allowedPropertyIds: string[] | null, input: Partial<Omit<ContractInput, 'propertyId' | 'tenantId'>>): Promise<ContractRow> {
-  await getContract(db, orgId, id, allowedPropertyIds);
+  const existing = await getContract(db, orgId, id, allowedPropertyIds);
   const patch: Record<string, unknown> = {};
-  for (const key of ['startDate', 'endDate', 'securityDeposit', 'note'] as const) {
+  for (const key of ['startDate', 'endDate', 'autoRenew', 'renewalMonths', 'securityDeposit', 'note'] as const) {
     if (input[key] !== undefined) patch[key] = input[key];
   }
+  // Switching renewal off (výpověď) ends the lease at the end of the renewal
+  // period running today, not retroactively at the original endDate — that
+  // would unpair every payment received since. An explicit endDate wins.
+  if (existing.autoRenew && input.autoRenew === false && input.endDate === undefined) {
+    patch.endDate = existing.effectiveEndDate;
+  }
+  validateRenewal({
+    endDate: input.endDate !== undefined ? input.endDate : existing.endDate,
+    autoRenew: input.autoRenew ?? existing.autoRenew,
+    renewalMonths: input.renewalMonths !== undefined ? input.renewalMonths : existing.renewalMonths,
+  });
   if (Object.keys(patch).length === 0) return getContract(db, orgId, id, allowedPropertyIds);
   await db.update(contract).set(patch).where(and(eq(contract.id, id), eq(contract.orgId, orgId)));
   // Same reasoning as createContract: .update().returning() wouldn't include

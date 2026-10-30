@@ -15,6 +15,7 @@ import { TableError } from '@/components/ui/table-error';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DuplicatePaymentError } from '@/components/DuplicatePaymentError';
 import { PairingCard } from './contract/PairingCard';
+import { ContractEditDialog, contractPeriodLabel } from './contract/ContractEditDialog';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -26,6 +27,9 @@ interface Contract {
   tenantName: string;
   startDate: string;
   endDate: string | null;
+  autoRenew: boolean;
+  renewalMonths: number | null;
+  effectiveEndDate: string | null;
   securityDeposit: number | null;
   note?: string | null;
 }
@@ -1342,7 +1346,7 @@ function MesicniRozpis({ contractId, contract }: MesicniRozpisProps) {
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
 
   const today = new Date().toISOString().slice(0, 10);
-  const periodTo = contract.endDate ?? today;
+  const periodTo = contract.effectiveEndDate ?? today;
 
   const breakdown = useQuery({
     queryKey: ['payment-breakdown', contractId],
@@ -1632,7 +1636,7 @@ export function ContractDetailPage() {
   const allStatements = costStatementsData?.statements ?? [];
   const filteredStatements = contract
     ? allStatements.filter(s =>
-        periodsOverlap(s.periodFrom, s.periodTo, contract.startDate, contract.endDate ?? null)
+        periodsOverlap(s.periodFrom, s.periodTo, contract.startDate, contract.effectiveEndDate ?? null)
       )
     : [];
 
@@ -1644,6 +1648,9 @@ export function ContractDetailPage() {
       currentTerm.serviceAdvance +
       currentUtilities.reduce((sum, u) => sum + u.monthlyAdvance, 0)
     : null;
+
+  // ── Contract edit dialog state ─────────────────────────────────────────────
+  const [contractEditOpen, setContractEditOpen] = useState(false);
 
   // ── Podmínky dialog state ──────────────────────────────────────────────────
   const [podminkyOpen, setPodminkyOpen] = useState(false);
@@ -1704,11 +1711,14 @@ export function ContractDetailPage() {
           {/* Sekce Smlouva */}
           {contract && (
             <Card className="p-6 space-y-2">
-              <h2 className="text-lg font-semibold mb-3">Smlouva</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-semibold">Smlouva</h2>
+                <Button size="sm" variant="outline" onClick={() => setContractEditOpen(true)}>Upravit</Button>
+              </div>
               <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                 <div>
                   <span className="text-muted-foreground">Platnost</span>
-                  <p className="font-medium">{contract.startDate} – {contract.endDate ?? 'běží'}</p>
+                  <p className="font-medium">{contractPeriodLabel(contract)}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Kauce</span>
@@ -2070,6 +2080,18 @@ export function ContractDetailPage() {
             // Měsíční rozpis can show pre-payment allocation for up to 30s
             // after creating a payment — the delete mutation above already
             // invalidates both keys; this create path must match.
+            qc.invalidateQueries({ queryKey: ['payment-breakdown', id] });
+          }}
+        />
+      )}
+
+      {/* ── Contract edit dialog ───────────────────────────────────────────── */}
+      {contractEditOpen && contract && (
+        <ContractEditDialog
+          contract={contract}
+          onClose={() => setContractEditOpen(false)}
+          onUpdated={() => {
+            qc.invalidateQueries({ queryKey: ['contracts'] });
             qc.invalidateQueries({ queryKey: ['payment-breakdown', id] });
           }}
         />

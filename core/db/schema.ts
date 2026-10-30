@@ -127,6 +127,11 @@ export const contract = pgTable('contract', {
   tenantId: text('tenant_id').notNull().references(() => tenant.id, { onDelete: 'restrict' }),
   startDate: date('start_date', { mode: 'string' }).notNull(),
   endDate: date('end_date', { mode: 'string' }),
+  // Automatic renewal (prolongace): endDate stays the original end of the
+  // fixed term, the effective end rolls forward by renewalMonths
+  // (core/lib/contract-period.ts). Both are set or neither is meaningful.
+  autoRenew: boolean('auto_renew').notNull().default(false),
+  renewalMonths: integer('renewal_months'),
   securityDeposit: integer('security_deposit_haler'),
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -9,9 +9,15 @@ Bump verze v `mcp/package.json` je zároveň spouštěč releasu — po mergi do
 publikuje job `release-mcp` v `.github/workflows/ci.yml` balíček na npm. Verze
 v konstruktoru `FastMCP` v `mcp/index.ts` musí sedět, jinak CI failne.
 
-## Unreleased
+## 0.4.0 — 2026-10-30
 
-Bez změny chování, bez releasu (verze zůstává).
+### Added
+
+- `contracts_create` a `contracts_update` berou `autoRenew` a `renewalMonths`
+  pro smlouvy s automatickým prodloužením (prolongací) za stejných podmínek.
+  `endDate` zůstává původní konec doby určité; `contracts_get` a
+  `contracts_list` vrací navíc `effectiveEndDate` (konec právě běžícího období).
+  Vypnutí `autoRenew` bez `endDate` ukončí smlouvu ke konci aktuálního období.
 
 ### Changed
 

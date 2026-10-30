@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableError } from '@/components/ui/table-error';
+import { contractPeriodLabel } from './contract/ContractEditDialog';
 
 interface Property { id: string; name: string; }
 interface Tenant { id: string; name: string; }
@@ -21,8 +22,13 @@ interface Contract {
   tenantName: string;
   startDate: string;
   endDate: string | null;
+  autoRenew: boolean;
+  renewalMonths: number | null;
+  effectiveEndDate: string | null;
   securityDeposit: number | null;
 }
+
+const EMPTY_FORM = { propertyId: '', tenantId: '', startDate: '', endDate: '', autoRenew: false, renewalMonths: '12', securityDeposit: '' };
 
 export function ContractsPage() {
   const qc = useQueryClient();
@@ -31,7 +37,7 @@ export function ContractsPage() {
   const { data: propertiesData } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
   const { data: tenantsData } = useQuery({ queryKey: ['tenants'], queryFn: () => api.get<{ tenants: Tenant[] }>('/api/tenants') });
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ propertyId: '', tenantId: '', startDate: '', endDate: '', securityDeposit: '' });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [err, setErr] = useState<string | null>(null);
 
   const properties = propertiesData?.properties ?? [];
@@ -41,6 +47,8 @@ export function ContractsPage() {
   // An unparseable value must not silently take that same null path.
   const securityDeposit = parseKorun(form.securityDeposit);
   const securityDepositInvalid = securityDeposit.kind === 'invalid';
+  const renewalMonths = Number(form.renewalMonths);
+  const renewalInvalid = form.autoRenew && (!form.endDate || !Number.isInteger(renewalMonths) || renewalMonths < 1);
 
   const create = useMutation({
     mutationFn: () => {
@@ -50,12 +58,14 @@ export function ContractsPage() {
         tenantId: form.tenantId,
         startDate: form.startDate,
         endDate: form.endDate || null,
+        autoRenew: form.autoRenew,
+        renewalMonths: form.autoRenew ? renewalMonths : null,
         securityDeposit: depositHalere,
       });
     },
     onSuccess: () => {
       setOpen(false);
-      setForm({ propertyId: '', tenantId: '', startDate: '', endDate: '', securityDeposit: '' });
+      setForm(EMPTY_FORM);
       qc.invalidateQueries({ queryKey: ['contracts'] });
     },
     onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
@@ -105,7 +115,7 @@ export function ContractsPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">—</TableCell>
                   <TableCell>
-                    {c.startDate} – {c.endDate ?? 'běží'}
+                    {contractPeriodLabel(c)}
                   </TableCell>
                 </TableRow>
               ))
@@ -148,6 +158,19 @@ export function ContractsPage() {
               <Label>Datum konce (volitelné)</Label>
               <Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.autoRenew} onChange={e => setForm({ ...form, autoRenew: e.target.checked })} />
+              Automatické prodloužení za stejných podmínek
+            </label>
+            {form.autoRenew && (
+              <div>
+                <Label>Prodlužuje se o (měsíců)</Label>
+                <Input type="number" min={1} value={form.renewalMonths} onChange={e => setForm({ ...form, renewalMonths: e.target.value })} />
+                {renewalInvalid && (
+                  <p className="text-sm text-destructive mt-1">Prodloužení potřebuje datum konce a celý počet měsíců, alespoň 1.</p>
+                )}
+              </div>
+            )}
             <div>
               <Label>Kauce (Kč)</Label>
               <Input type="text" placeholder="35000,50" value={form.securityDeposit} onChange={e => setForm({ ...form, securityDeposit: e.target.value })} />
@@ -163,7 +186,7 @@ export function ContractsPage() {
               <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
               <Button
                 onClick={() => create.mutate()}
-                disabled={!form.propertyId || !form.tenantId || !form.startDate || securityDepositInvalid || create.isPending}
+                disabled={!form.propertyId || !form.tenantId || !form.startDate || securityDepositInvalid || renewalInvalid || create.isPending}
               >
                 Vytvořit
               </Button>

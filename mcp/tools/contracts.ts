@@ -14,7 +14,9 @@ const CreateContractInput = z.object({
   propertyId: z.string().describe('Property ID'),
   tenantId: z.string().describe('Tenant ID'),
   startDate: DateStr.describe('Contract start date (YYYY-MM-DD)'),
-  endDate: DateStr.nullable().optional().describe('Contract end date (YYYY-MM-DD), null if open-ended'),
+  endDate: DateStr.nullable().optional().describe('Contract end date (YYYY-MM-DD), null if open-ended. For an auto-renewing contract this is the ORIGINAL end of the fixed term.'),
+  autoRenew: z.boolean().optional().describe('Contract renews automatically on the same terms after endDate (prolongace). Requires endDate and renewalMonths.'),
+  renewalMonths: z.number().int().positive().nullable().optional().describe('Length of each automatic renewal in months (e.g. 12)'),
   securityDeposit: z.number().int().nonnegative().nullable().optional().describe('Security deposit in haléře (CZK × 100)'),
   note: z.string().nullable().optional().describe('Internal note'),
 });
@@ -22,7 +24,9 @@ const CreateContractInput = z.object({
 const UpdateContractInput = z.object({
   id: z.string().describe('Contract ID'),
   startDate: DateStr.optional().describe('Contract start date (YYYY-MM-DD)'),
-  endDate: DateStr.nullable().optional().describe('Contract end date (YYYY-MM-DD)'),
+  endDate: DateStr.nullable().optional().describe('Contract end date (YYYY-MM-DD). For an auto-renewing contract, the original end of the fixed term.'),
+  autoRenew: z.boolean().optional().describe('Turn automatic renewal on/off. Turning it off without endDate ends the contract at the end of the renewal period running today.'),
+  renewalMonths: z.number().int().positive().nullable().optional().describe('Length of each automatic renewal in months'),
   securityDeposit: z.number().int().nonnegative().nullable().optional().describe('Security deposit in haléře'),
   note: z.string().nullable().optional().describe('Internal note'),
 });
@@ -51,7 +55,7 @@ export async function updateContract(client: RentalApiClient, args: z.infer<type
 export function addContractTools(server: ToolSink, client: RentalApiClient) {
   server.addTool({
     name: 'contracts_list',
-    description: 'List all contracts in the current organization.',
+    description: 'List all contracts in the current organization. effectiveEndDate is endDate rolled forward through automatic renewals as of today.',
     parameters: ListContractsInput,
     execute: async (args) => JSON.stringify(await listContracts(client, args), null, 2),
   });
@@ -72,7 +76,7 @@ export function addContractTools(server: ToolSink, client: RentalApiClient) {
 
   server.addTool({
     name: 'contracts_update',
-    description: 'Update an existing contract (end date, security deposit, note).',
+    description: 'Update an existing contract (end date, automatic renewal, security deposit, note).',
     parameters: UpdateContractInput,
     execute: async (args) => JSON.stringify(await updateContract(client, args), null, 2),
   });

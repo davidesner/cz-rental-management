@@ -214,7 +214,7 @@ export function CostStatementsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Vyúčtování nákladů</h1>
-        <Button onClick={() => { setErr(null); resetForm(); setOpen(true); }}>Nový výkaz</Button>
+        <Button onClick={() => { setErr(null); resetForm(); setOpen(true); }}>Nové vyúčtování</Button>
       </div>
       <Card className="overflow-hidden">
         <Table>
@@ -236,7 +236,7 @@ export function CostStatementsPage() {
               <TableSkeleton cols={7} />
             ) : data.statements.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-soft py-8">Zatím žádné výkazy nákladů.</TableCell>
+                <TableCell colSpan={7} className="text-center text-soft py-8">Zatím žádná vyúčtování nákladů.</TableCell>
               </TableRow>
             ) : (
               data.statements.map(s => {
@@ -262,7 +262,7 @@ export function CostStatementsPage() {
       </Card>
 
       {open && (
-        <Modal title="Nový výkaz nákladů" onClose={() => setOpen(false)} footer={<>
+        <Modal title="Nové vyúčtování nákladů" onClose={() => setOpen(false)} footer={<>
             <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
             <Button
               onClick={() => create.mutate()}

@@ -41,7 +41,7 @@ export function CurrentLeaseCard({ lease, upcoming, terms, debt, loaded, classNa
               <KVRow label="Měsíčně" className="font-normal">{dash}</KVRow>
             ) : (
               <>
-                <KVRow label="Nájemné">{fmtKc(terms.term.baseRent)}</KVRow>
+                <KVRow label="Nájem">{fmtKc(terms.term.baseRent)}</KVRow>
                 <KVRow label="Záloha na služby">{fmtKc(terms.term.serviceAdvance)}</KVRow>
                 {terms.utilities.map(u => <KVRow key={u.id} label={kindLabel(u.kind)}>{fmtKc(u.monthlyAdvance)}</KVRow>)}
                 <KVRow label="Měsíčně celkem" sum className="font-semibold">{fmtKc(terms.monthlyTotal ?? 0)}</KVRow>

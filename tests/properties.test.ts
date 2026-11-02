@@ -21,12 +21,11 @@ describe('properties REST', () => {
     const create = await app.request('/api/properties', {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ name: '<property-name-a>', address: '<city>', reconciliationSkill: 'reference-reconciliation' }),
+      body: JSON.stringify({ name: '<property-name-a>', address: '<city>' }),
     });
     expect(create.status).toBe(201);
     const p = (await create.json() as any).property;
     expect(p.name).toBe('<property-name-a>');
-    expect(p.reconciliationSkill).toBe('reference-reconciliation');
 
     const get = await app.request(`/api/properties/${p.id}`, { headers: { cookie } });
     expect(get.status).toBe(200);

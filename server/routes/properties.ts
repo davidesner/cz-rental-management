@@ -8,7 +8,6 @@ import type { AppEnv } from '../app.js';
 const CreateProperty = z.object({
   name: z.string().min(1).max(200),
   address: z.string().nullable().optional(),
-  reconciliationSkill: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
 });
 

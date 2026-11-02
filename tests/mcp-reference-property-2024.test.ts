@@ -39,7 +39,6 @@ describe('<property-name-a> 2024 — MCP replay', () => {
     const property = await createProperty(client, {
       name: '<property-name-a>',
       address: 'Praha',
-      reconciliationSkill: 'reference-reconciliation',
       note: null,
     });
 

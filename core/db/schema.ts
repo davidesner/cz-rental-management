@@ -88,7 +88,6 @@ export const property = pgTable('property', {
   orgId: text('org_id').notNull().references(() => organization.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   address: text('address'),
-  reconciliationSkill: text('reconciliation_skill'),
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

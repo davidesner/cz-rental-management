@@ -112,6 +112,8 @@ export function useDashboard(period: Period, filter: { propertyId?: string } = {
   const currentMonth = today.slice(0, 7);
   const agenda: AgendaItem[] = [];
   const income: IncomeSummary = { paid: 0, paidAdvances: 0, overdue: 0, overdueAdvances: 0, upcoming: 0, upcomingAdvances: 0, expected: 0 };
+  /** The same summary per calendar year, every year with a month that came due, regardless of `period`. */
+  const byYear: Record<string, IncomeSummary> = {};
   const debts: DebtRow[] = [];
   let monthlyExpected = 0;
   const occupiedProps = new Set<string>();
@@ -122,15 +124,19 @@ export function useDashboard(period: Period, filter: { propertyId?: string } = {
     // month whose due date already passed (rent paid in advance).
     const months = (breakdowns[i]?.data?.months ?? []).filter(m => m.month <= currentMonth || m.dueDate <= today);
     for (const m of months) {
-      if (!inPeriod(m.month)) continue;
+      const year = m.month.slice(0, 4);
+      const yearly = byYear[year] ?? (byYear[year] = { paid: 0, paidAdvances: 0, overdue: 0, overdueAdvances: 0, upcoming: 0, upcomingAdvances: 0, expected: 0 });
+      const targets = inPeriod(m.month) ? [income, yearly] : [yearly];
       const paid = m.receivedTotal - m.allocation.surplus;
-      income.paid += paid;
-      income.paidAdvances += advancesPaid(m);
-      income.expected += m.effectiveExpected;
-      if (m.allocation.deficitTotal > 0) {
-        const adv = advancesDeficit(m);
-        if (m.dueDate < today) { income.overdue += m.allocation.deficitTotal; income.overdueAdvances += adv; }
-        else { income.upcoming += m.allocation.deficitTotal; income.upcomingAdvances += adv; }
+      const adv = m.allocation.deficitTotal > 0 ? advancesDeficit(m) : 0;
+      for (const t of targets) {
+        t.paid += paid;
+        t.paidAdvances += advancesPaid(m);
+        t.expected += m.effectiveExpected;
+        if (m.allocation.deficitTotal > 0) {
+          if (m.dueDate < today) { t.overdue += m.allocation.deficitTotal; t.overdueAdvances += adv; }
+          else { t.upcoming += m.allocation.deficitTotal; t.upcomingAdvances += adv; }
+        }
       }
     }
     // Debt is period-independent: everything overdue up to today.
@@ -182,5 +188,5 @@ export function useDashboard(period: Period, filter: { propertyId?: string } = {
     deposits,
   };
 
-  return { isPending, isError, income, debts, portfolio, agenda, activeContracts: all.filter(c => isActiveContract(c, today)).length, refetch: () => { contracts.refetch(); properties.refetch(); unassigned.refetch(); reconciliations.refetch(); breakdowns.forEach(q => q.refetch()); } };
+  return { isPending, isError, income, byYear, debts, portfolio, agenda, activeContracts: all.filter(c => isActiveContract(c, today)).length, refetch: () => { contracts.refetch(); properties.refetch(); unassigned.refetch(); reconciliations.refetch(); breakdowns.forEach(q => q.refetch()); } };
 }

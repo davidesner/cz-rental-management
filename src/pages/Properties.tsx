@@ -16,7 +16,7 @@ import { isActiveContract, useContracts } from '@/hooks/useContracts';
 
 interface Property {
   id: string; name: string; address: string | null;
-  reconciliationSkill: string | null; note: string | null;
+  note: string | null;
 }
 
 export function PropertiesPage() {
@@ -24,7 +24,7 @@ export function PropertiesPage() {
   const { data, isError, refetch } = useQuery({ queryKey: ['properties'], queryFn: () => api.get<{ properties: Property[] }>('/api/properties') });
   const contracts = useContracts();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', address: '', reconciliationSkill: '' });
+  const [form, setForm] = useState({ name: '', address: '' });
   const [err, setErr] = useState<string | null>(null);
 
   // Current tenant per property: the contract running today. Joined here
@@ -38,11 +38,10 @@ export function PropertiesPage() {
     mutationFn: () => api.post<{ property: Property }>('/api/properties', {
       name: form.name,
       address: form.address || null,
-      reconciliationSkill: form.reconciliationSkill || null,
     }),
     onSuccess: () => {
       setOpen(false);
-      setForm({ name: '', address: '', reconciliationSkill: '' });
+      setForm({ name: '', address: '' });
       qc.invalidateQueries({ queryKey: ['properties'] });
     },
     onError: (e: unknown) => setErr(apiErrorMessage(e)),
@@ -60,16 +59,15 @@ export function PropertiesPage() {
             <TableRow>
               <TableHead>Nemovitost</TableHead>
               <TableHead>Aktuální nájemce</TableHead>
-              <TableHead>Postup vyúčtování</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isError && !data ? (
-              <TableError cols={3} onRetry={() => refetch()} />
+              <TableError cols={2} onRetry={() => refetch()} />
             ) : !data ? (
-              <TableSkeleton cols={3} />
+              <TableSkeleton cols={2} />
             ) : data.properties.length === 0 ? (
-              <TableEmpty cols={3}>Zatím žádné nemovitosti. Přidej první.</TableEmpty>
+              <TableEmpty cols={2}>Zatím žádné nemovitosti. Přidej první.</TableEmpty>
             ) : (
               data.properties.map(p => {
                 const t = tenantByProperty.get(p.id);
@@ -83,7 +81,6 @@ export function PropertiesPage() {
                       {t ? <Link to={`/contracts/${t.contractId}`} className="text-ink">{t.tenantName}</Link>
                         : contracts.data ? <span className="text-soft">volná</span> : <span className="text-wait">…</span>}
                     </TableCell>
-                    <TableCell>{p.reconciliationSkill ? <code>{p.reconciliationSkill}</code> : <span className="text-soft">—</span>}</TableCell>
                   </TableRow>
                 );
               })
@@ -108,11 +105,6 @@ export function PropertiesPage() {
           <div>
             <Label htmlFor="p-address">Adresa</Label>
             <Input id="p-address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="p-skill">Postup vyúčtování</Label>
-            <Input id="p-skill" placeholder="např. svj-lipova" value={form.reconciliationSkill} onChange={e => setForm({ ...form, reconciliationSkill: e.target.value })} />
-            <p className="mt-1 text-xs text-soft">Název postupu, který agent použije při ročním vyúčtování této nemovitosti.</p>
           </div>
           {err && <p className="text-sm text-late">{err}</p>}
         </Modal>

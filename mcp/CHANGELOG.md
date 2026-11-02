@@ -13,6 +13,10 @@ v konstruktoru `FastMCP` v `mcp/index.ts` musí sedět, jinak CI failne.
 
 Bez změny chování, bez releasu (verze zůstává).
 
+## 0.4.0
+
+- `properties_create` a `properties_update` už nepřijímají pole `reconciliationSkill` a nástroje `properties_*` ho nevrací. Pole bylo relikt původního plánu a nic ho nepoužívalo; neznámé pole ve vstupu se tiše ignoruje, takže starší klienti nespadnou.
+
 ### Changed
 
 - Tooly se registrují přes rozhraní `ToolSink` (`tools/sink.ts`) a jednu funkci

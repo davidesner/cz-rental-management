@@ -15,7 +15,7 @@ if (!apiToken) {
 const client = new RentalApiClient(apiUrl, apiToken);
 const server = new FastMCP({
   name: 'rental-management',
-  version: '0.3.0',
+  version: '0.4.0',
 });
 
 // FastMCP types tool arguments through Standard Schema, the sink through zod:

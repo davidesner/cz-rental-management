@@ -76,8 +76,8 @@ async function main() {
     const lastY = thisY - 1;
 
     // ── Properties ────────────────────────────────────────────────────────
-    const lipova = await createProperty(db, orgId, { name: 'Byt 3+1, Lipová 8', address: 'Lipová 8, 120 00 Praha 2', reconciliationSkill: 'svj-lipova' });
-    const nadrazni = await createProperty(db, orgId, { name: 'Garsoniéra, Nádražní 41', address: 'Nádražní 41, 602 00 Brno', reconciliationSkill: 'svj-nadrazni' });
+    const lipova = await createProperty(db, orgId, { name: 'Byt 3+1, Lipová 8', address: 'Lipová 8, 120 00 Praha 2' });
+    const nadrazni = await createProperty(db, orgId, { name: 'Garsoniéra, Nádražní 41', address: 'Nádražní 41, 602 00 Brno' });
     const skolni = await createProperty(db, orgId, { name: 'Byt 2+kk, Školní 27', address: 'Školní 27, 301 00 Plzeň' });
     await createProperty(db, orgId, { name: 'Garáž, Zahradní 5', address: 'Zahradní 5, 370 01 České Budějovice', note: 'Aktuálně bez nájemníka.' });
 

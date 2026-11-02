@@ -483,7 +483,7 @@ export function CostStatementDialog({ fixedPropertyId, properties, onClose, onCr
   });
 
   return (
-    <Modal title="Nový výkaz nákladů" onClose={onClose} footer={<>
+    <Modal title="Nové vyúčtování nákladů" onClose={onClose} footer={<>
         <Button variant="outline" onClick={onClose}>Zrušit</Button>
         <Button
           onClick={() => create.mutate()}

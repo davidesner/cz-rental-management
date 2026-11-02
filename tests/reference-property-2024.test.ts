@@ -16,7 +16,7 @@ describe('<property-name-a> 2024 reference reconciliation', () => {
     // Create property
     const p = (await (await app.request('/api/properties', {
       method: 'POST', headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ name: '<property-name-a>', address: 'Praha', reconciliationSkill: 'reference-reconciliation' }),
+      body: JSON.stringify({ name: '<property-name-a>', address: 'Praha' }),
     })).json() as any).property;
 
     // Create tenant

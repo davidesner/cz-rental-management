@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Plus } from 'lucide-react';
 import { api, ApiError, apiErrorMessage } from '@/lib/api';
@@ -15,16 +15,17 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableEmpty, TableError } from '@/components/ui/table-error';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Crumb } from '@/components/Layout';
 import { Hint } from '@/components/ui/hint';
 import { Status } from '@/components/ui/status';
 import { Agenda, reminderItems } from '@/components/Agenda';
 import { isActiveContract, isEndedContract, useContracts, useCurrentTermsMap } from '@/hooks/useContracts';
-import { useDashboard, type Period } from '@/hooks/useDashboard';
+import { useDashboard } from '@/hooks/useDashboard';
 import { useReminders } from '@/hooks/useReminders';
-import { IncomeCard } from './property/IncomeCard';
+import { IncomeTrendCard } from './property/IncomeTrendCard';
 import { CurrentLeaseCard } from './property/CurrentLeaseCard';
-import { CostsCard } from './property/CostsCard';
+import { CostsCard, useCostStatements } from './property/CostsCard';
 import { ReconciliationsCard } from './property/ReconciliationsCard';
 import { EditPropertyDialog, type PropertyRow } from './property/EditPropertyDialog';
 import { DocRef } from './property/DocRef';
@@ -58,13 +59,15 @@ export function PropertyDetailPage() {
     .sort((a, b) => Number(isEndedContract(b)) - Number(isEndedContract(a)) || b.startDate.localeCompare(a.startDate));
   const { map: termsMap } = useCurrentTermsMap(leases.map(c => c.id));
   // The lease running today, or failing that the earliest one still to start.
-  const activeLease = leases.find(isActiveContract) ?? null;
+  const activeLease = leases.find(c => isActiveContract(c)) ?? null;
   const upcomingLease = activeLease ? null : [...leases].filter(c => !isEndedContract(c)).sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null;
   const shownLease = activeLease ?? upcomingLease;
 
+  // The period only drives the dashboard's single-period summary, which this
+  // page does not show; the yearly totals are period-independent.
   const now = new Date();
-  const [period, setPeriod] = useState<Period>({ year: now.getFullYear(), month: now.getMonth() + 1 });
-  const dashboard = useDashboard(period, { propertyId: id });
+  const dashboard = useDashboard({ year: now.getFullYear(), month: now.getMonth() + 1 }, { propertyId: id });
+  const statements = useCostStatements(id);
 
   // Agenda: derived deadlines for this property plus manual reminders tied to it or to one of its leases.
   const reminders = useReminders();
@@ -76,6 +79,15 @@ export function PropertyDetailPage() {
   );
   const agenda = [...manual.filter(i => !i.done), ...dashboard.agenda].sort((a, b) => a.date.localeCompare(b.date)).concat(manual.filter(i => i.done));
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') ?? 'naklady';
+  const setTab = (v: string) => {
+    setSearchParams(prev => {
+      const n = new URLSearchParams(prev);
+      n.set('tab', v);
+      return n;
+    }, { replace: true });
+  };
   const [editOpen, setEditOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -137,7 +149,7 @@ export function PropertyDetailPage() {
       />
 
       <div className="flex flex-wrap items-stretch gap-5">
-        <IncomeCard className="flex-[3_1_480px]" period={period} onPeriod={setPeriod} data={dashboard} hasLeases={leases.length > 0} />
+        <IncomeTrendCard className="flex-[3_1_480px]" byYear={dashboard.byYear} statements={statements.data?.statements} isPending={dashboard.isPending || statements.isPending} isError={dashboard.isError} refetch={dashboard.refetch} />
         <CurrentLeaseCard
           className="flex-[1_1_280px]"
           lease={shownLease}
@@ -148,6 +160,20 @@ export function PropertyDetailPage() {
         />
       </div>
 
+      <Card>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+          <CardTitle>Základní údaje</CardTitle>
+          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}><Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />Upravit</Button>
+        </CardHeader>
+        <CardContent>
+          <KV>
+            <KVRow label="Adresa" className="font-normal">{p.address ?? <span className="text-soft">—</span>}</KVRow>
+            <KVRow label="Evidováno od" className="font-normal">{fmtDate(p.createdAt)}</KVRow>
+            <KVRow label="Poznámka" wide className="whitespace-pre-line">{p.note ?? <span className="text-soft">—</span>}</KVRow>
+          </KV>
+        </CardContent>
+      </Card>
+
       <Agenda
         items={agenda}
         isPending={reminders.query.isPending || dashboard.isPending}
@@ -156,110 +182,112 @@ export function PropertyDetailPage() {
         emptyText="Nic nečeká. Nájem je zaplacený a žádná připomínka k této nemovitosti není otevřená."
       />
 
-      <CostsCard propertyId={id} propertyName={p.name} />
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList aria-label="Sekce nemovitosti">
+          <TabsTrigger value="naklady">Náklady</TabsTrigger>
+          <TabsTrigger value="evidencni-list">Evidenční list</TabsTrigger>
+          <TabsTrigger value="vyuctovani">Vyúčtování</TabsTrigger>
+          <TabsTrigger value="pronajmy">Pronájmy</TabsTrigger>
+        </TabsList>
 
-      <Card className="overflow-hidden">
-        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
-          <div>
-            <CardTitle>Evidenční list (předpis SVJ)</CardTitle>
-            <CardDescription>Nový záznam vždy uzavře předchozí. Aktuální je ten bez konce platnosti.</CardDescription>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => { setErr(null); setOpen(true); }}><Plus className="h-3.5 w-3.5" strokeWidth={2.2} />Nový záznam</Button>
-        </CardHeader>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Platí od</TableHead>
-              <TableHead>Platí do</TableHead>
-              <TableHead className="num">Zálohy SVJ celkem</TableHead>
-              <TableHead className="num"><span className="inline-flex items-center gap-1">Odečitatelné<Hint label="Co je odečitatelné">Položky předpisu SVJ, které nese pronajímatel a nájemníkovi se nevyúčtovávají: fond oprav, odměny výboru, pojištění domu.</Hint></span></TableHead>
-              <TableHead className="num"><span className="inline-flex items-center gap-1">K vyúčtování<Hint label="Co je k vyúčtování">Zálohy SVJ po odečtení položek pronajímatele. Tahle částka se porovnává se zálohami, které platí nájemník.</Hint></span></TableHead>
-              <TableHead>Složení</TableHead>
-              <TableHead>Doklad</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tariffs.isError && !tariffs.data ? (
-              <TableError cols={7} onRetry={() => tariffs.refetch()} />
-            ) : !tariffs.data ? (
-              <TableSkeleton cols={7} />
-            ) : rows.length === 0 ? (
-              <TableEmpty cols={7}>Zatím žádný evidenční list. Přidej první záznam.</TableEmpty>
-            ) : (
-              rows.map(t => (
-                <TableRow key={t.id}>
-                  <TableCell className="whitespace-nowrap font-medium">{fmtDate(t.validFrom)}</TableCell>
-                  <TableCell className="whitespace-nowrap">{t.validTo ? fmtDate(t.validTo) : <span className="font-medium text-accent">aktuální</span>}</TableCell>
-                  <TableCell className="num">{fmtKc(t.totalSvjAdvance)}</TableCell>
-                  <TableCell className="num">{fmtKc(t.deductibleAmount)}</TableCell>
-                  <TableCell className="num font-semibold">{fmtKc(t.totalSvjAdvance - t.deductibleAmount)}</TableCell>
-                  <TableCell className="max-w-md text-sm text-soft">{t.deductibleNote ?? '—'}</TableCell>
-                  <TableCell><DocRef value={t.documentRef} /></TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+        <TabsContent value="naklady">
+        <CostsCard propertyId={id} propertyName={p.name} />
+        </TabsContent>
 
-      <ReconciliationsCard leases={leases} leasesLoaded={!!contracts.data} />
+        <TabsContent value="evidencni-list">
+        <Card className="overflow-hidden">
+          <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>Evidenční list (předpis SVJ)</CardTitle>
+              <CardDescription>Nový záznam vždy uzavře předchozí. Aktuální je ten bez konce platnosti.</CardDescription>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => { setErr(null); setOpen(true); }}><Plus className="h-3.5 w-3.5" strokeWidth={2.2} />Nový záznam</Button>
+          </CardHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Platí od</TableHead>
+                <TableHead>Platí do</TableHead>
+                <TableHead className="num">Zálohy SVJ celkem</TableHead>
+                <TableHead className="num"><span className="inline-flex items-center gap-1">Odečitatelné<Hint label="Co je odečitatelné">Položky předpisu SVJ, které nese pronajímatel a nájemci se nevyúčtovávají: fond oprav, odměny výboru, pojištění domu.</Hint></span></TableHead>
+                <TableHead className="num"><span className="inline-flex items-center gap-1">K vyúčtování<Hint label="Co je k vyúčtování">Zálohy SVJ po odečtení položek pronajímatele. Tahle částka se porovnává se zálohami, které platí nájemce.</Hint></span></TableHead>
+                <TableHead>Složení</TableHead>
+                <TableHead>Doklad</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tariffs.isError && !tariffs.data ? (
+                <TableError cols={7} onRetry={() => tariffs.refetch()} />
+              ) : !tariffs.data ? (
+                <TableSkeleton cols={7} />
+              ) : rows.length === 0 ? (
+                <TableEmpty cols={7}>Zatím žádný evidenční list. Přidej první záznam.</TableEmpty>
+              ) : (
+                rows.map(t => (
+                  <TableRow key={t.id}>
+                    <TableCell className="whitespace-nowrap font-medium">{fmtDate(t.validFrom)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{t.validTo ? fmtDate(t.validTo) : <span className="font-medium text-accent">aktuální</span>}</TableCell>
+                    <TableCell className="num">{fmtKc(t.totalSvjAdvance)}</TableCell>
+                    <TableCell className="num">{fmtKc(t.deductibleAmount)}</TableCell>
+                    <TableCell className="num font-semibold">{fmtKc(t.totalSvjAdvance - t.deductibleAmount)}</TableCell>
+                    <TableCell className="max-w-md text-sm text-soft">{t.deductibleNote ?? '—'}</TableCell>
+                    <TableCell><DocRef value={t.documentRef} /></TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+        </TabsContent>
 
-      <Card className="overflow-hidden">
-        <CardHeader>
-          <CardTitle>Pronájmy</CardTitle>
-          <CardDescription>Kdo v nemovitosti bydlí a bydlel.</CardDescription>
-        </CardHeader>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nájemník</TableHead>
-              <TableHead>Stav</TableHead>
-              <TableHead>Období</TableHead>
-              <TableHead className="num">Měsíčně</TableHead>
-              <TableHead className="num">Kauce</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {contracts.isError && !contracts.data ? (
-              <TableError cols={5} onRetry={() => contracts.refetch()} />
-            ) : !contracts.data ? (
-              <TableSkeleton cols={5} rows={2} />
-            ) : leases.length === 0 ? (
-              <TableEmpty cols={5}>Zatím žádný pronájem této nemovitosti.</TableEmpty>
-            ) : leases.map(c => {
-              const t = termsMap[c.id];
-              const active = isActiveContract(c);
-              const ended = isEndedContract(c);
-              return (
-                <TableRow key={c.id} className={ended ? 'text-soft' : undefined}>
-                  <TableCell><Link to={`/contracts/${c.id}`} className="font-medium text-ink">{c.tenantName}</Link></TableCell>
-                  <TableCell>
-                    {active ? <Status tone="ok">Běží</Status> : ended ? <Status tone="soft">Ukončen</Status> : <Status tone="wait">Začne {fmtDate(c.startDate)}</Status>}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">{fmtDate(c.startDate)} až {c.endDate ? fmtDate(c.endDate) : 'dosud'}</TableCell>
-                  <TableCell className="num">{t === undefined ? <span className="text-wait">…</span> : t.monthlyTotal !== null ? fmtKc(t.monthlyTotal) : <span className="text-soft">—</span>}</TableCell>
-                  <TableCell className="num">{c.securityDeposit ? fmtKc(c.securityDeposit) : <span className="text-soft">—</span>}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </Card>
+        <TabsContent value="vyuctovani">
+        <ReconciliationsCard leases={leases} leasesLoaded={!!contracts.data} />
+        </TabsContent>
 
-      <Card>
-        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
-          <CardTitle>Základní údaje</CardTitle>
-          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}><Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />Upravit</Button>
-        </CardHeader>
-        <CardContent>
-          <KV className="max-w-xl">
-            <KVRow label="Adresa" className="font-normal">{p.address ?? <span className="text-soft">—</span>}</KVRow>
-            <KVRow label={<span className="inline-flex items-center gap-1">Postup vyúčtování<Hint label="K čemu je postup vyúčtování">Název postupu, podle kterého agent dělá roční vyúčtování této nemovitosti.</Hint></span>} className="font-normal">{p.reconciliationSkill ? <code>{p.reconciliationSkill}</code> : <span className="text-soft">—</span>}</KVRow>
-            <KVRow label="Evidováno od" className="font-normal">{fmtDate(p.createdAt)}</KVRow>
-            <KVRow label="Poznámka" wide className="whitespace-pre-line">{p.note ?? <span className="text-soft">—</span>}</KVRow>
-          </KV>
-        </CardContent>
-      </Card>
+        <TabsContent value="pronajmy">
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>Pronájmy</CardTitle>
+            <CardDescription>Kdo v nemovitosti bydlí a bydlel.</CardDescription>
+          </CardHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nájemce</TableHead>
+                <TableHead>Stav</TableHead>
+                <TableHead>Období</TableHead>
+                <TableHead className="num">Měsíčně</TableHead>
+                <TableHead className="num">Kauce</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {contracts.isError && !contracts.data ? (
+                <TableError cols={5} onRetry={() => contracts.refetch()} />
+              ) : !contracts.data ? (
+                <TableSkeleton cols={5} rows={2} />
+              ) : leases.length === 0 ? (
+                <TableEmpty cols={5}>Zatím žádný pronájem této nemovitosti.</TableEmpty>
+              ) : leases.map(c => {
+                const t = termsMap[c.id];
+                const active = isActiveContract(c);
+                const ended = isEndedContract(c);
+                return (
+                  <TableRow key={c.id} className={ended ? 'text-soft' : undefined}>
+                    <TableCell><Link to={`/contracts/${c.id}`} className="font-medium text-ink">{c.tenantName}</Link></TableCell>
+                    <TableCell>
+                      {active ? <Status tone="ok">Běží</Status> : ended ? <Status tone="soft">Ukončen</Status> : <Status tone="wait">Začne {fmtDate(c.startDate)}</Status>}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{fmtDate(c.startDate)} až {c.endDate ? fmtDate(c.endDate) : 'dosud'}</TableCell>
+                    <TableCell className="num">{t === undefined ? <span className="text-wait">…</span> : t.monthlyTotal !== null ? fmtKc(t.monthlyTotal) : <span className="text-soft">—</span>}</TableCell>
+                    <TableCell className="num">{c.securityDeposit ? fmtKc(c.securityDeposit) : <span className="text-soft">—</span>}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Card>
+        </TabsContent>
+      </Tabs>
 
       {editOpen && <EditPropertyDialog property={p} onClose={() => setEditOpen(false)} />}
 

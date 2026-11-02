@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Hint } from '@/components/ui/hint';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Modal } from '@/components/ui/modal';
@@ -11,7 +10,7 @@ export interface PropertyRow {
   id: string;
   name: string;
   address: string | null;
-  reconciliationSkill: string | null;
+
   note: string | null;
   createdAt: string;
 }
@@ -22,7 +21,6 @@ export function EditPropertyDialog({ property, onClose }: { property: PropertyRo
   const [form, setForm] = useState({
     name: property.name,
     address: property.address ?? '',
-    reconciliationSkill: property.reconciliationSkill ?? '',
     note: property.note ?? '',
   });
   const [err, setErr] = useState<string | null>(null);
@@ -30,7 +28,6 @@ export function EditPropertyDialog({ property, onClose }: { property: PropertyRo
     mutationFn: () => api.patch(`/api/properties/${property.id}`, {
       name: form.name.trim(),
       address: form.address.trim() || null,
-      reconciliationSkill: form.reconciliationSkill.trim() || null,
       note: form.note.trim() || null,
     }),
     onSuccess: () => {
@@ -58,10 +55,6 @@ export function EditPropertyDialog({ property, onClose }: { property: PropertyRo
       <div>
         <Label htmlFor="pe-address">Adresa</Label>
         <Input id="pe-address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
-      </div>
-      <div>
-        <div className="mb-1 flex items-center gap-1.5"><Label htmlFor="pe-skill" className="mb-0">Postup vyúčtování</Label><Hint label="K čemu je postup vyúčtování">Název postupu, podle kterého agent dělá roční vyúčtování této nemovitosti. Nechej prázdné, pokud žádný zvláštní postup nemá.</Hint></div>
-        <Input id="pe-skill" placeholder="např. svj-lipova" value={form.reconciliationSkill} onChange={e => setForm({ ...form, reconciliationSkill: e.target.value })} />
       </div>
       <div>
         <Label htmlFor="pe-note">Poznámka</Label>

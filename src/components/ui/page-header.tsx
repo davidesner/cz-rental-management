@@ -1,8 +1,32 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+
+export interface BreadcrumbItem {
+  label: ReactNode;
+  to: string;
+}
+
+/**
+ * Ancestors of the current page, never the page itself: the title says where
+ * you are, the crumbs say what it belongs to. Items follow the sidebar's
+ * hierarchy (list → record → sub-record), not the route the visitor came by.
+ */
+export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
+  return (
+    <nav aria-label="Drobečková navigace" className="flex flex-wrap items-center gap-x-1.5 text-sm text-soft">
+      {items.map((item, i) => (
+        <span key={i} className="inline-flex items-center gap-x-1.5">
+          {i > 0 && <span aria-hidden="true" className="text-wait">/</span>}
+          <Link to={item.to} className="truncate text-soft hover:text-ink">{item.label}</Link>
+        </span>
+      ))}
+    </nav>
+  );
+}
 
 interface PageHeaderProps {
   title: ReactNode;
-  /** Breadcrumb line above the title, e.g. a link back to the list. */
+  /** Breadcrumb line above the title; usually `<Breadcrumbs items={…} />`. */
   crumb?: ReactNode;
   /** One line under the title in the soft colour. */
   sub?: ReactNode;

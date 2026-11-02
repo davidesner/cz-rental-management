@@ -34,6 +34,10 @@ export interface IncomeSummary {
   upcoming: number;
   upcomingAdvances: number;
   expected: number;
+  /** Rent alone as prescribed (after reductions), without advances. */
+  rent: number;
+  /** The months (YYYY-MM) that came due and were summed here. */
+  months: string[];
 }
 
 export interface DebtRow {
@@ -111,7 +115,7 @@ export function useDashboard(period: Period, filter: { propertyId?: string } = {
   const inPeriod = monthKeys(period);
   const currentMonth = today.slice(0, 7);
   const agenda: AgendaItem[] = [];
-  const income: IncomeSummary = { paid: 0, paidAdvances: 0, overdue: 0, overdueAdvances: 0, upcoming: 0, upcomingAdvances: 0, expected: 0 };
+  const income: IncomeSummary = { paid: 0, paidAdvances: 0, overdue: 0, overdueAdvances: 0, upcoming: 0, upcomingAdvances: 0, expected: 0, rent: 0, months: [] };
   /** The same summary per calendar year, every year with a month that came due, regardless of `period`. */
   const byYear: Record<string, IncomeSummary> = {};
   const debts: DebtRow[] = [];
@@ -125,7 +129,7 @@ export function useDashboard(period: Period, filter: { propertyId?: string } = {
     const months = (breakdowns[i]?.data?.months ?? []).filter(m => m.month <= currentMonth || m.dueDate <= today);
     for (const m of months) {
       const year = m.month.slice(0, 4);
-      const yearly = byYear[year] ?? (byYear[year] = { paid: 0, paidAdvances: 0, overdue: 0, overdueAdvances: 0, upcoming: 0, upcomingAdvances: 0, expected: 0 });
+      const yearly = byYear[year] ?? (byYear[year] = { paid: 0, paidAdvances: 0, overdue: 0, overdueAdvances: 0, upcoming: 0, upcomingAdvances: 0, expected: 0, rent: 0, months: [] });
       const targets = inPeriod(m.month) ? [income, yearly] : [yearly];
       const paid = m.receivedTotal - m.allocation.surplus;
       const adv = m.allocation.deficitTotal > 0 ? advancesDeficit(m) : 0;
@@ -133,6 +137,8 @@ export function useDashboard(period: Period, filter: { propertyId?: string } = {
         t.paid += paid;
         t.paidAdvances += advancesPaid(m);
         t.expected += m.effectiveExpected;
+        t.rent += Math.max(0, m.expected.baseRent - m.rentReduction);
+        t.months.push(m.month);
         if (m.allocation.deficitTotal > 0) {
           if (m.dueDate < today) { t.overdue += m.allocation.deficitTotal; t.overdueAdvances += adv; }
           else { t.upcoming += m.allocation.deficitTotal; t.upcomingAdvances += adv; }

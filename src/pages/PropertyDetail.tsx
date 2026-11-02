@@ -11,12 +11,11 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { KV, KVRow } from '@/components/ui/kv';
 import { Modal } from '@/components/ui/modal';
-import { PageHeader } from '@/components/ui/page-header';
+import { Breadcrumbs, PageHeader } from '@/components/ui/page-header';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableEmpty, TableError } from '@/components/ui/table-error';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Crumb } from '@/components/Layout';
 import { Hint } from '@/components/ui/hint';
 import { Status } from '@/components/ui/status';
 import { Agenda, reminderItems } from '@/components/Agenda';
@@ -142,14 +141,14 @@ export function PropertyDetailPage() {
   return (
     <>
       <PageHeader
-        crumb={<Crumb to="/properties">Nemovitosti</Crumb>}
+        crumb={<Breadcrumbs items={[{ label: 'Nemovitosti', to: '/properties' }]} />}
         title={p.name}
         sub={<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">{occupancy}{p.address && <span>{p.address}</span>}</span>}
         actions={<Button variant="outline" onClick={() => setEditOpen(true)}><Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />Upravit</Button>}
       />
 
       <div className="flex flex-wrap items-stretch gap-5">
-        <IncomeTrendCard className="flex-[3_1_480px]" byYear={dashboard.byYear} statements={statements.data?.statements} isPending={dashboard.isPending || statements.isPending} isError={dashboard.isError} refetch={dashboard.refetch} />
+        <IncomeTrendCard className="flex-[3_1_480px]" byYear={dashboard.byYear} statements={statements.data?.statements} tariffs={tariffs.data?.tariffs} isPending={dashboard.isPending || statements.isPending || tariffs.isPending} isError={dashboard.isError} refetch={dashboard.refetch} />
         <CurrentLeaseCard
           className="flex-[1_1_280px]"
           lease={shownLease}

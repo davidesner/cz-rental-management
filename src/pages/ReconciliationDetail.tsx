@@ -8,10 +8,9 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
-import { PageHeader } from '@/components/ui/page-header';
+import { Breadcrumbs, PageHeader } from '@/components/ui/page-header';
 import { Status } from '@/components/ui/status';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
-import { Crumb } from '@/components/Layout';
 import { Hint } from '@/components/ui/hint';
 
 interface CostStatementEntry {
@@ -354,10 +353,12 @@ export function ReconciliationDetailPage() {
   return (
     <>
       <PageHeader
-        crumb={<><Crumb to="/contracts">Pronájmy</Crumb> / <Crumb to={backTo}>{contract?.tenantName ?? 'Pronájem'}</Crumb></>}
+        crumb={<Breadcrumbs items={[
+          { label: 'Pronájmy', to: '/contracts' },
+          { label: contract ? `${contract.tenantName} · ${contract.propertyName}` : 'Pronájem', to: backTo },
+        ]} />}
         title={titleFor(r.periodFrom, r.periodTo)}
         sub={<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
-          {contract && <Link to={backTo}>{contract.tenantName} · {contract.propertyName}</Link>}
           <span>{fmtDate(r.periodFrom)} až {fmtDate(r.periodTo)}</span>
           <Status tone={st.tone}>{st.label}</Status>
           {r.computedAt && <span>spočítáno {fmtDateTime(r.computedAt)}</span>}

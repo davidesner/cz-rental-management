@@ -207,6 +207,3 @@ export function ProtectedLayout() {
 }
 
 /** Link back to a list page, for page-header crumbs. */
-export function Crumb({ to, children }: { to: string; children: React.ReactNode }) {
-  return <Link to={to} className="hover:text-ink">{children}</Link>;
-}

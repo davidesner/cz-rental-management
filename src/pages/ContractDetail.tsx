@@ -11,13 +11,12 @@ import { Hint } from '@/components/ui/hint';
 import { Modal } from '@/components/ui/modal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { PageHeader } from '@/components/ui/page-header';
+import { Breadcrumbs, PageHeader } from '@/components/ui/page-header';
 import { KV, KVRow } from '@/components/ui/kv';
 import { Seg } from '@/components/ui/seg';
 import { Status } from '@/components/ui/status';
 import { Notice } from '@/components/ui/notice';
 import { Pager, usePager } from '@/components/ui/pager';
-import { Crumb } from '@/components/Layout';
 import { breakdownRange } from '@/hooks/useContracts';
 import { useReminders, dueLabel, reconciliationDeadline, type AgendaItem } from '@/hooks/useReminders';
 import { Agenda, reminderItems } from '@/components/Agenda';
@@ -1778,9 +1777,12 @@ export function ContractDetailPage() {
   return (
     <>
       <PageHeader
-        crumb={<Crumb to="/contracts">Pronájmy</Crumb>}
-        title={contract ? <Link to={`/properties/${contract.propertyId}`} className="text-ink hover:no-underline">{contract.propertyName}</Link> : ' '}
-        sub={contract && <>Nájemce · <span className="text-ink">{contract.tenantName}</span></>}
+        crumb={<Breadcrumbs items={[{ label: 'Pronájmy', to: '/contracts' }]} />}
+        title={contract?.propertyName ?? ' '}
+        sub={contract && <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>Nájemce <span className="text-ink">{contract.tenantName}</span></span>
+          <Link to={`/properties/${contract.propertyId}`}>Detail nemovitosti</Link>
+        </span>}
       />
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">

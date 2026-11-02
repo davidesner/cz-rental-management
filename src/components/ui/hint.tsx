@@ -23,7 +23,7 @@ export function Hint({ children, label = 'Vysvětlení', className }: { children
         role="tooltip"
         id={id}
         className={cn(
-          'pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 hidden w-72 -translate-x-1/2 rounded-lg border border-line bg-card px-3 py-2.5 text-left text-sm font-normal leading-snug text-ink shadow-pop',
+          'pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 hidden w-72 -translate-x-1/2 rounded-lg border border-line bg-card px-3 py-2.5 whitespace-normal break-words text-left text-sm font-normal leading-snug tracking-normal text-ink shadow-pop',
           'group-hover:block group-focus-within:block',
         )}
       >

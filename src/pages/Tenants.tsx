@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { isActiveContract, useContracts } from '@/hooks/useContracts';
+import { isActiveContract, leaseEnd, useContracts } from '@/hooks/useContracts';
 import { fmtDate } from '@/lib/format';
 import { Plus } from 'lucide-react';
 import { api, apiErrorMessage } from '@/lib/api';
@@ -32,7 +32,7 @@ export function TenantsPage() {
   for (const c of [...(contracts.data?.contracts ?? [])].sort((a, b) => b.startDate.localeCompare(a.startDate))) {
     const cur = leaseByTenant.get(c.tenantId);
     const active = isActiveContract(c);
-    if (!cur || (active && !cur.active)) leaseByTenant.set(c.tenantId, { id: c.id, propertyName: c.propertyName, active, endDate: c.endDate });
+    if (!cur || (active && !cur.active)) leaseByTenant.set(c.tenantId, { id: c.id, propertyName: c.propertyName, active, endDate: leaseEnd(c) });
   }
   const [err, setErr] = useState<string | null>(null);
 

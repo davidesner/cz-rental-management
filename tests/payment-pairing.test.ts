@@ -25,6 +25,8 @@ const RULE: MatchingRule = {
   active: true,
   contractStartDate: '2024-09-01',
   contractEndDate: null,
+  contractAutoRenew: false,
+  contractRenewalMonths: null,
 };
 
 const rule = (o: Partial<MatchingRule> = {}): MatchingRule => ({ ...RULE, ...o });
@@ -77,6 +79,16 @@ describe('payment-pairing', () => {
       expect(ruleMatches(rule({ contractEndDate: '2026-07-31' }), tx())).toBe(false);
       expect(ruleMatches(rule({ contractEndDate: '2026-08-20' }), tx())).toBe(true); // inclusive
       expect(ruleMatches(rule({ contractStartDate: '2026-08-20' }), tx())).toBe(true); // inclusive
+    });
+
+    // Prolongace: the lease keeps running past its original end date.
+    it('keeps matching an auto-renewing contract after its original end date', () => {
+      const renewing = { contractEndDate: '2025-12-31', contractAutoRenew: true, contractRenewalMonths: 12 };
+      expect(ruleMatches(rule(renewing), tx({ valueDate: '2025-12-15' }))).toBe(true); // before end
+      expect(ruleMatches(rule(renewing), tx({ valueDate: '2026-01-05' }))).toBe(true); // first payment after
+      expect(ruleMatches(rule(renewing), tx({ valueDate: '2028-03-05' }))).toBe(true); // several renewals on
+      // The same contract without renewal stops at its end date.
+      expect(ruleMatches(rule({ ...renewing, contractAutoRenew: false }), tx({ valueDate: '2026-01-05' }))).toBe(false);
     });
   });
 

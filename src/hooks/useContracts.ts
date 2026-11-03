@@ -9,9 +9,21 @@ export interface ContractListRow {
   propertyName: string;
   tenantName: string;
   startDate: string;
+  /** Original end of the fixed term; null = open-ended. */
   endDate: string | null;
+  autoRenew: boolean;
+  renewalMonths: number | null;
+  /** End of the renewal period running today, or `endDate` when nothing renews. */
+  effectiveEndDate: string | null;
   securityDeposit: number | null;
   note?: string | null;
+}
+
+export interface LeaseEnd { endDate: string | null; effectiveEndDate?: string | null }
+
+/** The end that matters for "is it running": the renewed one when there is one. */
+export function leaseEnd(c: LeaseEnd): string | null {
+  return c.effectiveEndDate === undefined ? c.endDate : c.effectiveEndDate;
 }
 
 export interface ContractTermRow {
@@ -56,19 +68,21 @@ export function validOn<T extends { validFrom: string; validTo?: string | null }
  * before today: the API drops payments after it, and a tenant who settles
  * arrears after moving out would otherwise stay in debt forever.
  */
-export function breakdownRange(c: { startDate: string; endDate: string | null }, today = todayIso()): { from: string; to: string } {
-  const end = c.endDate ?? today;
+export function breakdownRange(c: { startDate: string } & LeaseEnd, today = todayIso()): { from: string; to: string } {
+  const end = leaseEnd(c) ?? today;
   return { from: c.startDate, to: end > today ? end : today };
 }
 
 /** Running today: started, and either open-ended or not yet ended. */
-export function isActiveContract(c: { startDate: string; endDate: string | null }, today = todayIso()): boolean {
-  return c.startDate <= today && (c.endDate === null || c.endDate >= today);
+export function isActiveContract(c: { startDate: string } & LeaseEnd, today = todayIso()): boolean {
+  const end = leaseEnd(c);
+  return c.startDate <= today && (end === null || end >= today);
 }
 
 /** Over: the end date has passed. A lease that has not started yet is not ended. */
-export function isEndedContract(c: { endDate: string | null }, today = todayIso()): boolean {
-  return c.endDate !== null && c.endDate < today;
+export function isEndedContract(c: LeaseEnd, today = todayIso()): boolean {
+  const end = leaseEnd(c);
+  return end !== null && end < today;
 }
 
 export interface CurrentTerms {

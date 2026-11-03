@@ -9,13 +9,15 @@ Bump verze v `mcp/package.json` je zároveň spouštěč releasu — po mergi do
 publikuje job `release-mcp` v `.github/workflows/ci.yml` balíček na npm. Verze
 v konstruktoru `FastMCP` v `mcp/index.ts` musí sedět, jinak CI failne.
 
-## Unreleased
+## 0.4.0 — 2026-10-30
 
-Bez změny chování, bez releasu (verze zůstává).
+### Added
 
-## 0.4.0
-
-- `properties_create` a `properties_update` už nepřijímají pole `reconciliationSkill` a nástroje `properties_*` ho nevrací. Pole bylo relikt původního plánu a nic ho nepoužívalo; neznámé pole ve vstupu se tiše ignoruje, takže starší klienti nespadnou.
+- `contracts_create` a `contracts_update` berou `autoRenew` a `renewalMonths`
+  pro smlouvy s automatickým prodloužením (prolongací) za stejných podmínek.
+  `endDate` zůstává původní konec doby určité; `contracts_get` a
+  `contracts_list` vrací navíc `effectiveEndDate` (konec právě běžícího období).
+  Vypnutí `autoRenew` bez `endDate` ukončí smlouvu ke konci aktuálního období.
 
 ### Changed
 
@@ -23,6 +25,12 @@ Bez změny chování, bez releasu (verze zůstává).
   `addAllTools` (`tools/index.ts`) místo přímo do `FastMCP`. Stejné definice teď
   servíruje i remote MCP endpoint aplikace (`/mcp`).
 - README doporučuje remote MCP; tenhle balíček je fallback pro klienty bez něj.
+
+### Removed
+
+- `properties_create` a `properties_update` už nepřijímají pole `reconciliationSkill`
+  a nástroje `properties_*` ho nevrací. Pole bylo relikt původního plánu a nic ho
+  nepoužívalo; neznámé pole ve vstupu se tiše ignoruje, takže starší klienti nespadnou.
 
 ## 0.3.0 — 2026-09-04
 

@@ -17,7 +17,7 @@ import { Seg } from '@/components/ui/seg';
 import { Status } from '@/components/ui/status';
 import { Notice } from '@/components/ui/notice';
 import { Pager, usePager } from '@/components/ui/pager';
-import { breakdownRange } from '@/hooks/useContracts';
+import { breakdownRange, leaseEnd } from '@/hooks/useContracts';
 import { useReminders, dueLabel, reconciliationDeadline, type AgendaItem } from '@/hooks/useReminders';
 import { Agenda, reminderItems } from '@/components/Agenda';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,7 @@ import { TableEmpty, TableError } from '@/components/ui/table-error';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DuplicatePaymentError } from '@/components/DuplicatePaymentError';
 import { PairingCard } from './contract/PairingCard';
+import { ContractEditDialog, renewalNote } from './contract/ContractEditDialog';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -40,6 +41,9 @@ interface Contract {
   tenantName: string;
   startDate: string;
   endDate: string | null;
+  autoRenew: boolean;
+  renewalMonths: number | null;
+  effectiveEndDate: string | null;
   securityDeposit: number | null;
   note?: string | null;
 }
@@ -1725,7 +1729,7 @@ export function ContractDetailPage() {
   const allStatements = costStatementsData?.statements ?? [];
   const filteredStatements = contract
     ? allStatements.filter(s =>
-        periodsOverlap(s.periodFrom, s.periodTo, contract.startDate, contract.endDate ?? null)
+        periodsOverlap(s.periodFrom, s.periodTo, contract.startDate, leaseEnd(contract))
       ).sort((a, b) => b.periodFrom.localeCompare(a.periodFrom))
     : [];
 
@@ -1739,6 +1743,7 @@ export function ContractDetailPage() {
     : null;
 
   // ── Dialog state ───────────────────────────────────────────────────────────
+  const [contractEditOpen, setContractEditOpen] = useState(false);
   const [podminkyOpen, setPodminkyOpen] = useState(false);
   const [editRowDate, setEditRowDate] = useState<string | null>(null);
   const [csOpen, setCsOpen] = useState(false);
@@ -1799,11 +1804,22 @@ export function ContractDetailPage() {
           <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-5">
             {/* Smlouva */}
             <Card>
-              <CardHeader><CardTitle>Smlouva</CardTitle></CardHeader>
+              <CardHeader className="flex-row items-start justify-between gap-3">
+                <CardTitle>Smlouva</CardTitle>
+                {contract && <Button size="sm" variant="outline" onClick={() => setContractEditOpen(true)}>Upravit</Button>}
+              </CardHeader>
               <CardContent>
                 {contract ? (
                   <KV>
-                    <KVRow label="Platnost">{fmtRange(contract.startDate, contract.endDate)}</KVRow>
+                    <KVRow label="Platnost">{fmtRange(contract.startDate, leaseEnd(contract))}</KVRow>
+                    {contract.autoRenew && contract.endDate && (
+                      <KVRow label="Prodloužení">
+                        <span className="inline-flex items-center gap-1.5">
+                          {renewalNote(contract)}
+                          <Hint label="Jak funguje automatické prodloužení">Když nikdo smlouvu nevypoví, po konci doby určité běží dál za stejných podmínek vždy o další období. Konec v řádku Platnost je konec právě běžícího období.</Hint>
+                        </span>
+                      </KVRow>
+                    )}
                     <KVRow label="Kauce">{contract.securityDeposit != null ? fmtKc(contract.securityDeposit) : <span className="text-soft">—</span>}</KVRow>
                     <KVRow label="Splatnost (aktuální)">
                       {currentTerm
@@ -2137,6 +2153,18 @@ export function ContractDetailPage() {
             // Měsíční rozpis can show pre-payment allocation for up to 30s
             // after creating a payment — the delete mutation above already
             // invalidates both keys; this create path must match.
+            qc.invalidateQueries({ queryKey: ['payment-breakdown', id] });
+          }}
+        />
+      )}
+
+      {/* ── Contract edit dialog ───────────────────────────────────────────── */}
+      {contractEditOpen && contract && (
+        <ContractEditDialog
+          contract={contract}
+          onClose={() => setContractEditOpen(false)}
+          onUpdated={() => {
+            qc.invalidateQueries({ queryKey: ['contracts'] });
             qc.invalidateQueries({ queryKey: ['payment-breakdown', id] });
           }}
         />

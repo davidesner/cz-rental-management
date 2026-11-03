@@ -98,6 +98,23 @@ describe('reconciliation edge cases – empty period', () => {
     expect(rec.items).toHaveLength(0);
     await client.close();
   }, 30_000);
+
+  it('an auto-renewing contract that passed its original end date still has items in the period', async () => {
+    const { client, app, cookie, contract } = await bootstrap('renew1@b.cz', '2023-01-01');
+    await app.request(`/api/contracts/${contract.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ endDate: '2023-12-31', autoRenew: true, renewalMonths: 12 }),
+    });
+    const res = await app.request(`/api/contracts/${contract.id}/reconciliations/compute`, {
+      method: 'POST', headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ periodFrom: '2024-01-01', periodTo: '2024-03-31' }),
+    });
+    expect(res.status).toBe(201);
+    const rec = (await res.json() as any).reconciliation;
+    // Nothing paid against three months of expected advances → items are there.
+    expect(rec.items.length).toBeGreaterThan(0);
+    await client.close();
+  }, 30_000);
 });
 
 // ─── Multi-tenant / scoping ───────────────────────────────────────────────────

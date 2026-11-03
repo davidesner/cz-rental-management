@@ -171,6 +171,34 @@ describe('bank-sync', () => {
     await c.close();
   });
 
+  // The fixture's value date is 2026-08-20.
+  describe('a fixed-term contract', () => {
+    async function withEnd(endDate: string, o: { autoRenew?: boolean; renewalMonths?: number | null } = {}) {
+      const c = await setup();
+      await c.db.update(contract).set({ endDate, autoRenew: o.autoRenew ?? false, renewalMonths: o.renewalMonths ?? null })
+        .where(eq(contract.id, c.contractId));
+      await addRule(c.db, c.orgId, c.contractId);
+      await syncIntegration(c.db, c.integrationId, deps([{ uid: 10, source: await notification('m1') }]), 'manual');
+      const [tx] = await c.db.select().from(bankTransaction);
+      await c.close();
+      return tx!;
+    }
+
+    it('pairs a payment dated before its end date', async () => {
+      expect((await withEnd('2026-12-31')).status).toBe('matched');
+    });
+
+    it('leaves a payment after its end date unmatched when it does not renew', async () => {
+      expect((await withEnd('2026-07-31')).status).toBe('unmatched');
+    });
+
+    it('pairs a payment after its original end date when it renews automatically', async () => {
+      const tx = await withEnd('2026-07-31', { autoRenew: true, renewalMonths: 12 });
+      expect(tx.status).toBe('matched');
+      expect(tx.paymentId).not.toBeNull();
+    });
+  });
+
   it('records ambiguity and creates no payment when two contracts match', async () => {
     const c = await setup();
     await addRule(c.db, c.orgId, c.contractId);

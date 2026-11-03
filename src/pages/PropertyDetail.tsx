@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Plus } from 'lucide-react';
 import { api, ApiError, apiErrorMessage } from '@/lib/api';
 import { parseKorun } from '@/lib/money';
-import { fmtDate, fmtKc } from '@/lib/format';
+import { fmtDate, fmtKc, fmtRange } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,7 +19,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Hint } from '@/components/ui/hint';
 import { Status } from '@/components/ui/status';
 import { Agenda, reminderItems } from '@/components/Agenda';
-import { isActiveContract, isEndedContract, useContracts, useCurrentTermsMap } from '@/hooks/useContracts';
+import { isActiveContract, isEndedContract, leaseEnd, useContracts, useCurrentTermsMap } from '@/hooks/useContracts';
 import { useDashboard } from '@/hooks/useDashboard';
 import { useReminders } from '@/hooks/useReminders';
 import { IncomeTrendCard } from './property/IncomeTrendCard';
@@ -276,7 +276,7 @@ export function PropertyDetailPage() {
                     <TableCell>
                       {active ? <Status tone="ok">Běží</Status> : ended ? <Status tone="soft">Ukončen</Status> : <Status tone="wait">Začne {fmtDate(c.startDate)}</Status>}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">{fmtDate(c.startDate)} až {c.endDate ? fmtDate(c.endDate) : 'dosud'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{fmtRange(c.startDate, leaseEnd(c))}</TableCell>
                     <TableCell className="num">{t === undefined ? <span className="text-wait">…</span> : t.monthlyTotal !== null ? fmtKc(t.monthlyTotal) : <span className="text-soft">—</span>}</TableCell>
                     <TableCell className="num">{c.securityDeposit ? fmtKc(c.securityDeposit) : <span className="text-soft">—</span>}</TableCell>
                   </TableRow>

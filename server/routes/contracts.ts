@@ -12,6 +12,8 @@ const CreateContract = z.object({
   tenantId: z.string(),
   startDate: DateStr,
   endDate: DateStr.nullable().optional(),
+  autoRenew: z.boolean().optional(),
+  renewalMonths: z.number().int().positive().nullable().optional(),
   securityDeposit: z.number().int().nonnegative().nullable().optional(),
   note: z.string().nullable().optional(),
 });
@@ -19,6 +21,8 @@ const CreateContract = z.object({
 const UpdateContract = z.object({
   startDate: DateStr.optional(),
   endDate: DateStr.nullable().optional(),
+  autoRenew: z.boolean().optional(),
+  renewalMonths: z.number().int().positive().nullable().optional(),
   securityDeposit: z.number().int().nonnegative().nullable().optional(),
   note: z.string().nullable().optional(),
 });

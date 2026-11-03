@@ -79,7 +79,11 @@ Pokud skript neexistuje a potřebuješ matiku → napiš ho jako deterministick�
 1. **Sběr dokumentů** — SVJ vyúčtování PDF, faktury elektřina, bank statement za období
 2. **Parse** — generic extractory (volný text → JSON) nebo property-specific parsery
 3. **Compute** — Python skripty pro adjustmenty (solar, FO odečet, proporce)
-4. **Regression test** — pokud `<složka>/_agent/fixtures/` existují, spusť je proti current parsery; **fail = STOP a oznam user**
+4. **Validace před zápisem do MCP** — všechny kontroly musí projít, jinak **STOP a oznam user**:
+   - **Kontrolní součet parsu:** součet naparsovaných položek se rovná celkové částce vytištěné na dokladu. Když nesedí, parser řádek vynechal nebo přečetl špatně.
+   - **Řád částek:** porovnej per-kind totaly s minulým rokem (`reconciliations_list`). Skok o řád znamená záměnu haléřů a korun.
+   - **Zálohy proti smlouvě:** `contract_terms_list` se musí shodovat s podepsanou smlouvou v `najem/`. MCP se od papíru rozchází tiše a vyúčtování pak počítá se špatnou zálohou.
+   - **Regression:** pokud `<složka>/_agent/fixtures/` existují, spusť je proti current parseru.
 5. **MCP zápis** (idempotentní přes `externalId` / `documentRef`):
    - `record_payments` (z bank statementu, s SHA hash jako externalId)
    - **Zkontroluj response** — `record_payments` může vrátit i `duplicates`, ne jen `created`/`existing`:
@@ -100,6 +104,12 @@ Pokud skript neexistuje a potřebuješ matiku → napiš ho jako deterministick�
     ```
 
     Cestu ke skriptu si odvoď od umístění tohoto `SKILL.md`, nehardcoduj ji.
+
+11. **Zkontroluj vygenerované PDF** — nájemce dostane tenhle soubor, ne MCP. Vytáhni z něj text a **každou částku porovnej s `reconciliations_get`**:
+
+    ```bash
+    pdftotext -layout <pdf> - | grep -nE "Kč|CZK"
+    ```
 
 ## Period matching pravidlo
 
@@ -165,3 +175,41 @@ Když user řekne "ulož parser" / "ulož pravidlo":
 - Pro CSV/Excel: `pandas` jen pokud je to opravdu potřeba (jinak `csv`)
 - Money v haléřích jako `int` (Decimal × 100), nikdy float
 - Každý compute skript ber **JSON input + JSON output** (stdin/stdout nebo argv) — snadno testovatelné
+
+## Zúčtovací období a lhůty (zák. č. 67/2013 Sb.)
+
+| co | § | lhůta |
+|---|---|---|
+| zúčtovací období | 2 | max. 12 měsíců, počátek určuje poskytovatel |
+| doručit vyúčtování | 7 odst. 1 | 4 měsíce od konce období |
+| finanční vyrovnání | 7 odst. 3 | ujednaná, max. 4 měsíce od doručení |
+| doložit náklady na žádost | 8 | do 5 měsíců po konci období, vyhovět do 30 dnů |
+| pokuta za prodlení | 13 | 50 Kč za každý započatý den |
+
+**Zúčtovací období volí tak, aby lhůta 4 měsíců vyšla** — prodloužit ji smlouvou
+nejde. § 7 odst. 1 vyhrazuje výjimku jinému právnímu předpisu, ne dohodě stran;
+metodický pokyn MMR: *„Ustanovení § 7 je kogentní."* Klauzuli „vyúčtování do 30
+dnů od obdržení podkladů od SVJ" u nájmu bytu navíc smete § 2235 odst. 1 OZ.
+
+**Rozdílné zúčtovací období pro každou službu je legální.** MMR: *„ZS nebrání ani
+možnosti určit pro jednotlivé služby rozdílný počátek, popř. délku zúčtovacího
+období."* Výčet služeb v § 3 odst. 1 je demonstrativní a rozsah se určuje
+ujednáním, takže sem spadá i elektřina odebíraná na smlouvu pronajímatele. Jeden
+souhrnný dokument zákon nežádá.
+
+Využij toho: službu dej na období, jehož konec lhůtu stíháš (typicky elektřinu na
+fakturační rok dodavatele) a doruč vyúčtování zvlášť, jakmile dorazí jeho podklad.
+
+**Když podklad chodí později než za 4 měsíce** (typicky SVJ), žádná volba období
+to nevyřeší. Pokuta podle § 13 vzniká uplynutím lhůty automaticky, ale neuplatní
+se, kdyby nebylo spravedlivé včasné plnění požadovat — a **prodlení dodavatele nad
+pronajímatelem sem spadá**. Archivuj proto písemné urgence, to je ten důkaz.
+
+## Rozpad předpisu SVJ na osobu vs. na byt
+
+**Sazbu na osobu ověř na korunu:** přepočtem na jiný počet osob musí vyjít jiná
+známá částka. Když nevyjde, položka, kterou máš za „na byt", má složku na osobu.
+Skladba položek se liší podle SVJ.
+
+Zálohu na vodu porovnej se skutečností z posledního vyúčtování, bývá
+podhodnocená. Odchylku od předpisu SVJ zdůvodni v `note` u `contract_terms_add`.

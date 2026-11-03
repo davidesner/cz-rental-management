@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
-import { fmtDate, fmtKc } from '@/lib/format';
+import { fmtKc, fmtRange } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { NewContractDialog } from './contract/NewContractDialog';
@@ -11,7 +11,8 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
 import { TableEmpty, TableError } from '@/components/ui/table-error';
-import { isEndedContract, useContracts, useCurrentTermsMap, type ContractListRow } from '@/hooks/useContracts';
+import { isEndedContract, leaseEnd, useContracts, useCurrentTermsMap, type ContractListRow } from '@/hooks/useContracts';
+import { renewalNote } from './contract/ContractEditDialog';
 
 type Filter = 'active' | 'ended' | 'all';
 
@@ -92,7 +93,8 @@ export function ContractsPage() {
                         : <span className="text-soft">bez podmínek</span>}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {fmtDate(c.startDate)} až {c.endDate ? fmtDate(c.endDate) : <span className="text-soft">dosud</span>}
+                      <div>{fmtRange(c.startDate, leaseEnd(c))}</div>
+                      {renewalNote(c) && <div className="text-sm text-soft">{renewalNote(c)}</div>}
                     </TableCell>
                   </TableRow>
                 );

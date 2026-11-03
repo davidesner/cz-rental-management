@@ -2,7 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { daysSince, fmtKc, fmtKcExact, todayIso } from '@/lib/format';
 import { dueLabel, reconciliationDeadline, type AgendaItem } from './useReminders';
-import { breakdownRange, isActiveContract, useContracts, type ContractListRow } from './useContracts';
+import { breakdownRange, isActiveContract, leaseEnd, useContracts, type ContractListRow } from './useContracts';
 
 // The month rows of /api/contracts/:id/payment-breakdown, as the detail page
 // reads them. Only the fields the dashboard sums are typed here.
@@ -163,8 +163,12 @@ export function useDashboard(period: Period, filter: { propertyId?: string } = {
       if (next && daysSince(next.dueDate) >= -31) {
         agenda.push({ key: `due:${c.id}`, date: next.dueDate, title: 'Splatnost nájmu', ref: `${c.propertyName}, ${fmtKc(next.allocation.deficitTotal)}`, href: `/contracts/${c.id}?tab=platby`, reminderId: null, done: false, ...dueLabel(next.dueDate, today) });
       }
-      if (c.endDate && daysSince(c.endDate) >= -90) {
-        agenda.push({ key: `end:${c.id}`, date: c.endDate, title: 'Končí nájemní smlouva', ref: `${c.propertyName}, ${c.tenantName}`, href: `/contracts/${c.id}`, reminderId: null, done: false, ...dueLabel(c.endDate, today) });
+      // A renewing lease rolls over on its own; the date still matters, it is
+      // the last day to give notice before another period starts.
+      const end = leaseEnd(c);
+      if (end && daysSince(end) >= -90) {
+        const renews = c.autoRenew && c.renewalMonths;
+        agenda.push({ key: `end:${c.id}`, date: end, title: renews ? 'Smlouva se automaticky prodlouží' : 'Končí nájemní smlouva', ref: `${c.propertyName}, ${c.tenantName}`, href: `/contracts/${c.id}`, reminderId: null, done: false, ...dueLabel(end, today) });
       }
     }
   });

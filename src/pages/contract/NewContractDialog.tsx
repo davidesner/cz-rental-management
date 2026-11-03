@@ -46,6 +46,8 @@ export function NewContractDialog({ onClose, onCreated, propertyId }: Props) {
     tenantId: '',
     startDate: '',
     endDate: '',
+    autoRenew: false,
+    renewalMonths: '12',
     securityDeposit: '',
     baseRent: '',
     serviceAdvance: '',
@@ -73,8 +75,10 @@ export function NewContractDialog({ onClose, onCreated, propertyId }: Props) {
   };
   const dueDay = parseInt(form.paymentDueDay, 10);
   const dueDayInvalid = !(dueDay >= 1 && dueDay <= 31);
+  const renewalMonths = parseInt(form.renewalMonths, 10);
+  const renewalInvalid = form.autoRenew && (!form.endDate || !(renewalMonths >= 1));
   const canSubmit = !!form.propertyId && !!form.tenantId && !!form.startDate
-    && !invalid.deposit && !invalid.rent && !invalid.advance && !invalid.utilities && !dueDayInvalid && !submitting;
+    && !invalid.deposit && !invalid.rent && !invalid.advance && !invalid.utilities && !dueDayInvalid && !renewalInvalid && !submitting;
 
   const usedKinds = new Set(utilities.map(u => u.kind));
   const freeKinds = UTILITY_KINDS.filter(k => !usedKinds.has(k));
@@ -90,6 +94,8 @@ export function NewContractDialog({ onClose, onCreated, propertyId }: Props) {
         tenantId: form.tenantId,
         startDate: form.startDate,
         endDate: form.endDate || null,
+        autoRenew: form.autoRenew,
+        renewalMonths: form.autoRenew ? renewalMonths : null,
         securityDeposit: securityDeposit.kind === 'value' ? securityDeposit.halere : null,
         note: form.note || null,
       });
@@ -174,6 +180,22 @@ export function NewContractDialog({ onClose, onCreated, propertyId }: Props) {
         </div>
       </div>
       {invalid.deposit && <p className="text-sm text-late">{AMOUNT_HELP}</p>}
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={form.autoRenew} onChange={e => set('autoRenew')(e.target.checked)} />
+          Automatické prodloužení
+          <Hint label="Co je automatické prodloužení">Smlouva na dobu určitou, kterou nikdo nevypoví, běží po konci dál za stejných podmínek vždy o další období. Potřebuje vyplněný konec.</Hint>
+        </label>
+        {form.autoRenew && (
+          <label className="inline-flex items-center gap-2 text-sm">
+            o
+            <Input className="w-16" inputMode="numeric" value={form.renewalMonths} onChange={e => set('renewalMonths')(e.target.value)} aria-label="Prodloužení o měsíců" />
+            měsíců
+          </label>
+        )}
+      </div>
+      {renewalInvalid && <p className="text-sm text-late">Prodloužení potřebuje konec smlouvy a celý počet měsíců, alespoň 1.</p>}
 
       <div className="border-t border-rule pt-4">
         <div className="mb-3 flex items-center gap-1.5">

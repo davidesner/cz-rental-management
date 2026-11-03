@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Hint } from '@/components/ui/hint';
 import { KV, KVRow } from '@/components/ui/kv';
 import { Status } from '@/components/ui/status';
-import type { ContractListRow, CurrentTerms } from '@/hooks/useContracts';
+import { leaseEnd, type ContractListRow, type CurrentTerms } from '@/hooks/useContracts';
 import type { DebtRow } from '@/hooks/useDashboard';
 import { fmtDate, fmtKc, fmtRange, plural } from '@/lib/format';
 import { kindLabel } from './labels';
@@ -25,7 +25,7 @@ export function CurrentLeaseCard({ lease, upcoming, terms, debt, loaded, classNa
     <Card className={className}>
       <CardHeader>
         <CardTitle>{upcoming ? 'Nadcházející pronájem' : 'Aktuální pronájem'}</CardTitle>
-        {lease && <CardDescription>{fmtRange(lease.startDate, lease.endDate, 'na dobu neurčitou')}</CardDescription>}
+        {lease && <CardDescription>{fmtRange(lease.startDate, leaseEnd(lease), 'na dobu neurčitou')}</CardDescription>}
       </CardHeader>
       <CardContent>
         {!loaded ? (

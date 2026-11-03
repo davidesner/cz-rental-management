@@ -18,6 +18,7 @@ import { paymentRoutes } from './routes/payments.js';
 import { costStatementRoutes } from './routes/cost-statements.js';
 import { reconciliationRoutes } from './routes/reconciliations.js';
 import { rentReductionRoutes } from './routes/rent-reductions.js';
+import { reminderRoutes } from './routes/reminders.js';
 import { paymentBreakdownRoutes } from './routes/payment-breakdown.js';
 import { bankRoutes, cronRoutes } from './routes/bank.js';
 import { mcpRoutes } from './mcp/routes.js';
@@ -116,6 +117,7 @@ export function buildApp(deps: AppDeps): HonoApp {
   app.route('/api', costStatementRoutes());
   app.route('/api', reconciliationRoutes());
   app.route('/api', rentReductionRoutes());
+  app.route('/api', reminderRoutes());
   app.route('/api', paymentBreakdownRoutes());
   app.route('/api', bankRoutes());
 

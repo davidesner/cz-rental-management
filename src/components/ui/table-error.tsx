@@ -19,10 +19,19 @@ interface TableErrorProps {
 export function TableError({ cols, onRetry }: TableErrorProps) {
   return (
     <TableRow>
-      <TableCell colSpan={cols} className="text-center py-8">
-        <p className="text-sm text-destructive mb-3">Nepodařilo se načíst data.</p>
+      <TableCell colSpan={cols} className="py-8 text-center">
+        <p className="mb-3 text-sm text-late">Nepodařilo se načíst data.</p>
         <Button size="sm" variant="outline" onClick={onRetry}>Zkusit znovu</Button>
       </TableCell>
+    </TableRow>
+  );
+}
+
+/** An empty-list row with the same geometry as TableError. */
+export function TableEmpty({ cols, children }: { cols: number; children: React.ReactNode }) {
+  return (
+    <TableRow>
+      <TableCell colSpan={cols} className="py-8 text-center text-sm text-soft">{children}</TableCell>
     </TableRow>
   );
 }

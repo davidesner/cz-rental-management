@@ -6,6 +6,8 @@ import { parseKorun } from '@/lib/money';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Hint } from '@/components/ui/hint';
+import { Modal } from '@/components/ui/modal';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
@@ -42,9 +44,9 @@ function fmtKc(halere: number) {
 
 function fmtKcSigned(halere: number) {
   const s = (halere / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
-  if (halere < 0) return <span className="text-red-600">{s}</span>;
-  if (halere > 0) return <span className="text-green-600">+{s}</span>;
-  return <span className="text-muted-foreground">{s}</span>;
+  if (halere < 0) return <span className="text-late">{s}</span>;
+  if (halere > 0) return <span className="text-accent">+{s}</span>;
+  return <span className="text-soft">{s}</span>;
 }
 
 export function CostStatementsPage() {
@@ -146,9 +148,9 @@ export function CostStatementsPage() {
     const repTariff = tariffs.find(t =>
       t.validFrom <= form.periodFrom && (t.validTo === null || form.periodFrom < t.validTo)
     );
-    const deductibleNote = repTariff?.deductibleNote ?? 'EL deductible';
+    const deductibleNote = repTariff?.deductibleNote ?? 'odečitatelná část z evidenčního listu';
 
-    const note = `FO portion (${deductibleNote}) × period (${daysCovered} dní) = ${(totalHaler / 100).toFixed(2)} Kč`;
+    const note = `Odečitatelná část (${deductibleNote}) za ${daysCovered} dní = ${(totalHaler / 100).toFixed(2)} Kč`;
 
     setForm(prev => ({
       ...prev,
@@ -211,8 +213,8 @@ export function CostStatementsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Vyúčtování nákladů</h1>
-        <Button onClick={() => { setErr(null); resetForm(); setOpen(true); }}>Nový výkaz</Button>
+        <h1 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Vyúčtování nákladů</h1>
+        <Button onClick={() => { setErr(null); resetForm(); setOpen(true); }}>Nové vyúčtování</Button>
       </div>
       <Card className="overflow-hidden">
         <Table>
@@ -223,7 +225,7 @@ export function CostStatementsPage() {
               <TableHead>Období</TableHead>
               <TableHead>Celkem</TableHead>
               <TableHead>Úprava</TableHead>
-              <TableHead>Reconciliable</TableHead>
+              <TableHead>K vyúčtování</TableHead>
               <TableHead>Poznámka k úpravě</TableHead>
             </TableRow>
           </TableHeader>
@@ -234,7 +236,7 @@ export function CostStatementsPage() {
               <TableSkeleton cols={7} />
             ) : data.statements.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Zatím žádné výkazy nákladů.</TableCell>
+                <TableCell colSpan={7} className="text-center text-soft py-8">Zatím žádná vyúčtování nákladů.</TableCell>
               </TableRow>
             ) : (
               data.statements.map(s => {
@@ -246,9 +248,9 @@ export function CostStatementsPage() {
                     <TableCell>{s.kind}</TableCell>
                     <TableCell>{s.periodFrom} – {s.periodTo}</TableCell>
                     <TableCell>{fmtKc(s.totalAmount)}</TableCell>
-                    <TableCell>{s.adjustmentAmount != null ? fmtKcSigned(s.adjustmentAmount) : <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell>{s.adjustmentAmount != null ? fmtKcSigned(s.adjustmentAmount) : <span className="text-soft">—</span>}</TableCell>
                     <TableCell className="font-bold">{fmtKc(reconciliable)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
+                    <TableCell className="text-xs text-soft max-w-xs truncate" title={s.adjustmentNote ?? undefined}>
                       {s.adjustmentNote ?? '—'}
                     </TableCell>
                   </TableRow>
@@ -260,13 +262,25 @@ export function CostStatementsPage() {
       </Card>
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setOpen(false)}>
-          <Card className="w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Nový výkaz nákladů</h2>
+        <Modal title="Nové vyúčtování nákladů" onClose={() => setOpen(false)} footer={<>
+            <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
+            <Button
+              onClick={() => create.mutate()}
+              disabled={
+                !form.propertyId ||
+                totalAmountInvalid ||
+                adjustmentAmountInvalid ||
+                (periodMode === 'custom' && (!form.periodFrom || !form.periodTo)) ||
+                create.isPending
+              }
+            >
+              Vytvořit
+            </Button>
+        </>}>
             <div>
               <Label>Nemovitost</Label>
               <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="select-native"
                 value={form.propertyId}
                 onChange={e => {
                   setAdjustmentTouched(false);
@@ -281,7 +295,7 @@ export function CostStatementsPage() {
             <div>
               <Label>Druh</Label>
               <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="select-native"
                 value={form.kind}
                 onChange={e => {
                   setAdjustmentTouched(false);
@@ -298,7 +312,7 @@ export function CostStatementsPage() {
               </select>
             </div>
             <div>
-              <Label>Období</Label>
+              <div className="mb-1 flex items-center gap-1.5"><Label className="mb-0">Období</Label><Hint label="K čemu je období">Období říká, co náklad pokrývá. Při vyúčtování nájemci se podle něj párují i platby stejného druhu, pokud období začíná uvnitř vyúčtovávaného roku. Náklad přes přelom roku rozděl na dva záznamy, každý ve svém kalendářním roce.</Hint></div>
               <div className="flex gap-2 mb-2">
                 <Button
                   type="button"
@@ -330,11 +344,11 @@ export function CostStatementsPage() {
                     }}
                   />
                   {!yearTouched && form.propertyId && form.kind && (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-soft">
                       Návrh: další rok bez vyúčtování pro tuto kombinaci.
                     </p>
                   )}
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-soft">
                     {`Od ${year}-01-01 do ${year}-12-31`}
                   </p>
                 </div>
@@ -366,24 +380,20 @@ export function CostStatementsPage() {
                   </div>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-1 leading-snug">
-                <strong>Tip:</strong> <code>periodFrom</code>/<code>periodTo</code> určují co náklad pokrývá. Při reconciliaci se tento period použije i pro <strong>matching plateb</strong> tohoto druhu — pokud <code>periodFrom</code> startuje uvnitř reconciliation období. Pro proporcionální rozdělení přes year boundary vytvoř dva statementy, každý ve svém kalendářním roce.
-              </p>
             </div>
             <div>
               <Label>Celková částka (Kč)</Label>
               <Input type="text" placeholder="35000,50" value={form.totalAmount} onChange={e => setForm({ ...form, totalAmount: e.target.value })} />
               {form.totalAmount !== '' && totalAmountInvalid && (
-                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
+                <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. 35000 nebo 35000,50.</p>
               )}
             </div>
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Label>Částka úpravy (Kč, se znaménkem)</Label>
-                {autoFillLabel && !adjustmentTouched && (
-                  <span className="text-xs text-muted-foreground italic">{autoFillLabel}</span>
-                )}
-              </div>
+              <div className="mb-1 flex items-center gap-1.5">
+              <Label className="mb-0">Částka úpravy (Kč)</Label>
+              <Hint label="K čemu je úprava">Část nákladů, kterou nájemce neplatí, třeba fond oprav nebo odměny výboru v předpisu SVJ. Záporná částka se od celkových nákladů odečte, kladná přičte. Předvyplní se z evidenčního listu nemovitosti podle délky období; můžeš ji přepsat.</Hint>
+              {autoFillLabel && !adjustmentTouched && <span className="text-xs text-soft">{autoFillLabel}</span>}
+            </div>
               <Input
                 type="text"
                 placeholder="0.00"
@@ -395,7 +405,7 @@ export function CostStatementsPage() {
                 }}
               />
               {adjustmentAmountInvalid && (
-                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. -350 nebo 35000,50.</p>
+                <p className="text-sm text-late mt-1">Částka musí být číslo v korunách, např. -350 nebo 35000,50.</p>
               )}
             </div>
             <div>
@@ -409,24 +419,8 @@ export function CostStatementsPage() {
               <Label>Reference dokumentu (volitelné)</Label>
               <Input value={form.documentRef} onChange={e => setForm({ ...form, documentRef: e.target.value })} />
             </div>
-            {err && <p className="text-sm text-destructive">{err}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
-              <Button
-                onClick={() => create.mutate()}
-                disabled={
-                  !form.propertyId ||
-                  totalAmountInvalid ||
-                  adjustmentAmountInvalid ||
-                  (periodMode === 'custom' && (!form.periodFrom || !form.periodTo)) ||
-                  create.isPending
-                }
-              >
-                Vytvořit
-              </Button>
-            </div>
-          </Card>
-        </div>
+            {err && <p className="text-sm text-late">{err}</p>}
+        </Modal>
       )}
     </div>
   );

@@ -1,25 +1,31 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '@/lib/api';
+import { fmtDate } from '@/lib/format';
 import { Button } from '@/components/ui/button';
+import { Hint } from '@/components/ui/hint';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card } from '@/components/ui/card';
+import { Modal } from '@/components/ui/modal';
 
 export interface EditableContract {
   id: string;
   startDate: string;
+  /** Original end of the fixed term; null = open-ended. */
   endDate: string | null;
   autoRenew: boolean;
   renewalMonths: number | null;
+  /** End of the renewal period running today. */
   effectiveEndDate: string | null;
 }
 
-/** "2025-01-01 – 2026-12-31 (prodlužuje se o 12 měs., původně do 2025-12-31)" */
-export function contractPeriodLabel(c: EditableContract): string {
-  if (!c.autoRenew || c.endDate === null) return `${c.startDate} – ${c.endDate ?? 'běží'}`;
-  const original = c.effectiveEndDate !== c.endDate ? `, původně do ${c.endDate}` : '';
-  return `${c.startDate} – ${c.effectiveEndDate} (prodlužuje se o ${c.renewalMonths} měs.${original})`;
+/** "prodlužuje se o 12 měsíců, původně do 31. 12. 2025", or null when nothing renews. */
+export function renewalNote(c: Pick<EditableContract, 'endDate' | 'autoRenew' | 'renewalMonths' | 'effectiveEndDate'>): string | null {
+  if (!c.autoRenew || c.endDate === null || !c.renewalMonths) return null;
+  const n = c.renewalMonths;
+  const unit = n === 1 ? 'měsíc' : n <= 4 ? 'měsíce' : 'měsíců';
+  const original = c.effectiveEndDate && c.effectiveEndDate !== c.endDate ? `, původně do ${fmtDate(c.endDate)}` : '';
+  return `prodlužuje se o ${n} ${unit}${original}`;
 }
 
 interface Props {
@@ -59,42 +65,50 @@ export function ContractEditDialog({ contract, onClose, onUpdated }: Props) {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">Upravit smlouvu</h2>
+    <Modal
+      title="Upravit smlouvu"
+      description="Platnost smlouvy a automatické prodloužení. Nájem, zálohy a splatnost se mění dodatkem v historii smlouvy."
+      onClose={onClose}
+      footer={<>
+        <Button variant="outline" onClick={onClose}>Zrušit</Button>
+        <Button onClick={() => { setErr(null); save.mutate(); }} disabled={!form.startDate || renewalInvalid || endMissing || save.isPending}>
+          {save.isPending ? 'Ukládám…' : 'Uložit'}
+        </Button>
+      </>}
+    >
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label>Datum začátku</Label>
-          <Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
+          <Label htmlFor="ce-start">Začátek</Label>
+          <Input id="ce-start" type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
         </div>
         <div>
-          <Label>{form.autoRenew ? 'Konec doby určité (původní)' : 'Datum konce (volitelné)'}</Label>
-          <Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
+          <Label htmlFor="ce-end">{form.autoRenew ? 'Konec doby určité' : 'Konec'}</Label>
+          <Input id="ce-end" type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.autoRenew} onChange={e => setForm({ ...form, autoRenew: e.target.checked })} />
-          Automatické prodloužení za stejných podmínek
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={form.autoRenew} onChange={e => setForm({ ...form, autoRenew: e.target.checked })} />
+          Automatické prodloužení
+          <Hint label="Co je automatické prodloužení">Smlouva na dobu určitou, kterou nikdo nevypoví, běží po konci dál za stejných podmínek vždy o další období. Konec doby určité zůstává v evidenci původní, aplikace si aktuální konec dopočítá.</Hint>
         </label>
         {form.autoRenew && (
-          <div>
-            <Label>Prodlužuje se o (měsíců)</Label>
-            <Input type="number" min={1} value={form.renewalMonths} onChange={e => setForm({ ...form, renewalMonths: e.target.value })} />
-            {renewalInvalid && <p className="text-sm text-destructive mt-1">Zadej celý počet měsíců, alespoň 1.</p>}
-            {endMissing && <p className="text-sm text-destructive mt-1">Prodloužení potřebuje datum konce doby určité.</p>}
-          </div>
+          <label className="inline-flex items-center gap-2 text-sm">
+            o
+            <Input className="w-16" inputMode="numeric" value={form.renewalMonths} onChange={e => setForm({ ...form, renewalMonths: e.target.value })} aria-label="Prodloužení o měsíců" />
+            měsíců
+          </label>
         )}
-        {stoppingRenewal && contract.effectiveEndDate && (
-          <p className="text-xs text-muted-foreground">
-            Smlouva skončí ke konci aktuálního období: {contract.effectiveEndDate}. Jiný konec nastav v poli výše.
-          </p>
-        )}
-        {err && <p className="text-sm text-destructive">{err}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Zrušit</Button>
-          <Button onClick={() => save.mutate()} disabled={!form.startDate || renewalInvalid || endMissing || save.isPending}>
-            Uložit
-          </Button>
-        </div>
-      </Card>
-    </div>
+      </div>
+      {renewalInvalid && <p className="text-sm text-late">Zadej celý počet měsíců, alespoň 1.</p>}
+      {endMissing && <p className="text-sm text-late">Prodloužení potřebuje konec doby určité.</p>}
+      {stoppingRenewal && contract.effectiveEndDate && (
+        <p className="text-sm text-soft">
+          Smlouva skončí ke konci aktuálního období, tedy {fmtDate(contract.effectiveEndDate)}. Jiný konec nastav v poli výše.
+        </p>
+      )}
+      {err && <p className="text-sm text-late">{err}</p>}
+    </Modal>
   );
 }

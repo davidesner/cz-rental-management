@@ -336,4 +336,9 @@ Source lives in [`mcp/`](./mcp) (tools + stdio entrypoint) and [`server/mcp/`](.
 
 ## License
 
-Private / personal use.
+[PolyForm Noncommercial 1.0.0](./LICENSE.md): free to use, change and share for
+personal, educational, research and other noncommercial purposes. Commercial use
+needs a separate agreement with the author.
+
+The MCP package in [`mcp/`](./mcp/) (`@esnerda/cz-rental-management-mcp`) stays
+under the [MIT License](./mcp/README.md#license).

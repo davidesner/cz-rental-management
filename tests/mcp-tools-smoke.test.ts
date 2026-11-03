@@ -67,7 +67,6 @@ describe('MCP tools smoke', () => {
     const created = await createProperty(mcpClient, {
       name: '<property-name-a>',
       address: null,
-      reconciliationSkill: 'reference-reconciliation',
       note: null,
     });
     expect(created.name).toBe('<property-name-a>');
@@ -78,7 +77,7 @@ describe('MCP tools smoke', () => {
 
   it('properties_get returns single property', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const created = await createProperty(mcpClient, { name: 'Test Property', address: 'Praha 1', reconciliationSkill: null, note: null });
+    const created = await createProperty(mcpClient, { name: 'Test Property', address: 'Praha 1', note: null });
     const found = await getProperty(mcpClient, { id: created.id });
     expect((found as { name: string }).name).toBe('Test Property');
     await dbClient.close();
@@ -86,7 +85,7 @@ describe('MCP tools smoke', () => {
 
   it('properties_update updates name', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const created = await createProperty(mcpClient, { name: 'Old Name', address: null, reconciliationSkill: null, note: null });
+    const created = await createProperty(mcpClient, { name: 'Old Name', address: null, note: null });
     const updated = await updateProperty(mcpClient, { id: created.id, name: 'New Name' });
     expect((updated as { name: string }).name).toBe('New Name');
     await dbClient.close();
@@ -103,7 +102,7 @@ describe('MCP tools smoke', () => {
 
   it('contracts_create and contracts_list round-trip', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     expect((contract as { id: string }).id).toBeTruthy();
@@ -114,7 +113,7 @@ describe('MCP tools smoke', () => {
 
   it('contract_terms_add and list round-trip', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;
@@ -126,7 +125,7 @@ describe('MCP tools smoke', () => {
 
   it('contract_utilities_add and list round-trip', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;
@@ -138,7 +137,7 @@ describe('MCP tools smoke', () => {
 
   it('contract_utilities_update fixes a row in-place', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;
@@ -151,7 +150,7 @@ describe('MCP tools smoke', () => {
 
   it('property_tariffs_add and list round-trip', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const propertyId = prop.id;
     await addPropertyTariff(mcpClient, { propertyId, validFrom: '2024-01-01', totalSvjAdvance: 888400, deductibleAmount: 187800, deductibleNote: 'Fond oprav', note: null });
     const tariffs = await listPropertyTariffs(mcpClient, { propertyId });
@@ -161,7 +160,7 @@ describe('MCP tools smoke', () => {
 
   it('payments_record and payments_list round-trip', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;
@@ -175,7 +174,7 @@ describe('MCP tools smoke', () => {
 
   it('payments_record_batch returns created/existing', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;
@@ -198,7 +197,7 @@ describe('MCP tools smoke', () => {
 
   it('payments_delete removes payment', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;
@@ -212,7 +211,7 @@ describe('MCP tools smoke', () => {
 
   it('cost_statements_create and list round-trip', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const propertyId = prop.id;
     const stmt = await createCostStatement(mcpClient, {
       propertyId,
@@ -234,7 +233,7 @@ describe('MCP tools smoke', () => {
 
   it('cost_statements_delete removes statement', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const stmt = await createCostStatement(mcpClient, {
       propertyId: prop.id,
       kind: 'services',
@@ -255,7 +254,7 @@ describe('MCP tools smoke', () => {
 
   it('reconciliations_compute and list round-trip', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;
@@ -288,7 +287,7 @@ describe('MCP tools smoke', () => {
 
   it('rent_reductions_add, list, and delete round-trip', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;
@@ -320,7 +319,7 @@ describe('MCP tools smoke', () => {
 
   it('contracts_payment_breakdown returns months with rent reduction applied', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-11-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;
@@ -368,7 +367,7 @@ describe('MCP tools smoke', () => {
 
   it('payment_rule_set then payment_rule_get round-trip on a seeded contract', async () => {
     const { dbClient, mcpClient } = await bootstrap();
-    const prop = await createProperty(mcpClient, { name: 'P', address: null, reconciliationSkill: null, note: null });
+    const prop = await createProperty(mcpClient, { name: 'P', address: null, note: null });
     const tenant = await createTenant(mcpClient, { name: 'T', email: null, phone: null, accountNumber: null, note: null });
     const contract = await createContract(mcpClient, { propertyId: prop.id, tenantId: (tenant as { id: string }).id, startDate: '2024-01-01', endDate: null, securityDeposit: null, note: null });
     const contractId = (contract as { id: string }).id;

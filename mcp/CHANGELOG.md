@@ -26,6 +26,12 @@ v konstruktoru `FastMCP` v `mcp/index.ts` musí sedět, jinak CI failne.
   servíruje i remote MCP endpoint aplikace (`/mcp`).
 - README doporučuje remote MCP; tenhle balíček je fallback pro klienty bez něj.
 
+### Removed
+
+- `properties_create` a `properties_update` už nepřijímají pole `reconciliationSkill`
+  a nástroje `properties_*` ho nevrací. Pole bylo relikt původního plánu a nic ho
+  nepoužívalo; neznámé pole ve vstupu se tiše ignoruje, takže starší klienti nespadnou.
+
 ## 0.3.0 — 2026-09-04
 
 ### Added

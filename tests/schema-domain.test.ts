@@ -18,7 +18,7 @@ describe('domain schema', () => {
     );
     const colNames = cols.map((c) => c.column_name);
     expect(colNames).toContain('address');
-    expect(colNames).toContain('reconciliation_skill');
+    expect(colNames).not.toContain('reconciliation_skill');
     expect(colNames).toContain('note');
     await client.close();
   });

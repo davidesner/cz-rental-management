@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { BankIntegrationKind } from './IntegrationMethodChooser';
@@ -92,17 +92,20 @@ export function IntegrationDialog({ integration, kind, onClose, onSaved }: Props
     && (editing || form.imapPassword !== '');
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <Card className="w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-semibold">{editing ? 'Upravit integraci' : 'Nová bankovní integrace'}</h2>
+    <Modal title={editing ? 'Upravit integraci' : 'Nová bankovní integrace'} onClose={onClose} className="max-w-lg" footer={<>
+          <Button variant="outline" onClick={onClose}>Zrušit</Button>
+          <Button disabled={!canSave || save.isPending} onClick={() => { setErr(null); save.mutate(); }}>
+            {save.isPending ? 'Ukládám…' : 'Uložit'}
+          </Button>
+    </>}>
 
         {kind === 'kb_email' && (
           // Open by default on create — a first-timer needs this to get any
           // e-mails at all. Collapsed on edit — someone fixing a port already
           // did this part.
           <details className="text-sm" open={!editing}>
-            <summary className="cursor-pointer text-muted-foreground">Jak to nastavit v bance</summary>
-            <div className="space-y-3 pt-3 text-muted-foreground">
+            <summary className="cursor-pointer text-soft">Jak to nastavit v bance</summary>
+            <div className="space-y-3 pt-3 text-soft">
               <div>
                 <p className="font-medium text-foreground">Zapnout e-mailové oznámení o platbě</p>
                 <p>
@@ -171,7 +174,7 @@ export function IntegrationDialog({ integration, kind, onClose, onSaved }: Props
         </div>
 
         <div>
-          <Label>Heslo {editing && integration!.imapPasswordSet && <span className="text-muted-foreground font-normal">— •••• nastaveno</span>}</Label>
+          <Label>Heslo {editing && integration!.imapPasswordSet && <span className="text-soft font-normal">— •••• nastaveno</span>}</Label>
           <Input
             type="password"
             value={form.imapPassword}
@@ -182,7 +185,7 @@ export function IntegrationDialog({ integration, kind, onClose, onSaved }: Props
           {/* Required help text: on Gmail a normal account password simply does
               not work, and the resulting AUTHENTICATIONFAILED looks exactly like
               a typo. The explanation belongs where the mistake is made. */}
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-soft mt-1">
             Gmail nepřijme běžné heslo k účtu — je potřeba{' '}
             <a
               href="https://support.google.com/accounts/answer/185833"
@@ -201,14 +204,14 @@ export function IntegrationDialog({ integration, kind, onClose, onSaved }: Props
             placeholder="např. 321-9876543210/0100"
             onChange={e => set('accountNumber')(e.target.value)}
           />
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-soft mt-1">
             Nepovinné. Když je vyplněné, notifikace na jiný účet se ignorují.
             Předčíslí je významné — <code>123-294153028/0300</code> je jiný účet než <code>294153028/0300</code>.
           </p>
         </div>
 
         <details className="text-sm">
-          <summary className="cursor-pointer text-muted-foreground">Pokročilé filtry</summary>
+          <summary className="cursor-pointer text-soft">Pokročilé filtry</summary>
           <div className="space-y-3 pt-3">
             <div>
               <Label>Složka</Label>
@@ -234,15 +237,8 @@ export function IntegrationDialog({ integration, kind, onClose, onSaved }: Props
           Aktivní (zahrnout do automatické synchronizace)
         </label>
 
-        {err && <p className="text-sm text-destructive">{err}</p>}
+        {err && <p className="text-sm text-late">{err}</p>}
 
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Zrušit</Button>
-          <Button disabled={!canSave || save.isPending} onClick={() => { setErr(null); save.mutate(); }}>
-            {save.isPending ? 'Ukládám…' : 'Uložit'}
-          </Button>
-        </div>
-      </Card>
-    </div>
+    </Modal>
   );
 }

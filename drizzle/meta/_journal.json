@@ -113,6 +113,20 @@
       "when": 1793347477759,
       "tag": "0015_contract_auto_renew",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793369186941,
+      "tag": "0016_reminders",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793370302839,
+      "tag": "0017_drop_property_reconciliation_skill",
+      "breakpoints": true
     }
   ]
 }

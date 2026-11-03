@@ -11,7 +11,6 @@ const GetPropertyInput = z.object({
 const CreatePropertyInput = z.object({
   name: z.string().min(1).max(200).describe('Property name'),
   address: z.string().nullable().optional().describe('Property address'),
-  reconciliationSkill: z.string().nullable().optional().describe('Skill directory name for reconciliation workflow'),
   note: z.string().nullable().optional().describe('Internal note'),
 });
 
@@ -19,7 +18,6 @@ const UpdatePropertyInput = z.object({
   id: z.string().describe('Property ID'),
   name: z.string().min(1).max(200).optional().describe('Property name'),
   address: z.string().nullable().optional().describe('Property address'),
-  reconciliationSkill: z.string().nullable().optional().describe('Skill directory name for reconciliation workflow'),
   note: z.string().nullable().optional().describe('Internal note'),
 });
 

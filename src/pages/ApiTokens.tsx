@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { Plus } from 'lucide-react';
+import { api, apiErrorMessage } from '@/lib/api';
+import { fmtDateTime } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card } from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Modal } from '@/components/ui/modal';
+import { Notice } from '@/components/ui/notice';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
-import { TableError } from '@/components/ui/table-error';
+import { TableEmpty, TableError } from '@/components/ui/table-error';
 
 interface ApiToken {
   id: string;
@@ -36,7 +40,7 @@ export function ApiTokensPanel() {
       setIssuedToken(result.token);
       qc.invalidateQueries({ queryKey: ['api-tokens'] });
     },
-    onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setErr(apiErrorMessage(e)),
   });
 
   const revoke = useMutation({
@@ -45,29 +49,30 @@ export function ApiTokensPanel() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">API tokeny</h2>
-        <Button onClick={() => { setErr(null); setOpen(true); }}>Nový token</Button>
-      </div>
-
+    <>
       {/* One-time issued token alert */}
       {issuedToken && (
-        <Card className="p-4 border-green-500 bg-green-50 space-y-2">
-          <p className="font-semibold text-green-800">Ulož si tento token, podruhé se nezobrazí:</p>
-          <p className="font-mono text-sm break-all text-green-900">{issuedToken}</p>
-          <Button size="sm" variant="outline" onClick={() => setIssuedToken(null)}>Zavřít</Button>
-        </Card>
+        <Notice kind="ok" onClose={() => setIssuedToken(null)}>
+          <div className="font-semibold">Ulož si tento token, podruhé se nezobrazí.</div>
+          <code className="mt-1 block select-all break-all text-[13px]">{issuedToken}</code>
+        </Notice>
       )}
 
       <Card className="overflow-hidden">
+        <CardHeader className="flex-row items-center justify-between gap-3">
+          <div>
+            <CardTitle>API tokeny</CardTitle>
+            <CardDescription>Přístup k REST API pro skripty a starší stdio MCP server.</CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => { setErr(null); setOpen(true); }}><Plus className="h-3.5 w-3.5" strokeWidth={2.2} />Nový token</Button>
+        </CardHeader>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Jméno</TableHead>
+              <TableHead>Název</TableHead>
               <TableHead>Naposledy použit</TableHead>
               <TableHead>Vytvořen</TableHead>
-              <TableHead></TableHead>
+              <TableHead><span className="sr-only">Akce</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -76,26 +81,24 @@ export function ApiTokensPanel() {
             ) : !data ? (
               <TableSkeleton cols={4} />
             ) : data.tokens.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">Zatím žádné API tokeny.</TableCell>
-              </TableRow>
+              <TableEmpty cols={4}>Zatím žádné API tokeny.</TableEmpty>
             ) : (
               data.tokens.map(t => (
-                <TableRow key={t.id}>
+                <TableRow key={t.id} className="rem">
                   <TableCell className="font-medium">{t.name}</TableCell>
-                  <TableCell>{t.lastUsedAt ?? '—'}</TableCell>
-                  <TableCell>{t.createdAt}</TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant="destructive"
+                  <TableCell className="whitespace-nowrap">{t.lastUsedAt ? fmtDateTime(t.lastUsedAt) : <span className="text-soft">nikdy</span>}</TableCell>
+                  <TableCell className="whitespace-nowrap">{fmtDateTime(t.createdAt)}</TableCell>
+                  <TableCell className="text-right">
+                    <button
+                      type="button"
+                      className="acts text-sm text-soft hover:text-late disabled:opacity-50"
                       onClick={() => {
-                        if (confirm(`Odvolat token "${t.name}"?`)) revoke.mutate(t.id);
+                        if (confirm(`Odvolat token „${t.name}"?`)) revoke.mutate(t.id);
                       }}
                       disabled={revoke.isPending}
                     >
                       Odvolat
-                    </Button>
+                    </button>
                   </TableCell>
                 </TableRow>
               ))
@@ -105,21 +108,21 @@ export function ApiTokensPanel() {
       </Card>
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setOpen(false)}>
-          <Card className="w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Nový API token</h2>
-            <div>
-              <Label>Jméno</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="např. ci-deploy" />
-            </div>
-            {err && <p className="text-sm text-destructive">{err}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
-              <Button onClick={() => create.mutate()} disabled={!name || create.isPending}>Vytvořit</Button>
-            </div>
-          </Card>
-        </div>
+        <Modal
+          title="Nový API token"
+          onClose={() => setOpen(false)}
+          footer={<>
+            <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
+            <Button onClick={() => create.mutate()} disabled={!name || create.isPending}>Vytvořit</Button>
+          </>}
+        >
+          <div>
+            <Label htmlFor="tok-name">Název</Label>
+            <Input id="tok-name" value={name} onChange={e => setName(e.target.value)} placeholder="např. skript na vyúčtování" />
+          </div>
+          {err && <p className="text-sm text-late">{err}</p>}
+        </Modal>
       )}
-    </div>
+    </>
   );
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "property" DROP COLUMN "reconciliation_skill";

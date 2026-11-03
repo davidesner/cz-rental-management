@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '@/lib/api';
+import { fmtDate, fmtKcExact } from '@/lib/format';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
+import { Status, type StatusTone } from '@/components/ui/status';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
-import { TableError } from '@/components/ui/table-error';
-
-const SELECT_CLS = 'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+import { TableEmpty, TableError } from '@/components/ui/table-error';
 
 interface BankTransaction {
   id: string;
@@ -39,10 +40,6 @@ interface Contract {
   endDate: string | null;
 }
 
-function fmtKc(halere: number): string {
-  return `${(halere / 100).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kč`;
-}
-
 const STATUS_LABEL: Record<BankTransaction['status'], string> = {
   unmatched: 'Nespárováno',
   matched: 'Spárováno',
@@ -53,12 +50,10 @@ const STATUS_LABEL: Record<BankTransaction['status'], string> = {
 };
 
 function StatusBadge({ status }: { status: BankTransaction['status'] }) {
-  const tone = status === 'parse_failed' || status === 'ambiguous'
-    ? 'bg-red-100 text-red-800'
-    : status === 'suspected_duplicate'
-      ? 'bg-amber-100 text-amber-900'
-      : 'bg-muted text-muted-foreground';
-  return <span className={`text-xs rounded-full px-2 py-0.5 whitespace-nowrap ${tone}`}>{STATUS_LABEL[status]}</span>;
+  const tone: StatusTone = status === 'parse_failed' || status === 'ambiguous' || status === 'suspected_duplicate'
+    ? 'late'
+    : status === 'matched' ? 'ok' : 'wait';
+  return <Status tone={tone}>{STATUS_LABEL[status]}</Status>;
 }
 
 export function TransactionInbox() {
@@ -103,34 +98,26 @@ export function TransactionInbox() {
   const busy = assign.isPending || ignore.isPending || reparse.isPending;
 
   const contractLabel = (c: Contract) =>
-    `${c.propertyName} — ${c.tenantName} (od ${c.startDate})`;
+    `${c.propertyName} / ${c.tenantName} (od ${fmtDate(c.startDate)})`;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Nepřiřazené platby</h2>
-        {rows.length > 0 && (
-          <span className="text-sm text-muted-foreground">{rows.length} čeká na vyřešení</span>
-        )}
-      </div>
-
-      {err && (
-        <Card className="p-4 border-destructive bg-red-50 flex items-start justify-between gap-4">
-          <p className="text-sm text-red-900">{err}</p>
-          <Button size="sm" variant="outline" onClick={() => setErr(null)}>Zavřít</Button>
-        </Card>
-      )}
+    <>
+      {err && <Notice kind="err" onClose={() => setErr(null)}>{err}</Notice>}
 
       <Card className="overflow-hidden">
+        <CardHeader>
+          <CardTitle>Nepřiřazené platby</CardTitle>
+          <CardDescription>{rows.length > 0 ? `${rows.length} čeká na vyřešení` : 'Transakce z banky, které se nespárovaly samy.'}</CardDescription>
+        </CardHeader>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Datum</TableHead>
-              <TableHead className="text-right">Částka</TableHead>
+              <TableHead className="num">Částka</TableHead>
               <TableHead>Z účtu</TableHead>
-              <TableHead>Symboly / zpráva</TableHead>
+              <TableHead>Symboly a zpráva</TableHead>
               <TableHead>Stav</TableHead>
-              <TableHead></TableHead>
+              <TableHead><span className="sr-only">Akce</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -139,66 +126,61 @@ export function TransactionInbox() {
             ) : !data ? (
               <TableSkeleton cols={6} />
             ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-sm text-muted-foreground">
-                  Nic nečeká — všechny platby jsou spárované.
-                </TableCell>
-              </TableRow>
+              <TableEmpty cols={6}>Nic nečeká, všechny platby jsou spárované.</TableEmpty>
             ) : rows.map(t => (
               <TableRow key={t.id}>
-                <TableCell className="whitespace-nowrap">{t.valueDate}</TableCell>
-                <TableCell className="text-right font-medium whitespace-nowrap">
-                  {fmtKc(t.amount)}
-                  {t.currency !== 'CZK' && <span className="text-xs text-muted-foreground"> ({t.currency})</span>}
+                <TableCell className="whitespace-nowrap">{fmtDate(t.valueDate)}</TableCell>
+                <TableCell className="num font-medium">
+                  {fmtKcExact(t.amount)}
+                  {t.currency !== 'CZK' && <span className="text-sm text-soft"> ({t.currency})</span>}
                 </TableCell>
-                <TableCell className="text-sm">{t.fromAccount ?? '—'}</TableCell>
-                <TableCell className="text-sm">
+                <TableCell className="whitespace-nowrap">{t.fromAccount ?? <span className="text-soft">—</span>}</TableCell>
+                <TableCell>
                   {t.messageForRecipient && <div>{t.messageForRecipient}</div>}
-                  <div className="text-muted-foreground text-xs">
+                  <div className="text-sm text-soft">
                     {[t.vs && `VS ${t.vs}`, t.ks && `KS ${t.ks}`, t.ss && `SS ${t.ss}`]
                       .filter(Boolean).join(' · ') || 'bez symbolů'}
                   </div>
                   {t.sourceLink && (
-                    <a href={t.sourceLink} target="_blank" rel="noreferrer" className="text-xs underline">
-                      notifikace v bance
-                    </a>
+                    <a href={t.sourceLink} target="_blank" rel="noreferrer" className="text-sm">notifikace v bance</a>
                   )}
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={t.status} />
                   {t.statusReason && (
-                    <div className="text-xs text-muted-foreground mt-1 max-w-xs break-words">{t.statusReason}</div>
+                    <div className="mt-1 max-w-xs break-words text-sm text-soft">{t.statusReason}</div>
                   )}
                 </TableCell>
-                <TableCell className="text-right space-y-2 min-w-[18rem]">
+                <TableCell className="min-w-[18rem] text-right">
                   {t.status === 'parse_failed' ? (
-                    <div className="space-x-2">
+                    <div className="inline-flex items-center gap-3.5">
                       <Button size="sm" variant="outline" disabled={busy} onClick={() => { setErr(null); reparse.mutate(t.id); }}>
                         Znovu zpracovat
                       </Button>
-                      <Button size="sm" variant="outline" disabled={busy} onClick={() => { setErr(null); ignore.mutate(t.id); }}>
+                      <button type="button" className="text-sm text-soft hover:text-ink disabled:opacity-50" disabled={busy} onClick={() => { setErr(null); ignore.mutate(t.id); }}>
                         Ignorovat
-                      </Button>
+                      </button>
                     </div>
                   ) : (
-                    <>
+                    <div className="space-y-2">
                       {/* Gated strictly on status, not on duplicateOfTransactionId being
                           non-null: a reparse can move a row back to 'unmatched' while
                           leaving that field populated from the earlier duplicate check,
                           and showing this text then would describe a state the row is
                           no longer in. */}
                       {t.status === 'suspected_duplicate' && (
-                        <p className="text-xs text-amber-900 text-left">
+                        <p className="text-left text-sm text-soft">
                           Shodná platba už je spárovaná. Pokud šlo o dvě samostatné platby,
-                          přiřaď ji ručně — jinak ignoruj.
+                          přiřaď ji ručně, jinak ji ignoruj.
                         </p>
                       )}
                       {contractsError && (
-                        <p className="text-xs text-destructive text-right">Nepodařilo se načíst pronájmy.</p>
+                        <p className="text-sm text-late">Nepodařilo se načíst pronájmy.</p>
                       )}
-                      <div className="flex gap-2 justify-end">
+                      <div className="flex items-center justify-end gap-2">
                         <select
-                          className={SELECT_CLS}
+                          className="select-native h-7 w-auto max-w-[16rem] text-sm"
+                          aria-label="Pronájem"
                           value={choice[t.id] ?? ''}
                           disabled={contractsError}
                           onChange={e => setChoice(c => ({ ...c, [t.id]: e.target.value }))}
@@ -227,11 +209,11 @@ export function TransactionInbox() {
                         >
                           {t.status === 'suspected_duplicate' ? 'Není duplikát' : 'Přiřadit'}
                         </Button>
-                        <Button size="sm" variant="outline" disabled={busy} onClick={() => { setErr(null); ignore.mutate(t.id); }}>
+                        <button type="button" className="text-sm text-soft hover:text-ink disabled:opacity-50" disabled={busy} onClick={() => { setErr(null); ignore.mutate(t.id); }}>
                           Ignorovat
-                        </Button>
+                        </button>
                       </div>
-                    </>
+                    </div>
                   )}
                 </TableCell>
               </TableRow>
@@ -239,6 +221,6 @@ export function TransactionInbox() {
           </TableBody>
         </Table>
       </Card>
-    </div>
+    </>
   );
 }

@@ -1,20 +1,34 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '@/lib/api';
+import { Pencil, Plus } from 'lucide-react';
+import { api, ApiError, apiErrorMessage } from '@/lib/api';
 import { parseKorun } from '@/lib/money';
+import { fmtDate, fmtKc, fmtRange } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { KV, KVRow } from '@/components/ui/kv';
+import { Modal } from '@/components/ui/modal';
+import { Breadcrumbs, PageHeader } from '@/components/ui/page-header';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { TableSkeleton } from '@/components/ui/table-skeleton';
-import { TableError } from '@/components/ui/table-error';
+import { TableEmpty, TableError } from '@/components/ui/table-error';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Hint } from '@/components/ui/hint';
+import { Status } from '@/components/ui/status';
+import { Agenda, reminderItems } from '@/components/Agenda';
+import { isActiveContract, isEndedContract, leaseEnd, useContracts, useCurrentTermsMap } from '@/hooks/useContracts';
+import { useDashboard } from '@/hooks/useDashboard';
+import { useReminders } from '@/hooks/useReminders';
+import { IncomeTrendCard } from './property/IncomeTrendCard';
+import { CurrentLeaseCard } from './property/CurrentLeaseCard';
+import { CostsCard } from './property/CostsCard';
+import { ReconciliationsCard } from './property/ReconciliationsCard';
+import { EditPropertyDialog, type PropertyRow } from './property/EditPropertyDialog';
+import { DocRef } from './property/DocRef';
 
-interface Property {
-  id: string; name: string; address: string | null;
-  reconciliationSkill: string | null; note: string | null; createdAt: string;
-}
 interface Tariff {
   id: string; propertyId: string;
   validFrom: string; validTo: string | null;
@@ -24,25 +38,12 @@ interface Tariff {
   note: string | null;
 }
 
-function DocRef({ value }: { value: string | null }) {
-  if (!value) return <span className="text-muted-foreground">—</span>;
-  const isUrl = /^https?:\/\//.test(value);
-  if (isUrl) {
-    return (
-      <a href={value} target="_blank" rel="noreferrer" className="text-primary underline truncate inline-block max-w-[200px]" title={value}>
-        {(() => { try { return new URL(value).hostname; } catch { return value; } })()}
-      </a>
-    );
-  }
-  return <span className="text-xs text-muted-foreground" title={value}>{value}</span>;
-}
-
 export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const property = useQuery({
     queryKey: ['property', id],
-    queryFn: () => api.get<{ property: Property }>(`/api/properties/${id}`),
+    queryFn: () => api.get<{ property: PropertyRow }>(`/api/properties/${id}`),
     enabled: !!id,
   });
   const tariffs = useQuery({
@@ -51,6 +52,41 @@ export function PropertyDetailPage() {
     enabled: !!id,
   });
 
+  const contracts = useContracts();
+  const leases = [...(contracts.data?.contracts ?? [])]
+    .filter(c => c.propertyId === id)
+    .sort((a, b) => Number(isEndedContract(b)) - Number(isEndedContract(a)) || b.startDate.localeCompare(a.startDate));
+  const { map: termsMap } = useCurrentTermsMap(leases.map(c => c.id));
+  // The lease running today, or failing that the earliest one still to start.
+  const activeLease = leases.find(c => isActiveContract(c)) ?? null;
+  const upcomingLease = activeLease ? null : [...leases].filter(c => !isEndedContract(c)).sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null;
+  const shownLease = activeLease ?? upcomingLease;
+
+  // The period only drives the dashboard's single-period summary, which this
+  // page does not show; the yearly totals are period-independent.
+  const now = new Date();
+  const dashboard = useDashboard({ year: now.getFullYear(), month: now.getMonth() + 1 }, { propertyId: id });
+
+  // Agenda: derived deadlines for this property plus manual reminders tied to it or to one of its leases.
+  const reminders = useReminders();
+  const leaseIds = new Set(leases.map(c => c.id));
+  const manual = reminderItems(
+    (reminders.query.data ?? []).filter(r => r.propertyId === id || (r.contractId !== null && leaseIds.has(r.contractId))),
+    r => r.contractId ? `/contracts/${r.contractId}` : `/properties/${id}`,
+    r => leases.find(c => c.id === r.contractId)?.tenantName ?? '',
+  );
+  const agenda = [...manual.filter(i => !i.done), ...dashboard.agenda].sort((a, b) => a.date.localeCompare(b.date)).concat(manual.filter(i => i.done));
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') ?? 'evidencni-list';
+  const setTab = (v: string) => {
+    setSearchParams(prev => {
+      const n = new URLSearchParams(prev);
+      n.set('tab', v);
+      return n;
+    }, { replace: true });
+  };
+  const [editOpen, setEditOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     validFrom: '', totalSvjAdvanceCzk: '', deductibleAmountCzk: '',
@@ -76,60 +112,100 @@ export function PropertyDetailPage() {
       setForm({ validFrom: '', totalSvjAdvanceCzk: '', deductibleAmountCzk: '', deductibleNote: '', documentRef: '', note: '' });
       qc.invalidateQueries({ queryKey: ['property-tariffs', id] });
     },
-    onError: (e: unknown) => setErr(e instanceof Error ? e.message : String(e)),
+    onError: (e: unknown) => setErr(apiErrorMessage(e)),
   });
 
-  if (property.isLoading) return <div>Načítání…</div>;
+  if (property.isLoading) return <p className="text-sm text-soft">Načítání…</p>;
   // A failed request is not the same as a missing property. Only a real 404
   // means "nenalezena"; anything else (network, 500) gets an error the user
   // can act on, instead of being told the property does not exist.
   if (property.isError && !(property.error instanceof ApiError && property.error.status === 404)) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-destructive">Nepodařilo se načíst nemovitost.</p>
+        <p className="text-sm text-late">Nepodařilo se načíst nemovitost.</p>
         <Button size="sm" variant="outline" onClick={() => property.refetch()}>Zkusit znovu</Button>
       </div>
     );
   }
-  if (!property.data) return <div>Nemovitost nenalezena.</div>;
+  if (!property.data || !id) return <p className="text-sm text-soft">Nemovitost nenalezena.</p>;
   const p = property.data.property;
+  const rows = [...(tariffs.data?.tariffs ?? [])].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
 
-  const fmt = (h: number) => (h / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč';
+  const occupancy = !contracts.data
+    ? null
+    : activeLease ? <Status tone="ok">Pronajato</Status>
+    : upcomingLease ? <Status tone="wait">Pronájem začne {fmtDate(upcomingLease.startDate)}</Status>
+    : <Status tone="soft">Volná</Status>;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Link to="/properties" className="text-sm text-muted-foreground hover:underline">← Nemovitosti</Link>
-        <h1 className="text-3xl font-bold mt-2">{p.name}</h1>
-        {p.address && <p className="text-muted-foreground">{p.address}</p>}
+    <>
+      <PageHeader
+        crumb={<Breadcrumbs items={[{ label: 'Nemovitosti', to: '/properties' }]} />}
+        title={p.name}
+        sub={<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">{occupancy}{p.address && <span>{p.address}</span>}</span>}
+        actions={<Button variant="outline" onClick={() => setEditOpen(true)}><Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />Upravit</Button>}
+      />
+
+      <div className="flex flex-wrap items-stretch gap-5">
+        <IncomeTrendCard className="flex-[3_1_480px]" byYear={dashboard.byYear} tariffs={tariffs.data?.tariffs} isPending={dashboard.isPending || tariffs.isPending} isError={dashboard.isError} refetch={dashboard.refetch} />
+        <CurrentLeaseCard
+          className="flex-[1_1_280px]"
+          lease={shownLease}
+          upcoming={activeLease === null && upcomingLease !== null}
+          terms={shownLease ? termsMap[shownLease.id] : undefined}
+          debt={shownLease ? dashboard.debts.find(d => d.contractId === shownLease.id) : undefined}
+          loaded={!!contracts.data}
+        />
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Informace o nemovitosti</CardTitle></CardHeader>
-        <CardContent className="space-y-1 text-sm">
-          <div><span className="text-muted-foreground">Adresa:</span> {p.address ?? '—'}</div>
-          <div><span className="text-muted-foreground">Reconciliation skill:</span> <span className="font-mono text-xs">{p.reconciliationSkill ?? '—'}</span></div>
-          <div><span className="text-muted-foreground">Poznámka:</span> {p.note ?? '—'}</div>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+          <CardTitle>Základní údaje</CardTitle>
+          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}><Pencil className="h-3.5 w-3.5" strokeWidth={2.2} />Upravit</Button>
+        </CardHeader>
+        <CardContent>
+          <KV>
+            <KVRow label="Adresa" className="font-normal">{p.address ?? <span className="text-soft">—</span>}</KVRow>
+            <KVRow label="Evidováno od" className="font-normal">{fmtDate(p.createdAt)}</KVRow>
+            <KVRow label="Poznámka" wide className="whitespace-pre-line">{p.note ?? <span className="text-soft">—</span>}</KVRow>
+          </KV>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Evidenční list (předpis SVJ)</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">SCD2 — nový řádek vždy uzavře předchozí. Aktuální je ten s prázdným „Platnost do".</p>
-          </div>
-          <Button onClick={() => { setErr(null); setOpen(true); }}>Nový záznam</Button>
-        </CardHeader>
-        <CardContent className="pt-0">
+      <Agenda
+        items={agenda}
+        isPending={reminders.query.isPending || dashboard.isPending}
+        newDefaults={{ propertyId: id }}
+        contracts={leases.map(c => ({ id: c.id, label: c.tenantName }))}
+        emptyText="Nic nečeká. Nájem je zaplacený a žádná připomínka k této nemovitosti není otevřená."
+      />
+
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList aria-label="Sekce nemovitosti">
+          <TabsTrigger value="evidencni-list">Evidenční list</TabsTrigger>
+          <TabsTrigger value="naklady">Náklady</TabsTrigger>
+          <TabsTrigger value="vyuctovani">Vyúčtování</TabsTrigger>
+          <TabsTrigger value="pronajmy">Pronájmy</TabsTrigger>
+        </TabsList>
+
+
+        <TabsContent value="evidencni-list">
+        <Card className="overflow-hidden">
+          <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>Evidenční list (předpis SVJ)</CardTitle>
+              <CardDescription>Nový záznam vždy uzavře předchozí. Aktuální je ten bez konce platnosti.</CardDescription>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => { setErr(null); setOpen(true); }}><Plus className="h-3.5 w-3.5" strokeWidth={2.2} />Nový záznam</Button>
+          </CardHeader>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Platnost od</TableHead>
-                <TableHead>Platnost do</TableHead>
-                <TableHead>Celkové zálohy SVJ</TableHead>
-                <TableHead>Odečitatelné (FO)</TableHead>
-                <TableHead>Reconciliable</TableHead>
+                <TableHead>Platí od</TableHead>
+                <TableHead>Platí do</TableHead>
+                <TableHead className="num">Zálohy SVJ celkem</TableHead>
+                <TableHead className="num"><span className="inline-flex items-center gap-1">Odečitatelné<Hint label="Co je odečitatelné">Položky předpisu SVJ, které nese pronajímatel a nájemci se nevyúčtovávají: fond oprav, odměny výboru, pojištění domu.</Hint></span></TableHead>
+                <TableHead className="num"><span className="inline-flex items-center gap-1">K vyúčtování<Hint label="Co je k vyúčtování">Zálohy SVJ po odečtení položek pronajímatele. Tahle částka se porovnává se zálohami, které platí nájemce.</Hint></span></TableHead>
                 <TableHead>Složení</TableHead>
                 <TableHead>Doklad</TableHead>
               </TableRow>
@@ -139,64 +215,119 @@ export function PropertyDetailPage() {
                 <TableError cols={7} onRetry={() => tariffs.refetch()} />
               ) : !tariffs.data ? (
                 <TableSkeleton cols={7} />
-              ) : tariffs.data.tariffs.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">Zatím žádný evidenční list. Přidej první „Nový záznam".</TableCell></TableRow>
+              ) : rows.length === 0 ? (
+                <TableEmpty cols={7}>Zatím žádný evidenční list. Přidej první záznam.</TableEmpty>
               ) : (
-                tariffs.data.tariffs.map(t => (
-                  <TableRow key={t.id} className={t.validTo === null ? 'bg-accent/30' : ''}>
-                    <TableCell>{t.validFrom}</TableCell>
-                    <TableCell>{t.validTo ?? <span className="font-semibold">aktuální</span>}</TableCell>
-                    <TableCell>{fmt(t.totalSvjAdvance)}</TableCell>
-                    <TableCell>{fmt(t.deductibleAmount)}</TableCell>
-                    <TableCell className="font-medium">{fmt(t.totalSvjAdvance - t.deductibleAmount)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-md">{t.deductibleNote ?? '—'}</TableCell>
+                rows.map(t => (
+                  <TableRow key={t.id}>
+                    <TableCell className="whitespace-nowrap font-medium">{fmtDate(t.validFrom)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{t.validTo ? fmtDate(t.validTo) : <span className="font-medium text-accent">aktuální</span>}</TableCell>
+                    <TableCell className="num">{fmtKc(t.totalSvjAdvance)}</TableCell>
+                    <TableCell className="num">{fmtKc(t.deductibleAmount)}</TableCell>
+                    <TableCell className="num font-semibold">{fmtKc(t.totalSvjAdvance - t.deductibleAmount)}</TableCell>
+                    <TableCell className="max-w-md text-sm text-soft">{t.deductibleNote ?? '—'}</TableCell>
                     <TableCell><DocRef value={t.documentRef} /></TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </Card>
+        </TabsContent>
+
+        <TabsContent value="naklady">
+        <CostsCard propertyId={id} propertyName={p.name} />
+        </TabsContent>
+
+        <TabsContent value="vyuctovani">
+        <ReconciliationsCard leases={leases} leasesLoaded={!!contracts.data} />
+        </TabsContent>
+
+        <TabsContent value="pronajmy">
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>Pronájmy</CardTitle>
+            <CardDescription>Kdo v nemovitosti bydlí a bydlel.</CardDescription>
+          </CardHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nájemce</TableHead>
+                <TableHead>Stav</TableHead>
+                <TableHead>Období</TableHead>
+                <TableHead className="num">Měsíčně</TableHead>
+                <TableHead className="num">Kauce</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {contracts.isError && !contracts.data ? (
+                <TableError cols={5} onRetry={() => contracts.refetch()} />
+              ) : !contracts.data ? (
+                <TableSkeleton cols={5} rows={2} />
+              ) : leases.length === 0 ? (
+                <TableEmpty cols={5}>Zatím žádný pronájem této nemovitosti.</TableEmpty>
+              ) : leases.map(c => {
+                const t = termsMap[c.id];
+                const active = isActiveContract(c);
+                const ended = isEndedContract(c);
+                return (
+                  <TableRow key={c.id} className={ended ? 'text-soft' : undefined}>
+                    <TableCell><Link to={`/contracts/${c.id}`} className="font-medium text-ink">{c.tenantName}</Link></TableCell>
+                    <TableCell>
+                      {active ? <Status tone="ok">Běží</Status> : ended ? <Status tone="soft">Ukončen</Status> : <Status tone="wait">Začne {fmtDate(c.startDate)}</Status>}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{fmtRange(c.startDate, leaseEnd(c))}</TableCell>
+                    <TableCell className="num">{t === undefined ? <span className="text-wait">…</span> : t.monthlyTotal !== null ? fmtKc(t.monthlyTotal) : <span className="text-soft">—</span>}</TableCell>
+                    <TableCell className="num">{c.securityDeposit ? fmtKc(c.securityDeposit) : <span className="text-soft">—</span>}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Card>
+        </TabsContent>
+      </Tabs>
+
+      {editOpen && <EditPropertyDialog property={p} onClose={() => setEditOpen(false)} />}
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setOpen(false)}>
-          <Card className="w-full max-w-lg p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-semibold">Nový záznam evidenčního listu</h2>
+        <Modal
+          title="Nový záznam evidenčního listu"
+          onClose={() => setOpen(false)}
+          className="max-w-lg"
+          footer={<>
+            <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
+            <Button onClick={() => create.mutate()} disabled={!form.validFrom || amountsInvalid || create.isPending}>Vytvořit</Button>
+          </>}
+        >
+          <div>
+            <Label htmlFor="el-from">Platí od</Label>
+            <Input id="el-from" type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Platnost od (YYYY-MM-DD)</Label>
-              <Input type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} />
-            </div>
-            <div>
-              <Label>Celkové zálohy SVJ (Kč/měs)</Label>
-              <Input type="text" placeholder="8884" value={form.totalSvjAdvanceCzk} onChange={e => setForm({ ...form, totalSvjAdvanceCzk: e.target.value })} />
-              {form.totalSvjAdvanceCzk !== '' && totalSvjAdvance.kind === 'invalid' && (
-                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 8884 nebo 8884,50.</p>
-              )}
-            </div>
-            <div>
-              <Label>Odečitatelné (FO + ostatní) (Kč/měs)</Label>
-              <Input type="text" placeholder="1878" value={form.deductibleAmountCzk} onChange={e => setForm({ ...form, deductibleAmountCzk: e.target.value })} />
-              {form.deductibleAmountCzk !== '' && deductibleAmount.kind === 'invalid' && (
-                <p className="text-sm text-destructive mt-1">Částka musí být číslo v korunách, např. 1878 nebo 1878,50.</p>
-              )}
+              <Label htmlFor="el-total">Zálohy SVJ celkem (Kč/měsíc)</Label>
+              <Input id="el-total" type="text" placeholder="8884" value={form.totalSvjAdvanceCzk} onChange={e => setForm({ ...form, totalSvjAdvanceCzk: e.target.value })} />
             </div>
             <div>
-              <Label>Složení (poznámka)</Label>
-              <Input placeholder="Fond oprav 1424 + Odměny výbor 110 + ..." value={form.deductibleNote} onChange={e => setForm({ ...form, deductibleNote: e.target.value })} />
+              <div className="mb-1 flex items-center gap-1.5"><Label htmlFor="el-ded" className="mb-0">Odečitatelné (Kč/měsíc)</Label><Hint label="Co je odečitatelné">Součet položek předpisu, které nese pronajímatel: fond oprav, odměny výboru, pojištění domu. Při vyúčtování nákladů se za období automaticky odečte.</Hint></div>
+              <Input id="el-ded" type="text" placeholder="1878" value={form.deductibleAmountCzk} onChange={e => setForm({ ...form, deductibleAmountCzk: e.target.value })} />
             </div>
-            <div>
-              <Label>Doklad (URL nebo cesta)</Label>
-              <Input placeholder="https://drive.google.com/file/d/... nebo /path/to/EL-2024.pdf" value={form.documentRef} onChange={e => setForm({ ...form, documentRef: e.target.value })} />
-            </div>
-            {err && <p className="text-sm text-destructive">{err}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Zrušit</Button>
-              <Button onClick={() => create.mutate()} disabled={!form.validFrom || amountsInvalid || create.isPending}>Vytvořit</Button>
-            </div>
-          </Card>
-        </div>
+          </div>
+          {((form.totalSvjAdvanceCzk !== '' && totalSvjAdvance.kind === 'invalid') || (form.deductibleAmountCzk !== '' && deductibleAmount.kind === 'invalid')) && (
+            <p className="text-sm text-late">Částka musí být číslo v korunách, např. 8884 nebo 8884,50.</p>
+          )}
+          <div>
+            <Label htmlFor="el-note">Složení</Label>
+            <Input id="el-note" placeholder="Fond oprav 1424 + odměny výboru 110 + …" value={form.deductibleNote} onChange={e => setForm({ ...form, deductibleNote: e.target.value })} />
+          </div>
+          <div>
+            <Label htmlFor="el-doc">Doklad (URL nebo cesta)</Label>
+            <Input id="el-doc" placeholder="https://… nebo /cesta/k/EL-2024.pdf" value={form.documentRef} onChange={e => setForm({ ...form, documentRef: e.target.value })} />
+          </div>
+          {err && <p className="text-sm text-late">{err}</p>}
+        </Modal>
       )}
-    </div>
+    </>
   );
 }

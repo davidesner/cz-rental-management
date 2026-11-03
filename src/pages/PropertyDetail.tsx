@@ -24,7 +24,7 @@ import { useDashboard } from '@/hooks/useDashboard';
 import { useReminders } from '@/hooks/useReminders';
 import { IncomeTrendCard } from './property/IncomeTrendCard';
 import { CurrentLeaseCard } from './property/CurrentLeaseCard';
-import { CostsCard, useCostStatements } from './property/CostsCard';
+import { CostsCard } from './property/CostsCard';
 import { ReconciliationsCard } from './property/ReconciliationsCard';
 import { EditPropertyDialog, type PropertyRow } from './property/EditPropertyDialog';
 import { DocRef } from './property/DocRef';
@@ -66,7 +66,6 @@ export function PropertyDetailPage() {
   // page does not show; the yearly totals are period-independent.
   const now = new Date();
   const dashboard = useDashboard({ year: now.getFullYear(), month: now.getMonth() + 1 }, { propertyId: id });
-  const statements = useCostStatements(id);
 
   // Agenda: derived deadlines for this property plus manual reminders tied to it or to one of its leases.
   const reminders = useReminders();
@@ -79,7 +78,7 @@ export function PropertyDetailPage() {
   const agenda = [...manual.filter(i => !i.done), ...dashboard.agenda].sort((a, b) => a.date.localeCompare(b.date)).concat(manual.filter(i => i.done));
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get('tab') ?? 'naklady';
+  const tab = searchParams.get('tab') ?? 'evidencni-list';
   const setTab = (v: string) => {
     setSearchParams(prev => {
       const n = new URLSearchParams(prev);
@@ -148,7 +147,7 @@ export function PropertyDetailPage() {
       />
 
       <div className="flex flex-wrap items-stretch gap-5">
-        <IncomeTrendCard className="flex-[3_1_480px]" byYear={dashboard.byYear} statements={statements.data?.statements} tariffs={tariffs.data?.tariffs} isPending={dashboard.isPending || statements.isPending || tariffs.isPending} isError={dashboard.isError} refetch={dashboard.refetch} />
+        <IncomeTrendCard className="flex-[3_1_480px]" byYear={dashboard.byYear} tariffs={tariffs.data?.tariffs} isPending={dashboard.isPending || tariffs.isPending} isError={dashboard.isError} refetch={dashboard.refetch} />
         <CurrentLeaseCard
           className="flex-[1_1_280px]"
           lease={shownLease}
@@ -183,15 +182,12 @@ export function PropertyDetailPage() {
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList aria-label="Sekce nemovitosti">
-          <TabsTrigger value="naklady">Náklady</TabsTrigger>
           <TabsTrigger value="evidencni-list">Evidenční list</TabsTrigger>
+          <TabsTrigger value="naklady">Náklady</TabsTrigger>
           <TabsTrigger value="vyuctovani">Vyúčtování</TabsTrigger>
           <TabsTrigger value="pronajmy">Pronájmy</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="naklady">
-        <CostsCard propertyId={id} propertyName={p.name} />
-        </TabsContent>
 
         <TabsContent value="evidencni-list">
         <Card className="overflow-hidden">
@@ -237,6 +233,10 @@ export function PropertyDetailPage() {
             </TableBody>
           </Table>
         </Card>
+        </TabsContent>
+
+        <TabsContent value="naklady">
+        <CostsCard propertyId={id} propertyName={p.name} />
         </TabsContent>
 
         <TabsContent value="vyuctovani">
